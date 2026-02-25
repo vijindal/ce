@@ -1,0 +1,22 @@
+# Gradle
+.gradle/
+build/
+app/build/
+app/bin/
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Compiled classes
+*.class
+*.jar
+*.war
+*.ear
