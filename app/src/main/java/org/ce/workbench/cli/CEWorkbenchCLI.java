@@ -101,6 +101,9 @@ public class CEWorkbenchCLI {
         System.out.print("Phase Name (e.g., A2, B2): ");
         String phase = scanner.nextLine().trim();
         
+        System.out.print("Model (e.g., T for tetrahedron, P for pair): ");
+        String model = scanner.nextLine().trim();
+        
         System.out.print("Number of Components: ");
         int numComponents;
         try {
@@ -116,7 +119,7 @@ public class CEWorkbenchCLI {
             components[i] = scanner.nextLine().trim();
         }
         
-        SystemInfo system = new SystemInfo(id, name, structure, phase, components);
+        SystemInfo system = new SystemInfo(id, name, structure, phase, model, components);
         registry.registerSystem(system);
         
         System.out.println("✓ System registered successfully!");

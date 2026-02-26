@@ -37,10 +37,21 @@ public class CEWorkbenchApplication extends Application {
         // Build UI
         buildUI(stage);
         
-        // Show window
+        // Show window with responsive sizing
         stage.setTitle("CE Thermodynamics Workbench");
-        stage.setWidth(1600);
-        stage.setHeight(900);
+        
+        // Get screen bounds
+        javafx.stage.Screen screen = javafx.stage.Screen.getPrimary();
+        javafx.geometry.Rectangle2D bounds = screen.getVisualBounds();
+        
+        // Set window to 90% of screen size, centered
+        double width = Math.min(1400, bounds.getWidth() * 0.9);
+        double height = Math.min(850, bounds.getHeight() * 0.9);
+        stage.setWidth(width);
+        stage.setHeight(height);
+        stage.setX((bounds.getWidth() - width) / 2);
+        stage.setY((bounds.getHeight() - height) / 2);
+        
         stage.show();
     }
     

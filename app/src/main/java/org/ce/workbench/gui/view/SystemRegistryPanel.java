@@ -10,9 +10,7 @@ import org.ce.workbench.backend.job.BackgroundJobManager;
 import org.ce.workbench.backend.registry.SystemRegistry;
 import org.ce.workbench.backend.job.BackgroundJob;
 import org.ce.workbench.gui.model.SystemInfo;
-import org.ce.workbench.gui.component.PeriodicTableSelectionDialog;
-import org.ce.workbench.gui.component.StructureModelSelectionDialog;
-import org.ce.workbench.gui.component.StructureModelInfo;
+import org.ce.workbench.backend.data.SystemDataLoader;
 import org.ce.identification.engine.Vector3D;
 import org.ce.workbench.backend.job.CFIdentificationJob;
 import org.ce.workbench.backend.job.ClusterIdentificationJob;
@@ -148,13 +146,15 @@ public class SystemRegistryPanel extends VBox {
             systemItemMap.put(systemItem, system);
             
             // Status indicators
-            String clustersStatus = system.isClustersComputed() ? "✓" : "○";
-            String cfsStatus = system.isCfsComputed() ? "✓" : "○";
+            String cecStatus = system.isCecAvailable() ? "✓" : "✗";
+            String clustersStatus = system.isClustersComputed() ? "✓" : "✗";
+            String cfsStatus = system.isCfsComputed() ? "✓" : "✗";
             
+            TreeItem<String> cecItem = new TreeItem<>(cecStatus + " CEC");
             TreeItem<String> clustersItem = new TreeItem<>(clustersStatus + " Clusters");
             TreeItem<String> cfsItem = new TreeItem<>(cfsStatus + " CFs");
             
-            systemItem.getChildren().addAll(clustersItem, cfsItem);
+            systemItem.getChildren().addAll(cecItem, clustersItem, cfsItem);
             root.getChildren().add(systemItem);
         }
         
@@ -200,112 +200,140 @@ public class SystemRegistryPanel extends VBox {
     }
     
     private void showAddSystemDialog() {
-        // Step 1: Select components using periodic table
-        Optional<List<String>> componentsOpt = PeriodicTableSelectionDialog.showDialog();
-        if (componentsOpt.isEmpty() || componentsOpt.get().isEmpty()) {
-            return; // User cancelled or selected nothing
-        }
-        
-        List<String> selectedComponents = componentsOpt.get();
-        String componentStr = String.join(", ", selectedComponents);
-        
-        // Step 2: Select structure, phase, and CVM model
-        Optional<StructureModelInfo> modelOpt = StructureModelSelectionDialog.showDialog(selectedComponents);
-        if (modelOpt.isEmpty()) {
-            return; // User cancelled
-        }
-        
-        StructureModelInfo modelInfo = modelOpt.get();
-        
-        // Step 3: Final confirmation and optional customization
         Dialog<SystemInfo> dialog = new Dialog<>();
-        dialog.setTitle("Add New System - Confirmation");
-        dialog.setHeaderText("Confirm system configuration");
+        dialog.setTitle("Add New System");
+        dialog.setHeaderText("Define a new calculation system");
         
         GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
+        grid.setHgap(12);
+        grid.setVgap(12);
         grid.setPadding(new Insets(20));
         
-        // Auto-generate ID and Name based on selections
-        String suggestedId = String.join("-", selectedComponents) + "_" + 
-                            modelInfo.getStructure() + "_" + modelInfo.getPhase();
-        String suggestedName = String.join("-", selectedComponents) + " " + 
-                              modelInfo.getDisplayName();
+        // Elements field
+        TextField elementsField = new TextField();
+        elementsField.setPromptText("Ti-Nb");
+        Label elementsHelp = new Label("Format: Element1-Element2 (e.g., Ti-Nb, Fe-Ni-Cr)");
+        elementsHelp.setStyle("-fx-font-size: 9; -fx-text-fill: #666;");
         
-        TextField idField = new TextField(suggestedId);
-        TextField nameField = new TextField(suggestedName);
+        // Structure/Phase field
+        TextField structurePhaseField = new TextField();
+        structurePhaseField.setPromptText("BCC_A2");
+        Label structureHelp = new Label("Format: Structure_Phase (e.g., BCC_A2, FCC_L12)");
+        structureHelp.setStyle("-fx-font-size: 9; -fx-text-fill: #666;");
         
-        Label componentsLabel = new Label(componentStr);
-        componentsLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #4CAF50;");
+        // Model field
+        TextField modelField = new TextField();
+        modelField.setPromptText("T");
+        Label modelHelp = new Label("CVM approximation (e.g., T=tetrahedron, P=pair)");
+        modelHelp.setStyle("-fx-font-size: 9; -fx-text-fill: #666;");
         
-        Label structureLabel = new Label(modelInfo.getStructure() + " " + modelInfo.getPhase());
-        structureLabel.setStyle("-fx-font-weight: bold;");
+        // Status labels for data availability
+        Label statusLabel = new Label("Data Availability:");
+        statusLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 11;");
+        Label cecStatusLabel = new Label("CEC: Not checked");
+        Label clusterStatusLabel = new Label("Cluster/CF: Not checked");
+        cecStatusLabel.setStyle("-fx-font-size: 10;");
+        clusterStatusLabel.setStyle("-fx-font-size: 10;");
         
-        Label cvmLabel = new Label(modelInfo.getCvmModel() + " (" + 
-                                   modelInfo.getMaxClusterSize() + " atoms max)");
-        cvmLabel.setStyle("-fx-font-style: italic;");
-        
-        Label clusterFileLabel = new Label(modelInfo.getClusterFile());
-        clusterFileLabel.setStyle("-fx-font-size: 9; -fx-text-fill: #666;");
-        
-        Label symGroupLabel = new Label(modelInfo.getSymGroup());
-        symGroupLabel.setStyle("-fx-font-size: 9; -fx-text-fill: #666;");
+        // Check availability button
+        Button checkButton = new Button("Check Availability");
+        checkButton.setStyle("-fx-font-size: 10;");
         
         int row = 0;
-        grid.add(new Label("Components:"), 0, row);
-        grid.add(componentsLabel, 1, row++);
+        grid.add(new Label("Elements:"), 0, row);
+        grid.add(elementsField, 1, row++);
+        grid.add(elementsHelp, 1, row++);
         
         grid.add(new Label("Structure/Phase:"), 0, row);
-        grid.add(structureLabel, 1, row++);
+        grid.add(structurePhaseField, 1, row++);
+        grid.add(structureHelp, 1, row++);
         
-        grid.add(new Label("CVM Model:"), 0, row);
-        grid.add(cvmLabel, 1, row++);
-        
-        grid.add(new Label("Cluster File:"), 0, row);
-        grid.add(clusterFileLabel, 1, row++);
-        
-        grid.add(new Label("Symmetry Group:"), 0, row);
-        grid.add(symGroupLabel, 1, row++);
+        grid.add(new Label("Model:"), 0, row);
+        grid.add(modelField, 1, row++);
+        grid.add(modelHelp, 1, row++);
         
         grid.add(new Separator(), 0, row, 2, 1);
         row++;
         
-        grid.add(new Label("System ID:"), 0, row);
-        grid.add(idField, 1, row++);
+        grid.add(checkButton, 0, row, 2, 1);
+        row++;
         
-        grid.add(new Label("System Name:"), 0, row);
-        grid.add(nameField, 1, row++);
+        grid.add(statusLabel, 0, row, 2, 1);
+        row++;
+        grid.add(cecStatusLabel, 0, row, 2, 1);
+        row++;
+        grid.add(clusterStatusLabel, 0, row, 2, 1);
         
         dialog.getDialogPane().setContent(grid);
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        dialog.getDialogPane().setPrefWidth(500);
+        
+        // Check availability handler
+        checkButton.setOnAction(e -> {
+            String elements = elementsField.getText().trim();
+            String structurePhase = structurePhaseField.getText().trim();
+            String model = modelField.getText().trim();
+            
+            if (elements.isEmpty() || structurePhase.isEmpty() || model.isEmpty()) {
+                cecStatusLabel.setText("CEC: ⚠ Please fill all fields first");
+                clusterStatusLabel.setText("Cluster/CF: ⚠ Please fill all fields first");
+                return;
+            }
+            
+            String[] parts = structurePhase.split("_");
+            if (parts.length != 2) {
+                cecStatusLabel.setText("CEC: ⚠ Invalid format");
+                clusterStatusLabel.setText("Cluster/CF: ⚠ Invalid format");
+                showAlert("Invalid Format", "Structure/Phase must be in format: Structure_Phase (e.g., BCC_A2)");
+                return;
+            }
+            
+            String structure = parts[0];
+            String phase = parts[1];
+            
+            // Check CEC availability (element-specific)
+            boolean cecExists = SystemDataLoader.cecExists(elements);
+            cecStatusLabel.setText("CEC: " + (cecExists ? "✓ Available" : "✗ Not available (will need manual input)"));
+            cecStatusLabel.setStyle("-fx-font-size: 10; -fx-text-fill: " + (cecExists ? "green" : "orange") + ";");
+            
+            // Check model data availability (shared across alloys)
+            boolean modelExists = SystemDataLoader.modelDataExists(structure, phase, model);
+            String modelId = structure + "_" + phase + "_" + model;
+            clusterStatusLabel.setText("Model (" + modelId + "): " + (modelExists ? "✓ Available" : "✗ Need calculation"));
+            clusterStatusLabel.setStyle("-fx-font-size: 10; -fx-text-fill: " + (modelExists ? "green" : "orange") + ";");
+        });
         
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == ButtonType.OK) {
-                if (idField.getText().isEmpty() || nameField.getText().isEmpty()) {
-                    showAlert("Missing Fields", "ID and Name are required.");
+                String elements = elementsField.getText().trim();
+                String structurePhase = structurePhaseField.getText().trim();
+                String model = modelField.getText().trim();
+                
+                if (elements.isEmpty() || structurePhase.isEmpty() || model.isEmpty()) {
+                    showAlert("Missing Fields", "All fields are required.");
                     return null;
                 }
                 
-                SystemInfo system = new SystemInfo(
-                    idField.getText().trim(),
-                    nameField.getText().trim(),
-                    modelInfo.getStructure(),
-                    modelInfo.getPhase(),
-                    selectedComponents.toArray(new String[0])
-                );
-                
-                // Populate additional fields from model info
-                system.setClusterFilePath(modelInfo.getClusterFile());
-                system.setSymmetryGroupName(modelInfo.getSymGroup());
-                
-                if (modelInfo.getTransformMatrix() != null) {
-                    system.setTransformationMatrix(modelInfo.getTransformMatrix());
+                String[] parts = structurePhase.split("_");
+                if (parts.length != 2) {
+                    showAlert("Invalid Format", "Structure/Phase must be in format: Structure_Phase (e.g., BCC_A2)");
+                    return null;
                 }
                 
-                if (modelInfo.getTranslationVector() != null) {
-                    system.setTranslationVector(modelInfo.getTranslationVector());
-                }
+                String structure = parts[0];
+                String phase = parts[1];
+                String[] componentArray = elements.split("-");
+                
+                String systemId = SystemInfo.generateSystemId(elements, structure, phase, model);
+                String systemName = elements + " " + structure + " " + phase + " (" + model + ")";
+                
+                SystemInfo system = new SystemInfo(systemId, systemName, structure, phase, model, componentArray);
+                
+                // Check and set availability flags using new separated data structure
+                system.setCecAvailable(SystemDataLoader.cecExists(elements));
+                boolean modelExists = SystemDataLoader.modelDataExists(structure, phase, model);
+                system.setClustersComputed(modelExists);
+                system.setCfsComputed(modelExists);
                 
                 return system;
             }
@@ -318,8 +346,8 @@ public class SystemRegistryPanel extends VBox {
             registry.registerSystem(newSystem);
             refreshSystemTree();
             logJobEvent("Added system: " + newSystem.getName() + 
-                       " (" + selectedComponents.size() + " components, " +
-                       modelInfo.getModelId() + ")");
+                       " (CEC:" + (newSystem.isCecAvailable() ? "Yes" : "No") +
+                       ", Cluster/CF:" + (newSystem.isClustersComputed() && newSystem.isCfsComputed() ? "Yes" : "No") + ")");
         }
     }
     
