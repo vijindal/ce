@@ -1,0 +1,192 @@
+package org.ce.app.gui.ui.panels;
+
+import javafx.geometry.Insets;
+import javafx.scene.control.*;
+import javafx.scene.layout.VBox;
+import org.ce.app.gui.backend.BackgroundJobManager;
+import org.ce.app.gui.backend.SystemRegistry;
+import org.ce.app.gui.backend.jobs.BackgroundJob;
+import org.ce.app.gui.models.SystemInfo;
+
+import java.util.Collection;
+
+/**
+ * Left panel for system registry and background job management.
+ * Displays registered systems with caching status and active job queue.
+ */
+public class SystemRegistryPanel extends VBox {
+    
+    private final SystemRegistry registry;
+    private final BackgroundJobManager jobManager;
+    private final TreeView<String> systemTree;
+    private final TextArea jobLogArea;
+    private final ProgressBar jobProgressBar;
+    
+    public SystemRegistryPanel(SystemRegistry registry, BackgroundJobManager jobManager) {
+        this.registry = registry;
+        this.jobManager = jobManager;
+        
+        this.setSpacing(10);
+        this.setPadding(new Insets(10));
+        this.setStyle("-fx-border-color: #d0d0d0; -fx-border-width: 0 1 0 0;");
+        
+        // Build UI components
+        VBox systemSection = createSystemSection();
+        VBox jobSection = createJobSection();
+        
+        // Add to layout with splitter
+        SplitPane splitter = new SplitPane();
+        splitter.setOrientation(javafx.geometry.Orientation.VERTICAL);
+        splitter.setDividerPositions(0.6);
+        splitter.getItems().addAll(systemSection, jobSection);
+        
+        this.getChildren().add(splitter);
+        
+        // Initialize data
+        refreshSystemTree();
+        setupJobMonitoring();
+    }
+    
+    private VBox createSystemSection() {
+        VBox vbox = new VBox(10);
+        
+        Label titleLabel = new Label("System Registry");
+        titleLabel.setStyle("-fx-font-size: 12; -fx-font-weight: bold;");
+        
+        // Search box
+        TextField searchBox = new TextField();
+        searchBox.setPromptText("Search systems...");
+        
+        // System tree
+        systemTree = new TreeView<>();
+        systemTree.setPrefHeight(200);
+        
+        // Toolbar
+        HBox toolbar = new HBox(5);
+        Button addButton = new Button("+ Add System");
+        Button deleteButton = new Button("Delete");
+        Button runBgButton = new Button("Run BG Calc");
+        
+        addButton.setStyle("-fx-font-size: 10;");
+        deleteButton.setStyle("-fx-font-size: 10;");
+        runBgButton.setStyle("-fx-font-size: 10;");
+        
+        toolbar.getChildren().addAll(addButton, deleteButton, runBgButton);
+        
+        vbox.getChildren().addAll(titleLabel, searchBox, new Label("Systems:"), 
+                                  systemTree, toolbar);
+        vbox.setVgrow(systemTree, javafx.scene.layout.Priority.ALWAYS);
+        
+        return vbox;
+    }
+    
+    private VBox createJobSection() {
+        VBox vbox = new VBox(10);
+        
+        Label titleLabel = new Label("Background Job Monitor");
+        titleLabel.setStyle("-fx-font-size: 12; -fx-font-weight: bold;");
+        
+        // Job progress
+        jobProgressBar = new ProgressBar(0);
+        jobProgressBar.setPrefHeight(20);
+        
+        // Job log
+        jobLogArea = new TextArea();
+        jobLogArea.setWrapText(true);
+        jobLogArea.setPrefHeight(100);
+        jobLogArea.setEditable(false);
+        jobLogArea.setStyle("-fx-font-family: 'Courier New', monospace; -fx-font-size: 9;");
+        
+        // Control buttons
+        HBox controls = new HBox(5);
+        Button pauseButton = new Button("Pause");
+        Button cancelButton = new Button("Cancel");
+        Button clearButton = new Button("Clear");
+        
+        pauseButton.setStyle("-fx-font-size: 10;");
+        cancelButton.setStyle("-fx-font-size: 10;");
+        clearButton.setStyle("-fx-font-size: 10;");
+        
+        controls.getChildren().addAll(pauseButton, cancelButton, clearButton);
+        
+        vbox.getChildren().addAll(titleLabel, jobProgressBar, new Label("Job Log:"), 
+                                  jobLogArea, controls);
+        vbox.setVgrow(jobLogArea, javafx.scene.layout.Priority.ALWAYS);
+        
+        return vbox;
+    }
+    
+    private void refreshSystemTree() {
+        TreeItem<String> root = new TreeItem<>("Systems");
+        root.setExpanded(true);
+        
+        Collection<SystemInfo> systems = registry.getAllSystems();
+        
+        for (SystemInfo system : systems) {
+            TreeItem<String> systemItem = new TreeItem<>(system.getName());
+            
+            // Status indicators
+            String clustersStatus = system.isClustersComputed() ? "✓" : "○";
+            String cfsStatus = system.isCfsComputed() ? "✓" : "○";
+            
+            TreeItem<String> clustersItem = new TreeItem<>(clustersStatus + " Clusters");
+            TreeItem<String> cfsItem = new TreeItem<>(cfsStatus + " CFs");
+            
+            systemItem.getChildren().addAll(clustersItem, cfsItem);
+            root.getChildren().add(systemItem);
+        }
+        
+        systemTree.setRoot(root);
+    }
+    
+    private void setupJobMonitoring() {
+        jobManager.addManagerListener(new BackgroundJobManager.JobManagerListener() {
+            @Override
+            public void onJobQueued(String jobId, int queueSize) {
+                javafx.application.Platform.runLater(() -> {
+                    logJobEvent(jobId + " - queued (queue size: " + queueSize + ")");
+                });
+            }
+            
+            @Override
+            public void onJobStarted(String jobId) {
+                javafx.application.Platform.runLater(() -> {
+                    logJobEvent(jobId + " - started");
+                });
+            }
+            
+            @Override
+            public void onJobFinished(String jobId) {
+                javafx.application.Platform.runLater(() -> {
+                    logJobEvent(jobId + " - finished");
+                    refreshSystemTree();
+                });
+            }
+            
+            @Override
+            public void onJobCancelled(String jobId) {
+                javafx.application.Platform.runLater(() -> {
+                    logJobEvent(jobId + " - cancelled");
+                });
+            }
+        });
+    }
+    
+    private void logJobEvent(String message) {
+        jobLogArea.appendText("[" + java.time.LocalTime.now() + "] " + message + "\n");
+    }
+    
+    public void updateJobProgress() {
+        Collection<BackgroundJob> activeJobs = jobManager.getActiveJobs();
+        if (activeJobs.isEmpty()) {
+            jobProgressBar.setProgress(0);
+        } else {
+            // Average progress of all active jobs
+            double avgProgress = activeJobs.stream()
+                .mapToInt(BackgroundJob::getProgress)
+                .average()
+                .orElse(0);
+            jobProgressBar.setProgress(avgProgress / 100.0);
+        }
+    }
+}

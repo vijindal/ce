@@ -10,6 +10,16 @@ dependencies {
     testImplementation libs.junit.jupiter
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     implementation libs.guava
+    
+    // TODO: JavaFX dependencies - temporarily removed due to platform classifier resolution issues
+    // Will be re-added once proper Maven Central configuration is in place
+    // See: https://gluonhq.com/products/javafx/
+    
+    // Database
+    implementation libs.sqlite.jdbc
+    
+    // JSON serialization
+    implementation libs.json
 }
 
 java {
@@ -19,8 +29,8 @@ java {
 }
 
 application {
-    // Default to MCS demo; use CMatrixDemo for C-matrix testing
-    mainClass = 'org.ce.app.examples.MCSDemo'
+    // Use CLI for now; switch to CEWorkbench when JavaFX is properly configured
+    mainClass = 'org.ce.app.cli.CEWorkbenchCLI'
 }
 
 tasks.named('test') {
