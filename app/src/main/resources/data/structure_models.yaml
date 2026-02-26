@@ -1,0 +1,115 @@
+# Structure Model Database
+# Defines available crystal structures, phases, and CVM approximation models
+# Each entry specifies cluster files, symmetry groups, and metadata
+
+structures:
+  BCC:
+    name: "Body-Centered Cubic"
+    phases:
+      A2:
+        description: "BCC disordered (reference state)"
+        ordered: false
+        supportedComponents: [2, 3, 4] # binary, ternary, quaternary
+        cvmModels:
+          T:
+            name: "Tetrahedron"
+            clusterFile: "cluster/A2-T.txt"
+            symGroup: "A2-SG"
+            symMatFile: null
+            maxClusterSize: 4
+            
+          O:
+            name: "Octahedron"  
+            clusterFile: "cluster/A2-O.txt"
+            symGroup: "A2-SG"
+            symMatFile: null
+            maxClusterSize: 6
+            
+          TO:
+            name: "Tetrahedron + Octahedron"
+            clusterFile: "cluster/A2-TO.txt"
+            symGroup: "A2-SG"
+            symMatFile: null
+            maxClusterSize: 6
+            
+      B2:
+        description: "BCC ordered (CsCl structure)"
+        ordered: true
+        supportedComponents: [2] # binary only
+        cvmModels:
+          T:
+            name: "Tetrahedron"
+            clusterFile: "cluster/B2-T.txt"
+            symGroup: "B2-SG"
+            symMatFile: "symmetry/B2-SG_mat.txt"
+            maxClusterSize: 4
+            transformMatrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+            translationVector: [0.5, 0.5, 0.5]
+            
+      D03:
+        description: "BCC super-ordered (Fe3Al structure)"
+        ordered: true
+        supportedComponents: [2] # binary only
+        cvmModels:
+          T:
+            name: "Tetrahedron"
+            clusterFile: "cluster/D03-T.txt"
+            symGroup: "D03-SG"
+            symMatFile: null
+            maxClusterSize: 4
+            
+  FCC:
+    name: "Face-Centered Cubic"
+    phases:
+      A1:
+        description: "FCC disordered (reference state)"
+        ordered: false
+        supportedComponents: [2, 3, 4]
+        cvmModels:
+          T:
+            name: "Tetrahedron"
+            clusterFile: "cluster/A1-T.txt"
+            symGroup: "A1-SG"
+            symMatFile: null
+            maxClusterSize: 4
+            
+      L12:
+        description: "FCC ordered (Cu3Au structure)"
+        ordered: true
+        supportedComponents: [2] # binary only (AB3 stoichiometry)
+        cvmModels:
+          T:
+            name: "Tetrahedron"
+            clusterFile: "cluster/L12-T.txt"
+            symGroup: "L12-SG"
+            symMatFile: null
+            maxClusterSize: 4
+            transformMatrix: [[2.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 2.0]]
+            translationVector: [0.0, 0.0, 0.0]
+            
+      L10:
+        description: "FCC ordered (AuCu structure)"
+        ordered: true
+        supportedComponents: [2] # binary only (AB stoichiometry)
+        cvmModels:
+          T:
+            name: "Tetrahedron"
+            clusterFile: "cluster/L10-T.txt"
+            symGroup: "L10-SG"
+            symMatFile: null
+            maxClusterSize: 4
+            
+  HCP:
+    name: "Hexagonal Close-Packed"
+    phases:
+      A3:
+        description: "HCP disordered (reference state)"
+        ordered: false
+        supportedComponents: [2, 3]
+        cvmModels:
+          T:
+            name: "Tetrahedron"
+            clusterFile: "cluster/A3-T.txt"
+            symGroup: "A3-SG"
+            symMatFile: null
+            maxClusterSize: 4

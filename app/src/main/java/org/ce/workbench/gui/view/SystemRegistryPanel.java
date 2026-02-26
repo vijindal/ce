@@ -10,6 +10,9 @@ import org.ce.workbench.backend.job.BackgroundJobManager;
 import org.ce.workbench.backend.registry.SystemRegistry;
 import org.ce.workbench.backend.job.BackgroundJob;
 import org.ce.workbench.gui.model.SystemInfo;
+import org.ce.workbench.gui.component.PeriodicTableSelectionDialog;
+import org.ce.workbench.gui.component.StructureModelSelectionDialog;
+import org.ce.workbench.gui.component.StructureModelInfo;
 import org.ce.identification.engine.Vector3D;
 import org.ce.workbench.backend.job.CFIdentificationJob;
 import org.ce.workbench.backend.job.ClusterIdentificationJob;
@@ -18,6 +21,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.List;
 
 /**
  * Left panel for system registry and background job management.
@@ -196,36 +200,82 @@ public class SystemRegistryPanel extends VBox {
     }
     
     private void showAddSystemDialog() {
+        // Step 1: Select components using periodic table
+        Optional<List<String>> componentsOpt = PeriodicTableSelectionDialog.showDialog();
+        if (componentsOpt.isEmpty() || componentsOpt.get().isEmpty()) {
+            return; // User cancelled or selected nothing
+        }
+        
+        List<String> selectedComponents = componentsOpt.get();
+        String componentStr = String.join(", ", selectedComponents);
+        
+        // Step 2: Select structure, phase, and CVM model
+        Optional<StructureModelInfo> modelOpt = StructureModelSelectionDialog.showDialog(selectedComponents);
+        if (modelOpt.isEmpty()) {
+            return; // User cancelled
+        }
+        
+        StructureModelInfo modelInfo = modelOpt.get();
+        
+        // Step 3: Final confirmation and optional customization
         Dialog<SystemInfo> dialog = new Dialog<>();
-        dialog.setTitle("Add New System");
-        dialog.setHeaderText("Create a new calculation system");
+        dialog.setTitle("Add New System - Confirmation");
+        dialog.setHeaderText("Confirm system configuration");
         
         GridPane grid = new GridPane();
         grid.setHgap(10);
         grid.setVgap(10);
         grid.setPadding(new Insets(20));
         
-        TextField idField = new TextField();
-        idField.setPromptText("e.g., FE-NI-001");
-        TextField nameField = new TextField();
-        nameField.setPromptText("e.g., Fe-Ni A1");
-        TextField structureField = new TextField();
-        structureField.setPromptText("e.g., BCC");
-        TextField phaseField = new TextField();
-        phaseField.setPromptText("e.g., A2");
-        TextField componentsField = new TextField();
-        componentsField.setPromptText("e.g., Fe,Ni");
+        // Auto-generate ID and Name based on selections
+        String suggestedId = String.join("-", selectedComponents) + "_" + 
+                            modelInfo.getStructure() + "_" + modelInfo.getPhase();
+        String suggestedName = String.join("-", selectedComponents) + " " + 
+                              modelInfo.getDisplayName();
         
-        grid.add(new Label("ID:"), 0, 0);
-        grid.add(idField, 1, 0);
-        grid.add(new Label("Name:"), 0, 1);
-        grid.add(nameField, 1, 1);
-        grid.add(new Label("Structure:"), 0, 2);
-        grid.add(structureField, 1, 2);
-        grid.add(new Label("Phase:"), 0, 3);
-        grid.add(phaseField, 1, 3);
-        grid.add(new Label("Components (comma-separated):"), 0, 4);
-        grid.add(componentsField, 1, 4);
+        TextField idField = new TextField(suggestedId);
+        TextField nameField = new TextField(suggestedName);
+        
+        Label componentsLabel = new Label(componentStr);
+        componentsLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #4CAF50;");
+        
+        Label structureLabel = new Label(modelInfo.getStructure() + " " + modelInfo.getPhase());
+        structureLabel.setStyle("-fx-font-weight: bold;");
+        
+        Label cvmLabel = new Label(modelInfo.getCvmModel() + " (" + 
+                                   modelInfo.getMaxClusterSize() + " atoms max)");
+        cvmLabel.setStyle("-fx-font-style: italic;");
+        
+        Label clusterFileLabel = new Label(modelInfo.getClusterFile());
+        clusterFileLabel.setStyle("-fx-font-size: 9; -fx-text-fill: #666;");
+        
+        Label symGroupLabel = new Label(modelInfo.getSymGroup());
+        symGroupLabel.setStyle("-fx-font-size: 9; -fx-text-fill: #666;");
+        
+        int row = 0;
+        grid.add(new Label("Components:"), 0, row);
+        grid.add(componentsLabel, 1, row++);
+        
+        grid.add(new Label("Structure/Phase:"), 0, row);
+        grid.add(structureLabel, 1, row++);
+        
+        grid.add(new Label("CVM Model:"), 0, row);
+        grid.add(cvmLabel, 1, row++);
+        
+        grid.add(new Label("Cluster File:"), 0, row);
+        grid.add(clusterFileLabel, 1, row++);
+        
+        grid.add(new Label("Symmetry Group:"), 0, row);
+        grid.add(symGroupLabel, 1, row++);
+        
+        grid.add(new Separator(), 0, row, 2, 1);
+        row++;
+        
+        grid.add(new Label("System ID:"), 0, row);
+        grid.add(idField, 1, row++);
+        
+        grid.add(new Label("System Name:"), 0, row);
+        grid.add(nameField, 1, row++);
         
         dialog.getDialogPane().setContent(grid);
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
@@ -236,17 +286,28 @@ public class SystemRegistryPanel extends VBox {
                     showAlert("Missing Fields", "ID and Name are required.");
                     return null;
                 }
-                String[] components = componentsField.getText().split(",");
-                for (int i = 0; i < components.length; i++) {
-                    components[i] = components[i].trim();
-                }
-                return new SystemInfo(
+                
+                SystemInfo system = new SystemInfo(
                     idField.getText().trim(),
                     nameField.getText().trim(),
-                    structureField.getText().trim(),
-                    phaseField.getText().trim(),
-                    components
+                    modelInfo.getStructure(),
+                    modelInfo.getPhase(),
+                    selectedComponents.toArray(new String[0])
                 );
+                
+                // Populate additional fields from model info
+                system.setClusterFilePath(modelInfo.getClusterFile());
+                system.setSymmetryGroupName(modelInfo.getSymGroup());
+                
+                if (modelInfo.getTransformMatrix() != null) {
+                    system.setTransformationMatrix(modelInfo.getTransformMatrix());
+                }
+                
+                if (modelInfo.getTranslationVector() != null) {
+                    system.setTranslationVector(modelInfo.getTranslationVector());
+                }
+                
+                return system;
             }
             return null;
         });
@@ -256,7 +317,9 @@ public class SystemRegistryPanel extends VBox {
             SystemInfo newSystem = result.get();
             registry.registerSystem(newSystem);
             refreshSystemTree();
-            logJobEvent("Added system: " + newSystem.getName());
+            logJobEvent("Added system: " + newSystem.getName() + 
+                       " (" + selectedComponents.size() + " components, " +
+                       modelInfo.getModelId() + ")");
         }
     }
     
