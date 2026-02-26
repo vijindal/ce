@@ -89,6 +89,7 @@ public class SystemRegistryPanel extends VBox {
                   systemTree, toolbar);
         VBox.setVgrow(systemTree, Priority.ALWAYS);
 
+        addButton.setOnAction(e -> showAddSystemDialog());
         clusterIdButton.setOnAction(e -> startClusterIdentification());
         cfIdButton.setOnAction(e -> startCfIdentification());
         
@@ -192,6 +193,71 @@ public class SystemRegistryPanel extends VBox {
     
     private void logJobEvent(String message) {
         jobLogArea.appendText("[" + java.time.LocalTime.now() + "] " + message + "\n");
+    }
+    
+    private void showAddSystemDialog() {
+        Dialog<SystemInfo> dialog = new Dialog<>();
+        dialog.setTitle("Add New System");
+        dialog.setHeaderText("Create a new calculation system");
+        
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20));
+        
+        TextField idField = new TextField();
+        idField.setPromptText("e.g., FE-NI-001");
+        TextField nameField = new TextField();
+        nameField.setPromptText("e.g., Fe-Ni A1");
+        TextField structureField = new TextField();
+        structureField.setPromptText("e.g., BCC");
+        TextField phaseField = new TextField();
+        phaseField.setPromptText("e.g., A2");
+        TextField componentsField = new TextField();
+        componentsField.setPromptText("e.g., Fe,Ni");
+        
+        grid.add(new Label("ID:"), 0, 0);
+        grid.add(idField, 1, 0);
+        grid.add(new Label("Name:"), 0, 1);
+        grid.add(nameField, 1, 1);
+        grid.add(new Label("Structure:"), 0, 2);
+        grid.add(structureField, 1, 2);
+        grid.add(new Label("Phase:"), 0, 3);
+        grid.add(phaseField, 1, 3);
+        grid.add(new Label("Components (comma-separated):"), 0, 4);
+        grid.add(componentsField, 1, 4);
+        
+        dialog.getDialogPane().setContent(grid);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == ButtonType.OK) {
+                if (idField.getText().isEmpty() || nameField.getText().isEmpty()) {
+                    showAlert("Missing Fields", "ID and Name are required.");
+                    return null;
+                }
+                String[] components = componentsField.getText().split(",");
+                for (int i = 0; i < components.length; i++) {
+                    components[i] = components[i].trim();
+                }
+                return new SystemInfo(
+                    idField.getText().trim(),
+                    nameField.getText().trim(),
+                    structureField.getText().trim(),
+                    phaseField.getText().trim(),
+                    components
+                );
+            }
+            return null;
+        });
+        
+        Optional<SystemInfo> result = dialog.showAndWait();
+        if (result.isPresent() && result.get() != null) {
+            SystemInfo newSystem = result.get();
+            registry.registerSystem(newSystem);
+            refreshSystemTree();
+            logJobEvent("Added system: " + newSystem.getName());
+        }
     }
     
     public void updateJobProgress() {
