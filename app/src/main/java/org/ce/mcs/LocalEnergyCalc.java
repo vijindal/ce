@@ -26,10 +26,12 @@ import java.util.List;
  *
  * <h2>Energy formula</h2>
  * <pre>
- *   H = Σ_{e ∈ allEmbeddings}  ECI[e.type] · Φ(e) / size(e)
+ *   H = Σ_{e ∈ allEmbeddings}  ECI[e.type] · Φ(e) / size(e)    [for size > 0]
+ *       + ECI[empty] · Φ(empty)                                  [for empty cluster]
  * </pre>
- * <p>dividing by {@code size(e)} corrects for the fact that each physical
- * cluster appears {@code clusterSize} times in {@code allEmbeddings}.</p>
+ * <p>Dividing by {@code size(e)} corrects for the fact that each physical
+ * cluster appears {@code clusterSize} times in {@code allEmbeddings}.
+ * For empty clusters (size=0), no division is performed to avoid NaN.</p>
  *
  * <h2>ΔE for a single-site occupation change at site i</h2>
  * <pre>
@@ -130,7 +132,14 @@ public final class LocalEnergyCalc {
                                       List<List<org.ce.identification.engine.Cluster>> orbits) {
         double sum = 0.0;
         for (Embedding e : emb.getAllEmbeddings()) {
-            sum += eci[e.getClusterType()] * clusterProduct(e, config, orbits) / e.size();
+            int size = e.size();
+            if (size > 0) {
+                // Normal clusters: divide by size to avoid double-counting
+                sum += eci[e.getClusterType()] * clusterProduct(e, config, orbits) / size;
+            } else {
+                // Empty cluster (constant term): no division needed
+                sum += eci[e.getClusterType()] * clusterProduct(e, config, orbits);
+            }
         }
         return sum;
     }
