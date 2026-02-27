@@ -309,7 +309,8 @@ public class CalculationSetupPanel extends VBox {
                 + "  orbitList=" + clusterData.getOrbitList().size());
 
         // --- Load ECI/CEC data using the full CEC key ---
-        int requiredECILength = clusterData.getTc();
+        // For Gibbs energy of mixing, ECIs = tc - 2 (excluding empty and point clusters)
+        int requiredECILength = clusterData.getTc() - 2;
         resultsPanel.logMessage("[MCS] Loading CEC  key=" + cecKey
                 + "  required length=" + requiredECILength);
 
