@@ -72,16 +72,17 @@ public class CalculationContext {
      */
     private void validateReadiness() {
         if (clusterData != null && eci != null) {
-            if (eci.length == clusterData.getTc()) {
+            // For Gibbs energy of mixing, we use tc-2 ECIs (excluding empty and point clusters)
+            int expectedEciCount = clusterData.getTc() - 2;
+            if (eci.length == expectedEciCount) {
                 this.isReady = true;
                 this.readinessError = null;
             } else {
                 this.isReady = false;
                 this.readinessError =
-                    "ECI length (" + eci.length + ") does not match cluster type count ("
-                    + clusterData.getTc() + ") for system " + system.getName()
-                    + ". Check that the CEC values in the database correspond to the "
-                    + "correct model (expected tc=" + clusterData.getTc() + ").";
+                    "ECI length (" + eci.length + ") does not match expected count (tc-2="
+                    + expectedEciCount + ") for system " + system.getName()
+                    + ". For mixing calculations, ECIs should exclude empty and point clusters.";
             }
         }
     }
