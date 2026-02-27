@@ -14,12 +14,10 @@
   ],
   "units": "J/mol",
   "description": [
-    "Point (1-body)",
-    "1-neighbor pair",
-    "II-neighbor pair",
-    "Triangle",
-    "Tetrahedron (4-body)",
-    "Mixed tetrahedra"
+    "1-neighbor pair (rc=3, mult=12)",
+    "II-neighbor pair (rc=2, mult=4)",
+    "Triangle (rc=2, mult=3)",
+    "Tetrahedron 4-body (rc=1)"
   ],
   "reference": "Optimized from Nb-Ti BCC phase diagram fitting",
   "timestamp": "2026-02-27T17:00:00Z",
