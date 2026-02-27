@@ -1,5 +1,8 @@
 package org.ce.app;
 
+import org.ce.core.CVMConfiguration;
+import org.ce.core.CVMPipeline;
+import org.ce.core.CVMResult;
 import org.ce.identification.engine.Vector3D;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;

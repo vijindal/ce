@@ -151,49 +151,69 @@ public class SystemRegistryPanel extends VBox {
             String phase = parts[1];
             String[] componentArray = elements.split("-");
             int numComponents = componentArray.length;
-            
+            String componentSuffix = getComponentSuffix(numComponents);
+
+            // systemId: uniquely identifies this system instance (element + model)
+            String systemId = SystemInfo.generateSystemId(elements, structure, phase, model);
+            // cecKey: element + model — one CEC file per alloy+model combination
+            String cecKey = elements + "_" + structure + "_" + phase + "_" + model;
+            // clusterKey: component-count + model — shared across all alloys with same topology
+            String clusterKey = structure + "_" + phase + "_" + model + "_" + componentSuffix;
+
+            logResult("\n[System Creation] ----------------------------------------");
+            logResult("  Elements      : " + elements + " (" + numComponents + " components → " + componentSuffix + ")");
+            logResult("  Structure     : " + structure + "  Phase: " + phase + "  Model: " + model);
+            logResult("  systemId      : " + systemId);
+            logResult("  CEC key       : " + cecKey + "  → /data/systems/" + cecKey + "/cec.json");
+            logResult("  Cluster key   : " + clusterKey + "  → cluster_data/" + clusterKey + "/cluster_result.json");
+
             // Resolve mapping
             String resolvedSymmetryGroup;
             String resolvedClusterFile;
             try {
                 resolvedSymmetryGroup = StructureModelMapping.resolveSymmetryGroup(structurePhase);
-                resolvedClusterFile = StructureModelMapping.resolveClusterFile(structurePhase, model);
-                logResult("Mapping resolved:");
-                logResult("  " + structurePhase + " → Symmetry: " + resolvedSymmetryGroup);
-                logResult("  " + structurePhase + " + " + model + " → Cluster file: " + resolvedClusterFile);
+                resolvedClusterFile   = StructureModelMapping.resolveClusterFile(structurePhase, model);
+                logResult("  Symmetry group : " + resolvedSymmetryGroup);
+                logResult("  Cluster file   : " + resolvedClusterFile);
             } catch (IllegalArgumentException ex) {
                 showAlert("Mapping Error", ex.getMessage());
                 return;
             }
-            
-            // Generate component suffix (e.g., "bin" for 2 components, "tern" for 3, "quat" for 4)
-            String componentSuffix = getComponentSuffix(numComponents);
-            String clusterDataId = structure + "_" + phase + "_" + model + "_" + componentSuffix;
-            
-            // Check CEC availability
-            boolean cecAvailable = SystemDataLoader.cecExists(elements);
-            logResult("Checking system: " + elements + " " + structure + "_" + phase + "_" + model);
-            logResult("CEC data: " + (cecAvailable ? "✓ Available" : "⚠ Not available - will need manual input"));
-            
-            // Check cluster data availability - look for actual cluster_result.json in project resources
-            String systemId = SystemInfo.generateSystemId(elements, structure, phase, model);
-            boolean clusterDataExists = ClusterDataCache.clusterDataExists(systemId);
-            logResult("Cluster data (" + clusterDataId + "): " + (clusterDataExists ? "✓ Available" : "⚠ Not available"));
+
+            // --- (i) CEC check — element + model specific ---
+            boolean cecAvailable = SystemDataLoader.cecExists(elements, structure, phase, model);
+            logResult("  CEC (" + cecKey + "): " + (cecAvailable
+                    ? "✓ found" : "⚠ NOT found — MCS will require manual ECI input"));
+            if (!cecAvailable) {
+                showAlert("CEC Data Missing",
+                    "No CEC data found for '" + cecKey + "'.\n\n"
+                    + "Expected file: /data/systems/" + cecKey + "/cec.json\n\n"
+                    + "You can still create the system and provide ECI values manually "
+                    + "when running MCS.");
+            }
+
+            // --- (ii) Cluster data check — component-count + model specific ---
+            logResult("  Checking cluster cache: " + clusterKey + " ...");
+            boolean clusterDataExists = ClusterDataCache.clusterDataExists(clusterKey);
+            logResult("  Cluster data (" + clusterKey + "): " + (clusterDataExists
+                    ? "✓ found in cache" : "⚠ not in cache — identification pipeline needed"));
             
             if (!clusterDataExists) {
-                boolean createClusterAlgebra = confirmAction(
+                boolean generate = confirmAction(
                     "Cluster Data Missing",
-                    "Cluster algebra is not available for this system.\nDo you want to create it now?"
+                    "No cluster data found for '" + clusterKey + "'.\n\n"
+                    + "This data is generated once and reused for all "
+                    + componentSuffix + " " + structure + "_" + phase
+                    + " systems regardless of element choice.\n\n"
+                    + "Generate now?"
                 );
-                if (!createClusterAlgebra) {
-                    logResult("⚠ Cluster algebra creation skipped by user.");
+                if (!generate) {
+                    logResult("⚠ Cluster data generation skipped. System not created.");
                     return;
                 }
-                
-                logResult("\n→ Cluster data missing. Starting identification pipeline...");
-                logResult("Step 1: Cluster identification");
-                
-                // Create system object (using systemId already generated)
+
+                logResult("\n→ Starting identification pipeline  clusterKey=" + clusterKey);
+
                 String systemName = elements + " " + structure + " " + phase + " (" + model + ")";
                 SystemInfo system = new SystemInfo(systemId, systemName, structure, phase, model, componentArray);
                 system.setCecAvailable(cecAvailable);
@@ -201,22 +221,19 @@ public class SystemRegistryPanel extends VBox {
                 system.setCfsComputed(false);
                 system.setClusterFilePath(resolvedClusterFile);
                 system.setSymmetryGroupName(resolvedSymmetryGroup);
-                
                 registry.registerSystem(system);
-                
-                // Trigger cluster identification
-                logResult("\n>>> Starting cluster identification for: " + systemName);
+                logResult("  System registered: " + systemId);
+
+                logResult("  Running cluster identification → will save as clusterKey=" + clusterKey);
                 if (!startClusterIdentificationForSystem(system)) {
                     return;
                 }
-                
-                logResult("Step 2: CF identification");
+                logResult("  Running CF identification...");
                 startCfIdentificationForSystem(system);
-                
+
             } else {
-                // Cluster data exists - create system directly
-                logResult("\n✓ All required data available. Creating system...");
-                
+                logResult("\n✓ Cluster cache hit (" + clusterKey + ") — no identification needed.");
+
                 String systemName = elements + " " + structure + " " + phase + " (" + model + ")";
                 SystemInfo system = new SystemInfo(systemId, systemName, structure, phase, model, componentArray);
                 system.setCecAvailable(cecAvailable);
@@ -224,9 +241,10 @@ public class SystemRegistryPanel extends VBox {
                 system.setCfsComputed(true);
                 system.setClusterFilePath(resolvedClusterFile);
                 system.setSymmetryGroupName(resolvedSymmetryGroup);
-                
                 registry.registerSystem(system);
-                logResult("✓ System created successfully: " + systemName);
+                logResult("✓ System created: " + systemName);
+                logResult("  At MCS time → CEC loaded from key: " + cecKey);
+                logResult("  At MCS time → cluster data loaded from key: " + clusterKey);
             }
             
             // Clear form

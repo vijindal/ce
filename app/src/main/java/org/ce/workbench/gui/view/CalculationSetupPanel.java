@@ -8,12 +8,11 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import org.ce.workbench.backend.registry.SystemRegistry;
 import org.ce.workbench.backend.job.BackgroundJobManager;
-import org.ce.workbench.backend.job.ClusterIdentificationJob;
 import org.ce.workbench.gui.model.SystemInfo;
 import org.ce.workbench.util.CalculationContext;
+import org.ce.workbench.util.ClusterDataCache;
 import org.ce.workbench.util.ECILoader;
 import org.ce.workbench.util.MCSExecutor;
-import org.ce.workbench.util.ClusterDataCache;
 import org.ce.identification.engine.ClusCoordListResult;
 
 import java.util.Comparator;
@@ -218,10 +217,10 @@ public class CalculationSetupPanel extends VBox {
             return;
         }
         
-        if (!selectedSystem.isClustersComputed() || !selectedSystem.isCfsComputed()) {
+        if (!selectedSystem.isClustersComputed()) {
             showError(
                 "Data Missing",
-                "The system '" + selectedSystem.getName() + "' does not have cluster and CF data computed.\n" +
+                "The system '" + selectedSystem.getName() + "' does not have cluster data computed.\n" +
                 "Please complete the identification pipeline first."
             );
             return;
@@ -266,66 +265,107 @@ public class CalculationSetupPanel extends VBox {
             seed
         );
         
-        // Load cluster data from the identification job (must be same session)
-        String clusterJobId = selectedSystem.getClusterJobId();
-        if (clusterJobId == null) {
-            showError("No Cluster Identification", "System has no cluster identification job ID. Please run identification first.");
+        // Derive the two keys from the selected system
+        String elementsStr     = String.join("-", selectedSystem.getComponents());
+        String componentSuffix = getComponentSuffix(selectedSystem.getNumComponents());
+        // CEC key:     elements + model  e.g. "Nb-Ti_BCC_A2_T"
+        String cecKey     = elementsStr + "_"
+                          + selectedSystem.getStructure() + "_"
+                          + selectedSystem.getPhase()     + "_"
+                          + selectedSystem.getModel();
+        // Cluster key: component-count + model  e.g. "BCC_A2_T_bin"
+        String clusterKey = selectedSystem.getStructure() + "_"
+                          + selectedSystem.getPhase()     + "_"
+                          + selectedSystem.getModel()     + "_"
+                          + componentSuffix;
+
+        resultsPanel.logMessage("[MCS] CEC key     : " + cecKey);
+        resultsPanel.logMessage("[MCS] Cluster key : " + clusterKey);
+
+        // --- Load cluster data ---
+        resultsPanel.logMessage("[MCS] Loading cluster data from cache...");
+        ClusCoordListResult clusterData;
+        try {
+            java.util.Optional<ClusCoordListResult> cached =
+                    ClusterDataCache.loadClusterData(clusterKey);
+            if (cached.isEmpty()) {
+                showError("Cluster Data Not Found",
+                    "No valid cluster data found for '" + clusterKey + "'.\n\n"
+                    + "The identification pipeline has not been run for this "
+                    + componentSuffix + " " + selectedSystem.getStructure()
+                    + "_" + selectedSystem.getPhase() + " system.\n\n"
+                    + "Delete this system, recreate it, and run identification.\n"
+                    + "Check console for [ClusterDataCache] messages for the exact path.");
+                return;
+            }
+            clusterData = cached.get();
+        } catch (Exception ex) {
+            showError("Cluster Data Load Error",
+                "Failed to load cluster data for '" + clusterKey + "':\n" + ex.getMessage());
             return;
         }
-        
-        resultsPanel.logMessage("Retrieving cluster data from job: " + clusterJobId);
-        ClusterIdentificationJob clusterJob = (ClusterIdentificationJob) jobManager.getJob(clusterJobId);
-        if (clusterJob == null) {
-            showError("Job Not Available", 
-                "Cluster identification job no longer in memory.\n\n" +
-                "Note: Cluster data is only available during the same session as identification.\n" +
-                "Please run identification again if needed.");
-            return;
-        }
-        
-        ClusCoordListResult clusterData = clusterJob.getResult();
-        if (clusterData == null) {
-            showError("No Cluster Result", "Cluster identification job has no result. Please complete identification first.");
-            return;
-        }
-        
         context.setClusterData(clusterData);
-        resultsPanel.logMessage("✓ Cluster data loaded: " + clusterData.getTc() + " cluster types");
-        
-        // Load ECI data
-        String elementsStr = String.join("-", selectedSystem.getComponents());
-        resultsPanel.logMessage("Loading ECI data for " + elementsStr + "...");
-        
-        // Get actual cluster type count from cluster data
-        int requiredECILength = context.getClusterData().getTc();
-        
-        // Try to load from database silently first
-        Optional<double[]> eciOpt = ECILoader.loadECIFromDatabase(elementsStr, requiredECILength);
-        
-        if (eciOpt.isEmpty()) {
-            // Database load failed, try with user prompt
-            resultsPanel.logMessage("⚠ CEC not found in database, attempting manual load...");
-            eciOpt = ECILoader.loadOrInputECI(elementsStr, requiredECILength);
+        resultsPanel.logMessage("✓ Cluster data loaded: tc=" + clusterData.getTc()
+                + "  orbitList=" + clusterData.getOrbitList().size());
+
+        // --- Load ECI/CEC data using the full CEC key ---
+        int requiredECILength = clusterData.getTc();
+        resultsPanel.logMessage("[MCS] Loading CEC  key=" + cecKey
+                + "  required length=" + requiredECILength);
+
+        ECILoader.DBLoadResult dbResult =
+                ECILoader.loadECIFromDatabase(elementsStr,
+                        selectedSystem.getStructure(),
+                        selectedSystem.getPhase(),
+                        selectedSystem.getModel(),
+                        temperature,
+                        requiredECILength);
+        Optional<double[]> eciOpt;
+
+        if (dbResult.status == ECILoader.DBLoadResult.Status.OK) {
+            eciOpt = Optional.of(dbResult.eci);
+            resultsPanel.logMessage("✓ CEC loaded from database: " + dbResult.message);
+            if (dbResult.temperatureEvaluated) {
+                resultsPanel.logMessage("  (T-dependent terms evaluated at T=" + temperature + "K)");
+            }
+        } else {
+            resultsPanel.logMessage("⚠ CEC database load failed: " + dbResult.message);
+            eciOpt = ECILoader.loadOrInputECI(elementsStr,
+                    selectedSystem.getStructure(),
+                    selectedSystem.getPhase(),
+                    selectedSystem.getModel(),
+                    temperature,
+                    requiredECILength);
         }
-        
+
         if (eciOpt.isEmpty()) {
-            resultsPanel.logMessage("⚠ ECI loading cancelled or failed.");
+            resultsPanel.logMessage("⚠ ECI loading cancelled or failed. Cannot run MCS.");
             return;
         }
-        
+
         context.setECI(eciOpt.get());
-        resultsPanel.logMessage("✓ ECI loaded: " + eciOpt.get().length + " values");
-        
-        // Validate context is ready
+        resultsPanel.logMessage("✓ ECI set: " + eciOpt.get().length + " values");
+
         if (!context.isReady()) {
-            showError("Calculation Not Ready", "Missing cluster data or ECI. Cannot proceed with calculation.");
+            showError("ECI/Cluster Mismatch", context.getReadinessError());
             return;
         }
-        
+
         // Execute MCS calculation
         MCSExecutor.executeMCS(context, resultsPanel);
     }
-    
+
+    /** Maps component count to the string suffix used in cache keys. */
+    private static String getComponentSuffix(int n) {
+        switch (n) {
+            case 2:  return "bin";
+            case 3:  return "tern";
+            case 4:  return "quat";
+            case 5:  return "quint";
+            default: return "comp" + n;
+        }
+    }
+
     private void runCVMCalculation() {
         resultsPanel.logMessage("\n>>> CVM Calculation Requested");
         resultsPanel.logMessage("⚠ CVM calculation not yet implemented.");

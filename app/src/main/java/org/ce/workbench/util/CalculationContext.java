@@ -20,6 +20,7 @@ public class CalculationContext {
     private ClusCoordListResult clusterData;
     private double[] eci;
     private boolean isReady;
+    private String readinessError; // Human-readable reason when isReady=false
     
     public CalculationContext(
         SystemInfo system,
@@ -52,6 +53,7 @@ public class CalculationContext {
     public ClusCoordListResult getClusterData() { return clusterData; }
     public double[] getECI() { return eci; }
     public boolean isReady() { return isReady; }
+    public String getReadinessError() { return readinessError; }
     
     // Setters
     public void setClusterData(ClusCoordListResult clusterData) {
@@ -66,18 +68,20 @@ public class CalculationContext {
     
     /**
      * Validates that all required data is present and consistent.
+     * Never throws — callers check {@link #isReady()} and {@link #getReadinessError()}.
      */
     private void validateReadiness() {
         if (clusterData != null && eci != null) {
-            // Verify ECI array length matches cluster type count
             if (eci.length == clusterData.getTc()) {
                 this.isReady = true;
+                this.readinessError = null;
             } else {
                 this.isReady = false;
-                throw new IllegalStateException(
-                    "ECI array length (" + eci.length + ") does not match " +
-                    "cluster type count (" + clusterData.getTc() + ") for system " + system.getName()
-                );
+                this.readinessError =
+                    "ECI length (" + eci.length + ") does not match cluster type count ("
+                    + clusterData.getTc() + ") for system " + system.getName()
+                    + ". Check that the CEC values in the database correspond to the "
+                    + "correct model (expected tc=" + clusterData.getTc() + ").";
             }
         }
     }

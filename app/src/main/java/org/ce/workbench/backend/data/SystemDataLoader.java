@@ -26,9 +26,19 @@ public class SystemDataLoader {
     private static final String MODEL_FILE = "model_data.json";
     
     /**
-     * Checks if CEC data exists for the given elements.
-     * @param elements e.g., "Ti-Nb"
-     * @return true if cec.json exists
+     * Checks if CEC data exists for the given elements + model combination.
+     * Key format: {elements}_{structure}_{phase}_{model}  e.g. "Nb-Ti_BCC_A2_T"
+     */
+    public static boolean cecExists(String elements, String structure, String phase, String model) {
+        String cecKey = elements + "_" + structure + "_" + phase + "_" + model;
+        boolean found = resourceExists(SYSTEMS_BASE_PATH + cecKey + "/" + CEC_FILE);
+        System.out.println("[SystemDataLoader.cecExists] key=" + cecKey + " found=" + found);
+        return found;
+    }
+
+    /**
+     * Checks if CEC data exists for the given elements (legacy — no model qualifier).
+     * Prefer {@link #cecExists(String, String, String, String)}.
      */
     public static boolean cecExists(String elements) {
         return resourceExists(SYSTEMS_BASE_PATH + elements + "/" + CEC_FILE);
@@ -61,41 +71,17 @@ public class SystemDataLoader {
     }
     
     /**
-     * Loads CEC values for given elements.
+     * Loads CEC data for the given elements (legacy — no model qualifier).
      * @param elements e.g., "Ti-Nb"
      * @return Optional containing CEC data, or empty if not found
      */
     public static Optional<CECData> loadCecData(String elements) {
         try {
             String json = loadResourceAsString(SYSTEMS_BASE_PATH + elements + "/" + CEC_FILE);
-            if (json == null) {
-                return Optional.empty();
-            }
-            
-            JSONObject obj = new JSONObject(json);
-            CECData data = new CECData();
-            
-            data.elements = obj.getString("elements");
-            
-            if (obj.has("cecValues")) {
-                JSONArray values = obj.getJSONArray("cecValues");
-                data.cecValues = new double[values.length()];
-                for (int i = 0; i < values.length(); i++) {
-                    data.cecValues[i] = values.getDouble(i);
-                }
-            }
-            
-            if (obj.has("cecUnits")) {
-                data.cecUnits = obj.getString("cecUnits");
-            }
-            
-            if (obj.has("reference")) {
-                data.reference = obj.getString("reference");
-            }
-            
-            return Optional.of(data);
+            if (json == null) return Optional.empty();
+            return Optional.of(parseCecJson(new JSONObject(json)));
         } catch (Exception e) {
-            System.err.println("Error loading CEC data for " + elements + ": " + e.getMessage());
+            System.err.println("[SystemDataLoader.loadCecData] error for " + elements + ": " + e.getMessage());
             return Optional.empty();
         }
     }
@@ -183,7 +169,7 @@ public class SystemDataLoader {
     }
     
     /**
-     * Loads CEC values only (convenience method).
+     * Loads CEC values only - legacy, no model qualifier.
      * @param elements e.g., "Ti-Nb"
      * @return Optional containing CEC values array, or empty if not found
      */
@@ -191,7 +177,106 @@ public class SystemDataLoader {
         Optional<CECData> data = loadCecData(elements);
         return data.map(cecData -> cecData.cecValues);
     }
-    
+
+    /**
+     * Loads CEC data for the given elements + model combination.
+     * Key: {elements}_{structure}_{phase}_{model}  e.g. "Nb-Ti_BCC_A2_T"
+     * File: /data/systems/Nb-Ti_BCC_A2_T/cec.json
+     */
+    public static Optional<CECData> loadCecData(String elements, String structure,
+                                                 String phase, String model) {
+        String cecKey = elements + "_" + structure + "_" + phase + "_" + model;
+        System.out.println("[SystemDataLoader.loadCecData] key=" + cecKey);
+        try {
+            String json = loadResourceAsString(SYSTEMS_BASE_PATH + cecKey + "/" + CEC_FILE);
+            if (json == null) {
+                System.out.println("[SystemDataLoader.loadCecData] NOT FOUND: " + cecKey);
+                return Optional.empty();
+            }
+            CECData data = parseCecJson(new JSONObject(json));
+            System.out.println("[SystemDataLoader.loadCecData] loaded " + cecKey
+                    + "  size=" + data.size()
+                    + "  temperatureDependent=" + data.temperatureDependent);
+            return Optional.of(data);
+        } catch (Exception e) {
+            System.err.println("[SystemDataLoader.loadCecData] error for " + cecKey + ": " + e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Evaluates CEC values at the given temperature.
+     * Uses the full model-qualified key.
+     *
+     * @param elements    e.g. "Nb-Ti"
+     * @param structure   e.g. "BCC"
+     * @param phase       e.g. "A2"
+     * @param model       e.g. "T"
+     * @param temperature temperature in Kelvin (used for T-dependent systems)
+     * @return Optional containing evaluated ECI array, or empty if not found
+     */
+    public static Optional<double[]> loadCecValuesAt(String elements, String structure,
+                                                      String phase, String model,
+                                                      double temperature) {
+        return loadCecData(elements, structure, phase, model)
+                .map(d -> {
+                    double[] eci = d.evaluateAt(temperature);
+                    System.out.println("[SystemDataLoader.loadCecValuesAt] evaluated at T=" + temperature
+                            + "K  eci.length=" + eci.length);
+                    return eci;
+                });
+    }
+
+    /**
+     * Parses a CEC JSON object into a {@link CECData}.
+     * Supports both the new {@code cecTerms} schema (with a/b coefficients)
+     * and the legacy flat {@code cecValues} array.
+     */
+    private static CECData parseCecJson(JSONObject obj) {
+        CECData data = new CECData();
+        data.elements            = obj.optString("elements", "");
+        data.temperatureDependent = obj.optBoolean("temperatureDependent", false);
+        data.tc                  = obj.optInt("tc", 0);
+        if (obj.has("cecUnits"))  data.cecUnits  = obj.getString("cecUnits");
+        if (obj.has("reference")) data.reference = obj.getString("reference");
+        if (obj.has("notes"))     data.notes     = obj.getString("notes");
+
+        // Preferred: cecTerms with a/b coefficients
+        if (obj.has("cecTerms")) {
+            JSONArray terms = obj.getJSONArray("cecTerms");
+            data.cecTerms = new CECTerm[terms.length()];
+            for (int i = 0; i < terms.length(); i++) {
+                JSONObject t = terms.getJSONObject(i);
+                CECTerm term = new CECTerm();
+                term.name = t.optString("name", "term" + i);
+                term.a    = t.getDouble("a");
+                term.b    = t.optDouble("b", 0.0);
+                data.cecTerms[i] = term;
+            }
+            if (data.tc == 0) data.tc = data.cecTerms.length;
+        }
+
+        // Fallback: legacy flat array
+        if (obj.has("cecValues")) {
+            JSONArray values = obj.getJSONArray("cecValues");
+            data.cecValues = new double[values.length()];
+            for (int i = 0; i < values.length(); i++) {
+                data.cecValues[i] = values.getDouble(i);
+            }
+            if (data.tc == 0) data.tc = data.cecValues.length;
+        }
+
+        return data;
+    }
+
+    /**
+     * Loads CEC values array for the given elements + model combination.
+     */
+    public static Optional<double[]> loadCecValues(String elements, String structure,
+                                                    String phase, String model) {
+        return loadCecData(elements, structure, phase, model).map(d -> d.cecValues);
+    }
+
     /**
      * Loads cluster result metadata from model data.
      */
@@ -329,12 +414,55 @@ public class SystemDataLoader {
     
     /**
      * Element-specific CEC data.
+     *
+     * <p>Each term stores coefficients {@code a} and {@code b} so that
+     * {@code E(T) = a + b*T}.  For temperature-independent systems {@code b = 0}
+     * and the value collapses to the constant {@code a}.</p>
+     *
+     * <p>Call {@link #evaluateAt(double)} to obtain a flat {@code double[]}
+     * evaluated at a given temperature for use in MCSRunner.</p>
      */
     public static class CECData {
-        public String elements;
-        public double[] cecValues;
-        public String cecUnits;
-        public String reference;
+        public String    elements;
+        public boolean   temperatureDependent;
+        public int       tc;                  // expected ECI array length
+        public CECTerm[] cecTerms;            // length == tc
+        public double[]  cecValues;           // legacy flat array (constant, b=0 for all)
+        public String    cecUnits;
+        public String    reference;
+        public String    notes;
+
+        /**
+         * Evaluates all CEC terms at the given temperature and returns a flat
+         * {@code double[tc]} array: {@code eci[i] = a[i] + b[i] * temperature}.
+         *
+         * @param temperature temperature in Kelvin
+         * @return evaluated ECI array, or the legacy {@code cecValues} if no terms defined
+         */
+        public double[] evaluateAt(double temperature) {
+            if (cecTerms != null && cecTerms.length > 0) {
+                double[] eci = new double[cecTerms.length];
+                for (int i = 0; i < cecTerms.length; i++) {
+                    eci[i] = cecTerms[i].a + cecTerms[i].b * temperature;
+                }
+                return eci;
+            }
+            // fallback: legacy flat array
+            return cecValues != null ? cecValues.clone() : new double[0];
+        }
+
+        /** Number of ECI values this data provides. */
+        public int size() {
+            if (cecTerms != null && cecTerms.length > 0) return cecTerms.length;
+            return cecValues != null ? cecValues.length : 0;
+        }
+    }
+
+    /** One CEC interaction term: {@code E(T) = a + b*T}. */
+    public static class CECTerm {
+        public String name;
+        public double a;    // constant part (J/mol)
+        public double b;    // temperature coefficient (J/mol/K); 0 for constant terms
     }
     
     /**

@@ -100,33 +100,39 @@ public class ClusterIdentificationJob extends AbstractBackgroundJob {
             
             if (cancelled) return;
             
-            // Update system info and save cluster data before marking complete
+            // Update system info
             system.setClustersComputed(true);
-            
-            // Save cluster identification result to project resources
-            System.out.println("[ClusterJob] Starting cluster data save for system: " + system.getId());
-            System.out.println("[ClusterJob] Result is null? " + (result == null));
-            if (result != null) {
-                System.out.println("[ClusterJob] Result tc: " + result.getTc());
-                System.out.println("[ClusterJob] Result multiplicities count: " + result.getMultiplicities().size());
-            }
-            
+            system.setCfsComputed(true);
+
+            // Cluster data key: {structure}_{phase}_{model}_{componentSuffix}
+            // e.g. BCC_A2_T_bin  — element-independent, shared by all binary BCC alloys
+            String componentSuffix = getComponentSuffix(system.getNumComponents());
+            String clusterKey = system.getStructure() + "_" + system.getPhase()
+                              + "_" + system.getModel() + "_" + componentSuffix;
+
+            System.out.println("[ClusterJob] Identification complete."
+                    + "  tc=" + (result != null ? result.getTc() : "null")
+                    + "  clusterKey=" + clusterKey);
+
             try {
                 if (result != null) {
-                    boolean saved = ClusterDataCache.saveClusterData(result, system.getId());
-                    System.out.println("[ClusterJob] Save result: " + saved);
+                    System.out.println("[ClusterJob]   orbitList size=" + result.getOrbitList().size());
+                    System.out.println("[ClusterJob]   clusCoordList size=" + result.getClusCoordList().size());
+                    boolean saved = ClusterDataCache.saveClusterData(result, clusterKey);
                     if (saved) {
-                        setStatusMessage("Cluster data persisted to project resources");
-                        System.out.println("[ClusterJob] ✓ Cluster data saved successfully");
+                        setStatusMessage("Cluster data saved for " + clusterKey);
+                        System.out.println("[ClusterJob]   Save SUCCESS → " + clusterKey);
                     } else {
-                        System.out.println("[ClusterJob] ✗ Save returned false");
+                        System.out.println("[ClusterJob]   Save returned FALSE for " + clusterKey);
+                        setStatusMessage("Warning: cluster data save returned false");
                     }
                 } else {
-                    System.out.println("[ClusterJob] ✗ Result is null, cannot save");
+                    System.out.println("[ClusterJob]   result is null — cannot save");
+                    setStatusMessage("Warning: identification result is null");
                 }
             } catch (Exception e) {
                 setStatusMessage("Warning: Failed to save cluster data: " + e.getMessage());
-                System.err.println("[ClusterJob] ClusterDataCache save failed: " + e.getMessage());
+                System.err.println("[ClusterJob]   Save EXCEPTION: " + e.getMessage());
                 e.printStackTrace();
             }
             
@@ -147,6 +153,17 @@ public class ClusterIdentificationJob extends AbstractBackgroundJob {
         return result;
     }
     
+    /** Maps component count to the string suffix used in cluster cache keys. */
+    private static String getComponentSuffix(int n) {
+        switch (n) {
+            case 2:  return "bin";
+            case 3:  return "tern";
+            case 4:  return "quat";
+            case 5:  return "quint";
+            default: return "comp" + n;
+        }
+    }
+
     @Override
     public String toString() {
         return name + " [" + getProgress() + "%]";
