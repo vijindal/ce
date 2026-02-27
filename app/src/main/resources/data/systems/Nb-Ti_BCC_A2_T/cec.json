@@ -7,10 +7,10 @@
   "numComponents": 2,
   "clusterCount": 6,
   "cecValues": [
-    -390.0,
-    -260.0,
     0.0,
-    0.0
+    0.0,
+        -390.0,
+    -260.0
   ],
   "units": "J/mol",
   "description": [
