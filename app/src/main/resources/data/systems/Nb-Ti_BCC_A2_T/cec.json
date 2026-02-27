@@ -20,8 +20,8 @@
     "Triangle (rc=3, mult=12)",
     "1-neighbor pair (rc=2, mult=4)",
     "II-neighbor pair (rc=2, mult=3)",
-    "Point cluster (rc=1, excluded from mixing)",
-    "Reference cluster (rc=0, excluded from mixing)"
+    "Point cluster (rc=1, excluded)",
+    "Reference cluster (rc=0, excluded)"
   ],
   "reference": "Optimized from Nb-Ti BCC phase diagram fitting",
   "timestamp": "2026-02-27T17:00:00Z",

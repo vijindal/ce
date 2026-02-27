@@ -79,7 +79,8 @@ public class CalculationSetupPanel extends VBox {
         // Initialize MCS parameters
         mcsEquilibrationField = new TextField("5000");
         mcsAveragingField = new TextField("10000");
-        mcsSeedField = new TextField("42");
+        // Use random seed by default to avoid deterministic behavior
+        mcsSeedField = new TextField(String.valueOf(System.currentTimeMillis() % 100000));
         
         // Initialize CVM parameters
         cvmMaxClusterField = new TextField("4");
@@ -197,7 +198,7 @@ public class CalculationSetupPanel extends VBox {
             compositionField.setText("0.5");
             mcsEquilibrationField.setText("5000");
             mcsAveragingField.setText("10000");
-            mcsSeedField.setText("42");
+            mcsSeedField.setText(String.valueOf(System.currentTimeMillis() % 100000));
             cvmMaxClusterField.setText("4");
             cvmToleranceField.setText("1e-6");
         });

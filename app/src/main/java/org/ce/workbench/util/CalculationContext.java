@@ -72,7 +72,7 @@ public class CalculationContext {
      */
     private void validateReadiness() {
         if (clusterData != null && eci != null) {
-            // ECI array must include values for all cluster types, even excluded ones (which have value 0)
+            // ECI array must have one value for each cluster type
             if (eci.length == clusterData.getTc()) {
                 this.isReady = true;
                 this.readinessError = null;
@@ -82,7 +82,7 @@ public class CalculationContext {
                     "ECI length (" + eci.length + ") does not match cluster type count ("
                     + clusterData.getTc() + ") for system " + system.getName()
                     + ". CEC values must be provided for all " + clusterData.getTc()
-                    + " cluster types (including excluded ones with value 0).";
+                    + " cluster types.";
             }
         }
     }
