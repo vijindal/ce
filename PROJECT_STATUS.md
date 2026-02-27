@@ -1,65 +1,93 @@
 # CE Workbench - Project Status
 
-**Last Updated:** February 26, 2026  
-**Version:** 0.2.0  
+**Last Updated:** February 27, 2026  
+**Version:** 0.3.0  
 **Compilation:** ✅ Successful  
-**GUI Status:** ✅ Functional
+**GUI Status:** ✅ Fully Functional
 
 ---
 
 ## Current Architecture
 
-### Data Structure (NEW - Feb 2026)
-Separated element-specific data from shared model data:
+### Data Structure (UPDATED - Feb 2026)
+Three-tier data organization:
 
 ```
-app/src/main/resources/data/
-├── systems/
-│   ├── Ti-Nb/
-│   │   └── cec.json              # Element-specific CECs
-│   ├── Ti-V/
-│   │   └── cec.json
-│   └── Nb-Ti/
-│       └── cec.json
-└── models/
-    ├── BCC_A2_T/
-    │   └── model_data.json       # Shared cluster/CF metadata
-    └── FCC_L12_T/
-        └── model_data.json
+app/src/main/resources/
+├── cluster_data/                   # Runtime persistence (NEW)
+│   └── Ti-Nb_BCC_A2_T/
+│       └── cluster_result.json    # Cluster identification results
+├── data/
+│   ├── systems/                    # Element-specific CECs
+│   │   ├── Ti-Nb/
+│   │   │   └── cec.json
+│   │   ├── Ti-V/
+│   │   │   └── cec.json
+│   │   └── Nb-Ti/
+│   │       └── cec.json
+│   └── models/                     # Shared model data (metadata only)
+│       ├── BCC_A2_T/
+│       │   └── model_data.json
+│       └── FCC_L12_T/
+│           └── model_data.json
+├── cluster/                        # Cluster input files
+└── symmetry/                       # Symmetry group files
 ```
 
-**Rationale:** CECs are element-pair specific (Ti-Nb ≠ Ti-V), but multiple alloy systems can share the same structure/phase/model data (Ti-Nb, Ti-V, Ti-Zr all use BCC_A2_T).
+**Rationale:** 
+- **CECs** are element-pair specific (Ti-Nb ≠ Ti-V)
+- **Model metadata** is shared across systems (Ti-Nb, Ti-V, Ti-Zr all use BCC_A2_T)
+- **Cluster results** are system-specific runtime data (NEW: persisted for distribution)
 
 ### GUI Components
 - **SystemRegistryPanel** - System management with guided text input (replaces periodic table)
   - Text fields: Elements (Ti-Nb), Structure/Phase (BCC_A2), Model (T)
   - Data availability checking (CEC + Model status)
   - Tree view showing CEC/Cluster/CF status per system
+  - Single identification dialog with cached input (eliminates redundancy)
+  - Pre-filled ordered cluster/symmetry fields
+  - Comprehensive diagnostic logging
   
 - **CalculationSetupPanel** - Configure and run calculations
 - **BackgroundJobManager** - Async job execution
 - **SystemDataLoader** - Load from separated data structure
+- **ClusterDataCache** (NEW) - JSON persistence for cluster identification results
 
 ### Backend
 - **SystemRegistry** - System registration and metadata management
 - **SystemInfo** - Enhanced with model field and availability flags
 - **CEWorkbenchCLI** - Command-line interface
+- **ClusterIdentificationJob** - Saves cluster data before job completion
+- **CFIdentificationJob** - Reuses cached input files
 
 ---
 
 ## Recent Changes (Feb 2026)
 
-### ✅ Completed
-1. **Window Sizing** - Responsive sizing (90% screen, centered)
-2. **UI Redesign** - Replaced periodic table with guided text fields
-3. **Data Separation** - Split CECs from model data for proper reuse
-4. **SystemDataLoader** - Rewritten for new dual-source loading
-5. **Nb-Ti System** - Added CEC data (4 values from phase diagram)
-6. **BCC_A2_T Model** - Added shared model data (tcdis=5, tcf=15)
+### ✅ Completed (Week of Feb 27)
+1. **Cluster Data Persistence** - NEW
+   - ClusterDataCache utility for JSON serialization
+   - Results saved to `cluster_data/{systemId}/cluster_result.json`
+   - Project-based storage (not user home directory) for distribution
+   
+2. **UX Improvements** - MAJOR
+   - **Single identification dialog** - Eliminated duplicate file prompts
+   - **Cached input pattern** - CF identification reuses cluster identification inputs
+   - **Pre-filled fields** - Ordered cluster/symmetry auto-populated with resolved values
+   - **Diagnostic logging** - Component-prefixed console output (`[ClusterJob]`, `[ClusterDataCache]`)
+   
+3. **Bug Fixes** - CRITICAL
+   - Fixed system availability check (now checks actual `cluster_result.json`)
+   - Fixed job timing issue (cluster data saved before job removed from queue)
+   - Fixed dialog redundancy (single prompt for entire identification pipeline)
 
-### 🔄 In Progress
-- Testing complete workflow with new data structure
-- Creating additional alloy system examples (Ti-V, Ti-Zr)
+### ✅ Completed (Week of Feb 20-26)
+4. **Window Sizing** - Responsive sizing (90% screen, centered)
+5. **UI Redesign** - Replaced periodic table with guided text fields
+6. **Data Separation** - Split CECs from model data for proper reuse
+7. **SystemDataLoader** - Rewritten for new dual-source loading
+8. **Nb-Ti System** - Added CEC data (4 values from phase diagram)
+9. **BCC_A2_T Model** - Added shared model data (tcdis=5, tcf=15)
 
 ---
 
@@ -75,20 +103,27 @@ app/src/main/resources/data/
   - Expected behavior, does not affect functionality
   - Will be resolved when JavaFX updates for JDK 25
 
+### Known Limitations
+- Cluster data only available during same session as identification
+  - Full Cluster objects are not serializable (complex Nd4j dependencies)
+  - Workaround: cluster_result.json stores essential metadata
+  - App restart requires re-running identification
+
 ---
 
 ## Next Steps
 
 ### High Priority
-1. **Manual CEC Input Workflow**
+1. **✅ COMPLETED: Cluster Data Persistence**
+   - ✅ Store cluster_result.json in project folder
+   - ✅ Distribute example cluster data to users
+   - ✅ Fix system availability checks
+   - ✅ Eliminate duplicate identification dialogs
+
+2. **Manual CEC Input Workflow**
    - Create dialog for entering CEC values manually
    - Save to systems/<Elements>/cec.json
    - Integrate with "Add System" flow
-
-2. **Cluster/CF Calculation Trigger**
-   - Implement "Calculate Clusters" button
-   - Run cluster identification via background job
-   - Save results to models/<Model>/model_data.json
 
 3. **Calculation Panel Gating**
    - Disable calculation panel if system data incomplete
@@ -103,14 +138,18 @@ app/src/main/resources/data/
    - Import CEC data from CSV/JSON
    - Export system configurations
 
-6. **Documentation**
+6. **Full Cluster Serialization** (if needed)
+   - Serialize complete Cluster objects with Nd4j matrices
+   - Enable cross-session cluster data loading
+
+7. **Documentation**
    - User guide for adding new systems
    - Developer guide for data structure
 
 ### Low Priority
-7. **Phase Diagram Plotting** (future)
-8. **MCS Integration** (future)
-9. **Multi-component Systems** (future - ternary, quaternary)
+8. **Phase Diagram Plotting** (future)
+9. **MCS Integration** (future)
+10. **Multi-component Systems** (future - ternary, quaternary)
 
 ---
 
@@ -150,7 +189,8 @@ ce/
 │   │   │   ├── SystemRegistry.java             # Central system registry
 │   │   │   ├── BackgroundJobManager.java       # Job execution
 │   │   │   ├── data/
-│   │   │   │   └── SystemDataLoader.java       # Load CECs + model data
+│   │   │   │   ├── SystemDataLoader.java       # Load CECs + model data
+│   │   │   │   └── ClusterDataCache.java       # NEW: JSON persistence
 │   │   │   └── jobs/
 │   │   │       ├── ClusterIdentificationJob.java
 │   │   │       └── CFIdentificationJob.java
@@ -161,6 +201,8 @@ ce/
 │       ├── CVMPipeline.java
 │       └── ...
 ├── app/src/main/resources/
+│   ├── cluster_data/                            # NEW: Runtime persistence
+│   │   └── {systemId}/cluster_result.json      # Cluster identification results
 │   └── data/
 │       ├── systems/                             # Element-specific CECs
 │       │   ├── Ti-Nb/cec.json

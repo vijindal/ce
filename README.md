@@ -4,10 +4,24 @@ A Java implementation of the **Cluster Expansion (CE)** and **Cluster Variation
 Method (CVM)** pipeline for alloy thermodynamics, with a Monte Carlo Simulation
 (MCS) engine path for equilibrium verification.
 
+**GUI Application:** CE Thermodynamics Workbench - Interactive system management and calculation setup. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for full details.
+
 ---
 
 ## Quick Start
 
+### GUI Application (Recommended)
+```bash
+./gradlew run
+```
+
+Launch the CE Thermodynamics Workbench with:
+- System registry and management
+- Background cluster/CF identification
+- Interactive calculation setup
+- Real-time job monitoring
+
+### Programmatic API
 ```java
 // Build a configuration
 CVMConfiguration config = CVMConfiguration.builder()
@@ -21,12 +35,6 @@ CVMConfiguration config = CVMConfiguration.builder()
 // Run the two-stage identification pipeline
 CVMResult result = CVMPipeline.identify(config);
 result.printDebug();
-```
-
-Run the integration test:
-
-```bash
-./gradlew run
 ```
 
 ---

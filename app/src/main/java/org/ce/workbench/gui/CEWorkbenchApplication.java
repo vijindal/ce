@@ -12,6 +12,7 @@ import org.ce.workbench.backend.job.BackgroundJobManager;
 import org.ce.workbench.backend.registry.SystemRegistry;
 import org.ce.workbench.gui.view.CalculationSetupPanel;
 import org.ce.workbench.gui.view.SystemRegistryPanel;
+import org.ce.workbench.gui.view.ResultsPanel;
 
 import java.nio.file.Paths;
 
@@ -24,6 +25,7 @@ public class CEWorkbenchApplication extends Application {
     private SystemRegistry systemRegistry;
     private BackgroundJobManager jobManager;
     private SystemRegistryPanel registryPanel;
+    private ResultsPanel resultsPanel;
     
     private Stage primaryStage;
     
@@ -72,15 +74,18 @@ public class CEWorkbenchApplication extends Application {
         // Top: Menu bar
         root.setTop(createMenuBar());
         
-        // Center: Splitter with left (system registry) and right (calculations) panels
+        // Center: Splitter with left (system registry) and right (results) panels
         SplitPane mainSplitter = new SplitPane();
-        mainSplitter.setDividerPositions(0.25);
+        mainSplitter.setDividerPositions(0.3);
         
-        // Left panel: System registry + background jobs
-        registryPanel = new SystemRegistryPanel(systemRegistry, jobManager);
+        // Create shared results panel
+        resultsPanel = new ResultsPanel();
+        
+        // Left panel: System registry + calculation setup
+        registryPanel = new SystemRegistryPanel(systemRegistry, jobManager, resultsPanel);
         mainSplitter.getItems().add(registryPanel);
         
-        // Right panel: Tabbed calculation interface (placeholder for now)
+        // Right panel: Single Results tab
         TabPane rightPanel = createRightPanel();
         mainSplitter.getItems().add(rightPanel);
         
@@ -137,92 +142,11 @@ public class CEWorkbenchApplication extends Application {
         TabPane tabPane = new TabPane();
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         
-        // Tab 1: Calculation Setup
-        Tab setupTab = new Tab("Setup", createSetupPanelContent());
-        setupTab.setStyle("-fx-font-weight: bold;");
+        // Single Result tab with the shared results panel
+        Tab resultTab = new Tab("Result", resultsPanel);
         
-        // Tab 2: Monitor
-        Tab monitorTab = new Tab("Monitor", createMonitorPanelContent());
-        
-        // Tab 3: Results
-        Tab resultsTab = new Tab("Results", createResultsPanelContent());
-        
-        // Tab 4: Visualization
-        Tab visTab = new Tab("Visualization", createVisualizationContent());
-        
-        // Tab 5: Batch
-        Tab batchTab = new Tab("Batch", createBatchContent());
-        
-        tabPane.getTabs().addAll(setupTab, monitorTab, resultsTab, visTab, batchTab);
+        tabPane.getTabs().addAll(resultTab);
         return tabPane;
-    }
-    
-    private VBox createSetupPanelContent() {
-        return new CalculationSetupPanel(systemRegistry);
-    }
-    
-    private VBox createMonitorPanelContent() {
-        VBox vbox = new VBox(10);
-        vbox.setPadding(new Insets(15));
-        
-        Label label = new Label("Live Calculation Monitor");
-        label.setStyle("-fx-font-size: 14; -fx-font-weight: bold;");
-        
-        VBox placeholder = new VBox(10);
-        placeholder.setStyle("-fx-border-color: #e0e0e0; -fx-border-width: 1;");
-        placeholder.setPadding(new Insets(20));
-        placeholder.getChildren().add(new Label("Monitor panel content coming soon..."));
-        
-        vbox.getChildren().addAll(label, placeholder);
-        return vbox;
-    }
-    
-    private VBox createResultsPanelContent() {
-        VBox vbox = new VBox(10);
-        vbox.setPadding(new Insets(15));
-        
-        Label label = new Label("Results Viewer");
-        label.setStyle("-fx-font-size: 14; -fx-font-weight: bold;");
-        
-        VBox placeholder = new VBox(10);
-        placeholder.setStyle("-fx-border-color: #e0e0e0; -fx-border-width: 1;");
-        placeholder.setPadding(new Insets(20));
-        placeholder.getChildren().add(new Label("Results panel content coming soon..."));
-        
-        vbox.getChildren().addAll(label, placeholder);
-        return vbox;
-    }
-    
-    private VBox createVisualizationContent() {
-        VBox vbox = new VBox(10);
-        vbox.setPadding(new Insets(15));
-        
-        Label label = new Label("Visualization & Analysis");
-        label.setStyle("-fx-font-size: 14; -fx-font-weight: bold;");
-        
-        VBox placeholder = new VBox(10);
-        placeholder.setStyle("-fx-border-color: #e0e0e0; -fx-border-width: 1;");
-        placeholder.setPadding(new Insets(20));
-        placeholder.getChildren().add(new Label("Visualization panel content coming soon..."));
-        
-        vbox.getChildren().addAll(label, placeholder);
-        return vbox;
-    }
-    
-    private VBox createBatchContent() {
-        VBox vbox = new VBox(10);
-        vbox.setPadding(new Insets(15));
-        
-        Label label = new Label("Batch Processing & Comparison");
-        label.setStyle("-fx-font-size: 14; -fx-font-weight: bold;");
-        
-        VBox placeholder = new VBox(10);
-        placeholder.setStyle("-fx-border-color: #e0e0e0; -fx-border-width: 1;");
-        placeholder.setPadding(new Insets(20));
-        placeholder.getChildren().add(new Label("Batch panel content coming soon..."));
-        
-        vbox.getChildren().addAll(label, placeholder);
-        return vbox;
     }
     
     private HBox createStatusBar() {

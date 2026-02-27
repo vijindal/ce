@@ -14,12 +14,12 @@ import org.ce.workbench.backend.data.SystemDataLoader;
 import org.ce.identification.engine.Vector3D;
 import org.ce.workbench.backend.job.CFIdentificationJob;
 import org.ce.workbench.backend.job.ClusterIdentificationJob;
+import org.ce.workbench.util.StructureModelMapping;
+import org.ce.workbench.util.ClusterDataCache;
+import org.ce.identification.engine.ClusCoordListResult;
 
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
-import java.util.List;
 
 /**
  * Left panel for system registry and background job management.
@@ -29,215 +29,64 @@ public class SystemRegistryPanel extends VBox {
     
     private final SystemRegistry registry;
     private final BackgroundJobManager jobManager;
-    private TreeView<String> systemTree;
-    private TextArea jobLogArea;
-    private ProgressBar jobProgressBar;
-    private final Map<TreeItem<String>, SystemInfo> systemItemMap = new HashMap<>();
+    private final ResultsPanel resultsPanel;
     
-    public SystemRegistryPanel(SystemRegistry registry, BackgroundJobManager jobManager) {
+    // Cache identification input to avoid asking twice
+    private IdentificationInput cachedIdentificationInput;
+    
+    public SystemRegistryPanel(SystemRegistry registry, BackgroundJobManager jobManager, ResultsPanel resultsPanel) {
         this.registry = registry;
         this.jobManager = jobManager;
+        this.resultsPanel = resultsPanel;
         
-        this.setSpacing(10);
-        this.setPadding(new Insets(10));
+        this.setSpacing(6);
+        this.setPadding(new Insets(8));
         this.setStyle("-fx-border-color: #d0d0d0; -fx-border-width: 0 1 0 0;");
         
-        // Build UI components
+        // Build UI components - left panel only
         VBox systemSection = createSystemSection();
-        VBox jobSection = createJobSection();
         
-        // Add to layout with splitter
-        SplitPane splitter = new SplitPane();
-        splitter.setOrientation(javafx.geometry.Orientation.VERTICAL);
-        splitter.setDividerPositions(0.6);
-        splitter.getItems().addAll(systemSection, jobSection);
-        
-        this.getChildren().add(splitter);
+        // Add to layout (no splitter needed - entire left panel is system section)
+        this.getChildren().add(systemSection);
         
         // Initialize data
-        refreshSystemTree();
         setupJobMonitoring();
     }
     
     private VBox createSystemSection() {
         VBox vbox = new VBox(10);
         
-        Label titleLabel = new Label("System Registry");
+        Label titleLabel = new Label("System Setup");
         titleLabel.setStyle("-fx-font-size: 12; -fx-font-weight: bold;");
         
-        // Search box
-        TextField searchBox = new TextField();
-        searchBox.setPromptText("Search systems...");
+        // Create a scroll pane for the form
+        ScrollPane formScroll = new ScrollPane();
+        formScroll.setFitToWidth(true);
         
-        // System tree
-        systemTree = new TreeView<>();
-        systemTree.setPrefHeight(200);
-        
-        // Toolbar
-        HBox toolbar = new HBox(5);
-        Button addButton = new Button("+ Add System");
-        Button deleteButton = new Button("Delete");
-        Button clusterIdButton = new Button("Cluster ID");
-        Button cfIdButton = new Button("CF ID");
-        
-        addButton.setStyle("-fx-font-size: 10;");
-        deleteButton.setStyle("-fx-font-size: 10;");
-        clusterIdButton.setStyle("-fx-font-size: 10;");
-        cfIdButton.setStyle("-fx-font-size: 10;");
-        
-        toolbar.getChildren().addAll(addButton, deleteButton, clusterIdButton, cfIdButton);
-        
-        vbox.getChildren().addAll(titleLabel, searchBox, new Label("Systems:"),
-                  systemTree, toolbar);
-        VBox.setVgrow(systemTree, Priority.ALWAYS);
-
-        addButton.setOnAction(e -> showAddSystemDialog());
-        clusterIdButton.setOnAction(e -> startClusterIdentification());
-        cfIdButton.setOnAction(e -> startCfIdentification());
-        
-        return vbox;
-    }
-    
-    private VBox createJobSection() {
-        VBox vbox = new VBox(10);
-        
-        Label titleLabel = new Label("Background Job Monitor");
-        titleLabel.setStyle("-fx-font-size: 12; -fx-font-weight: bold;");
-        
-        // Job progress
-        jobProgressBar = new ProgressBar(0);
-        jobProgressBar.setPrefHeight(20);
-        
-        // Job log
-        jobLogArea = new TextArea();
-        jobLogArea.setWrapText(true);
-        jobLogArea.setPrefHeight(100);
-        jobLogArea.setEditable(false);
-        jobLogArea.setStyle("-fx-font-family: 'Courier New', monospace; -fx-font-size: 9;");
-        
-        // Control buttons
-        HBox controls = new HBox(5);
-        Button pauseButton = new Button("Pause");
-        Button cancelButton = new Button("Cancel");
-        Button clearButton = new Button("Clear");
-        
-        pauseButton.setStyle("-fx-font-size: 10;");
-        cancelButton.setStyle("-fx-font-size: 10;");
-        clearButton.setStyle("-fx-font-size: 10;");
-        
-        controls.getChildren().addAll(pauseButton, cancelButton, clearButton);
-        
-        vbox.getChildren().addAll(titleLabel, jobProgressBar, new Label("Job Log:"), 
-                      jobLogArea, controls);
-        VBox.setVgrow(jobLogArea, Priority.ALWAYS);
-        
-        return vbox;
-    }
-    
-    private void refreshSystemTree() {
-        TreeItem<String> root = new TreeItem<>("Systems");
-        root.setExpanded(true);
-        
-        Collection<SystemInfo> systems = registry.getAllSystems();
-        systemItemMap.clear();
-        
-        for (SystemInfo system : systems) {
-            TreeItem<String> systemItem = new TreeItem<>(system.getName());
-            systemItemMap.put(systemItem, system);
-            
-            // Status indicators
-            String cecStatus = system.isCecAvailable() ? "✓" : "✗";
-            String clustersStatus = system.isClustersComputed() ? "✓" : "✗";
-            String cfsStatus = system.isCfsComputed() ? "✓" : "✗";
-            
-            TreeItem<String> cecItem = new TreeItem<>(cecStatus + " CEC");
-            TreeItem<String> clustersItem = new TreeItem<>(clustersStatus + " Clusters");
-            TreeItem<String> cfsItem = new TreeItem<>(cfsStatus + " CFs");
-            
-            systemItem.getChildren().addAll(cecItem, clustersItem, cfsItem);
-            root.getChildren().add(systemItem);
-        }
-        
-        systemTree.setRoot(root);
-    }
-    
-    private void setupJobMonitoring() {
-        jobManager.addManagerListener(new BackgroundJobManager.JobManagerListener() {
-            @Override
-            public void onJobQueued(String jobId, int queueSize) {
-                javafx.application.Platform.runLater(() -> {
-                    logJobEvent(jobId + " - queued (queue size: " + queueSize + ")");
-                });
-            }
-            
-            @Override
-            public void onJobStarted(String jobId) {
-                javafx.application.Platform.runLater(() -> {
-                    logJobEvent(jobId + " - started");
-                });
-            }
-            
-            @Override
-            public void onJobFinished(String jobId) {
-                javafx.application.Platform.runLater(() -> {
-                    logJobEvent(jobId + " - finished");
-                    registry.persistSystems();
-                    refreshSystemTree();
-                });
-            }
-            
-            @Override
-            public void onJobCancelled(String jobId) {
-                javafx.application.Platform.runLater(() -> {
-                    logJobEvent(jobId + " - cancelled");
-                });
-            }
-        });
-    }
-    
-    private void logJobEvent(String message) {
-        jobLogArea.appendText("[" + java.time.LocalTime.now() + "] " + message + "\n");
-    }
-    
-    private void showAddSystemDialog() {
-        Dialog<SystemInfo> dialog = new Dialog<>();
-        dialog.setTitle("Add New System");
-        dialog.setHeaderText("Define a new calculation system");
-        
+        // Main form container
         GridPane grid = new GridPane();
-        grid.setHgap(12);
-        grid.setVgap(12);
-        grid.setPadding(new Insets(20));
+        grid.setHgap(10);
+        grid.setVgap(8);
+        grid.setPadding(new Insets(10));
+        grid.setStyle("-fx-border-color: #e0e0e0; -fx-border-width: 1; -fx-padding: 10;");
         
         // Elements field
         TextField elementsField = new TextField();
-        elementsField.setPromptText("Ti-Nb");
+        elementsField.setText("Ti-Nb");
         Label elementsHelp = new Label("Format: Element1-Element2 (e.g., Ti-Nb, Fe-Ni-Cr)");
         elementsHelp.setStyle("-fx-font-size: 9; -fx-text-fill: #666;");
         
         // Structure/Phase field
         TextField structurePhaseField = new TextField();
-        structurePhaseField.setPromptText("BCC_A2");
+        structurePhaseField.setText("BCC_A2");
         Label structureHelp = new Label("Format: Structure_Phase (e.g., BCC_A2, FCC_L12)");
         structureHelp.setStyle("-fx-font-size: 9; -fx-text-fill: #666;");
         
         // Model field
         TextField modelField = new TextField();
-        modelField.setPromptText("T");
+        modelField.setText("T");
         Label modelHelp = new Label("CVM approximation (e.g., T=tetrahedron, P=pair)");
         modelHelp.setStyle("-fx-font-size: 9; -fx-text-fill: #666;");
-        
-        // Status labels for data availability
-        Label statusLabel = new Label("Data Availability:");
-        statusLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 11;");
-        Label cecStatusLabel = new Label("CEC: Not checked");
-        Label clusterStatusLabel = new Label("Cluster/CF: Not checked");
-        cecStatusLabel.setStyle("-fx-font-size: 10;");
-        clusterStatusLabel.setStyle("-fx-font-size: 10;");
-        
-        // Check availability button
-        Button checkButton = new Button("Check Availability");
-        checkButton.setStyle("-fx-font-size: 10;");
         
         int row = 0;
         grid.add(new Label("Elements:"), 0, row);
@@ -255,142 +104,219 @@ public class SystemRegistryPanel extends VBox {
         grid.add(new Separator(), 0, row, 2, 1);
         row++;
         
-        grid.add(checkButton, 0, row, 2, 1);
-        row++;
+        // Create/Clear buttons
+        HBox formButtons = new HBox(10);
+        Button createButton = new Button("Create System");
+        Button clearButton = new Button("Clear");
+        createButton.setStyle("-fx-font-size: 11; -fx-padding: 5 15;");
+        clearButton.setStyle("-fx-font-size: 11; -fx-padding: 5 15;");
+        formButtons.getChildren().addAll(createButton, clearButton);
         
-        grid.add(statusLabel, 0, row, 2, 1);
+        grid.add(new Separator(), 0, row, 2, 1);
         row++;
-        grid.add(cecStatusLabel, 0, row, 2, 1);
-        row++;
-        grid.add(clusterStatusLabel, 0, row, 2, 1);
+        grid.add(formButtons, 0, row, 2, 1);
         
-        dialog.getDialogPane().setContent(grid);
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
-        dialog.getDialogPane().setPrefWidth(500);
+        formScroll.setContent(grid);
         
-        // Check availability handler
-        checkButton.setOnAction(e -> {
+        // Add calculation setup section
+        CalculationSetupPanel calcSetupPanel = new CalculationSetupPanel(registry, jobManager, resultsPanel);
+        
+        vbox.getChildren().addAll(titleLabel, formScroll, new Separator(), calcSetupPanel);
+        VBox.setVgrow(formScroll, Priority.SOMETIMES);
+        VBox.setVgrow(calcSetupPanel, Priority.ALWAYS);
+        
+        // Create System button handler with full availability checking
+        createButton.setOnAction(e -> {
+            // Clear any cached identification input from previous system
+            cachedIdentificationInput = null;
+            
             String elements = elementsField.getText().trim();
             String structurePhase = structurePhaseField.getText().trim();
             String model = modelField.getText().trim();
             
             if (elements.isEmpty() || structurePhase.isEmpty() || model.isEmpty()) {
-                cecStatusLabel.setText("CEC: ⚠ Please fill all fields first");
-                clusterStatusLabel.setText("Cluster/CF: ⚠ Please fill all fields first");
+                showAlert("Missing Fields", "All fields are required.");
+                return;
+            }
+            
+            // Validate structure/phase format
+            if (!StructureModelMapping.isValidStructurePhase(structurePhase)) {
+                showAlert("Invalid Format", "Structure/Phase must be in format: Structure_Phase (e.g., BCC_A2)\n" +
+                    "Known phases: " + String.join(", ", StructureModelMapping.getKnownPhases()));
                 return;
             }
             
             String[] parts = structurePhase.split("_");
-            if (parts.length != 2) {
-                cecStatusLabel.setText("CEC: ⚠ Invalid format");
-                clusterStatusLabel.setText("Cluster/CF: ⚠ Invalid format");
-                showAlert("Invalid Format", "Structure/Phase must be in format: Structure_Phase (e.g., BCC_A2)");
+            String structure = parts[0];
+            String phase = parts[1];
+            String[] componentArray = elements.split("-");
+            int numComponents = componentArray.length;
+            
+            // Resolve mapping
+            String resolvedSymmetryGroup;
+            String resolvedClusterFile;
+            try {
+                resolvedSymmetryGroup = StructureModelMapping.resolveSymmetryGroup(structurePhase);
+                resolvedClusterFile = StructureModelMapping.resolveClusterFile(structurePhase, model);
+                logResult("Mapping resolved:");
+                logResult("  " + structurePhase + " → Symmetry: " + resolvedSymmetryGroup);
+                logResult("  " + structurePhase + " + " + model + " → Cluster file: " + resolvedClusterFile);
+            } catch (IllegalArgumentException ex) {
+                showAlert("Mapping Error", ex.getMessage());
                 return;
             }
             
-            String structure = parts[0];
-            String phase = parts[1];
+            // Generate component suffix (e.g., "bin" for 2 components, "tern" for 3, "quat" for 4)
+            String componentSuffix = getComponentSuffix(numComponents);
+            String clusterDataId = structure + "_" + phase + "_" + model + "_" + componentSuffix;
             
-            // Check CEC availability (element-specific)
-            boolean cecExists = SystemDataLoader.cecExists(elements);
-            cecStatusLabel.setText("CEC: " + (cecExists ? "✓ Available" : "✗ Not available (will need manual input)"));
-            cecStatusLabel.setStyle("-fx-font-size: 10; -fx-text-fill: " + (cecExists ? "green" : "orange") + ";");
+            // Check CEC availability
+            boolean cecAvailable = SystemDataLoader.cecExists(elements);
+            logResult("Checking system: " + elements + " " + structure + "_" + phase + "_" + model);
+            logResult("CEC data: " + (cecAvailable ? "✓ Available" : "⚠ Not available - will need manual input"));
             
-            // Check model data availability (shared across alloys)
-            boolean modelExists = SystemDataLoader.modelDataExists(structure, phase, model);
-            String modelId = structure + "_" + phase + "_" + model;
-            clusterStatusLabel.setText("Model (" + modelId + "): " + (modelExists ? "✓ Available" : "✗ Need calculation"));
-            clusterStatusLabel.setStyle("-fx-font-size: 10; -fx-text-fill: " + (modelExists ? "green" : "orange") + ";");
-        });
-        
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == ButtonType.OK) {
-                String elements = elementsField.getText().trim();
-                String structurePhase = structurePhaseField.getText().trim();
-                String model = modelField.getText().trim();
-                
-                if (elements.isEmpty() || structurePhase.isEmpty() || model.isEmpty()) {
-                    showAlert("Missing Fields", "All fields are required.");
-                    return null;
+            // Check cluster data availability - look for actual cluster_result.json in project resources
+            String systemId = SystemInfo.generateSystemId(elements, structure, phase, model);
+            boolean clusterDataExists = ClusterDataCache.clusterDataExists(systemId);
+            logResult("Cluster data (" + clusterDataId + "): " + (clusterDataExists ? "✓ Available" : "⚠ Not available"));
+            
+            if (!clusterDataExists) {
+                boolean createClusterAlgebra = confirmAction(
+                    "Cluster Data Missing",
+                    "Cluster algebra is not available for this system.\nDo you want to create it now?"
+                );
+                if (!createClusterAlgebra) {
+                    logResult("⚠ Cluster algebra creation skipped by user.");
+                    return;
                 }
                 
-                String[] parts = structurePhase.split("_");
-                if (parts.length != 2) {
-                    showAlert("Invalid Format", "Structure/Phase must be in format: Structure_Phase (e.g., BCC_A2)");
-                    return null;
-                }
+                logResult("\n→ Cluster data missing. Starting identification pipeline...");
+                logResult("Step 1: Cluster identification");
                 
-                String structure = parts[0];
-                String phase = parts[1];
-                String[] componentArray = elements.split("-");
-                
-                String systemId = SystemInfo.generateSystemId(elements, structure, phase, model);
+                // Create system object (using systemId already generated)
                 String systemName = elements + " " + structure + " " + phase + " (" + model + ")";
-                
                 SystemInfo system = new SystemInfo(systemId, systemName, structure, phase, model, componentArray);
+                system.setCecAvailable(cecAvailable);
+                system.setClustersComputed(false);
+                system.setCfsComputed(false);
+                system.setClusterFilePath(resolvedClusterFile);
+                system.setSymmetryGroupName(resolvedSymmetryGroup);
                 
-                // Check and set availability flags using new separated data structure
-                system.setCecAvailable(SystemDataLoader.cecExists(elements));
-                boolean modelExists = SystemDataLoader.modelDataExists(structure, phase, model);
-                system.setClustersComputed(modelExists);
-                system.setCfsComputed(modelExists);
+                registry.registerSystem(system);
                 
-                return system;
+                // Trigger cluster identification
+                logResult("\n>>> Starting cluster identification for: " + systemName);
+                if (!startClusterIdentificationForSystem(system)) {
+                    return;
+                }
+                
+                logResult("Step 2: CF identification");
+                startCfIdentificationForSystem(system);
+                
+            } else {
+                // Cluster data exists - create system directly
+                logResult("\n✓ All required data available. Creating system...");
+                
+                String systemName = elements + " " + structure + " " + phase + " (" + model + ")";
+                SystemInfo system = new SystemInfo(systemId, systemName, structure, phase, model, componentArray);
+                system.setCecAvailable(cecAvailable);
+                system.setClustersComputed(true);
+                system.setCfsComputed(true);
+                system.setClusterFilePath(resolvedClusterFile);
+                system.setSymmetryGroupName(resolvedSymmetryGroup);
+                
+                registry.registerSystem(system);
+                logResult("✓ System created successfully: " + systemName);
             }
-            return null;
+            
+            // Clear form
+            elementsField.clear();
+            structurePhaseField.clear();
+            modelField.clear();
         });
         
-        Optional<SystemInfo> result = dialog.showAndWait();
-        if (result.isPresent() && result.get() != null) {
-            SystemInfo newSystem = result.get();
-            registry.registerSystem(newSystem);
-            refreshSystemTree();
-            logJobEvent("Added system: " + newSystem.getName() + 
-                       " (CEC:" + (newSystem.isCecAvailable() ? "Yes" : "No") +
-                       ", Cluster/CF:" + (newSystem.isClustersComputed() && newSystem.isCfsComputed() ? "Yes" : "No") + ")");
+        clearButton.setOnAction(e -> {
+            elementsField.clear();
+            structurePhaseField.clear();
+            modelField.clear();
+        });
+        
+        return vbox;
+    }
+    
+    private void setupJobMonitoring() {
+        jobManager.addManagerListener(new BackgroundJobManager.JobManagerListener() {
+            @Override
+            public void onJobQueued(String jobId, int queueSize) {
+                javafx.application.Platform.runLater(() -> {
+                    logResult(jobId + " - queued (queue size: " + queueSize + ")");
+                });
+            }
+            
+            @Override
+            public void onJobStarted(String jobId) {
+                javafx.application.Platform.runLater(() -> {
+                    logResult(jobId + " - started");
+                });
+            }
+            
+            @Override
+            public void onJobFinished(String jobId) {
+                javafx.application.Platform.runLater(() -> {
+                    logResult(jobId + " - finished");
+                    
+                    // CF identification completion is already logged
+                    // Cluster data is saved directly in ClusterIdentificationJob.run()
+                    // Just persist the updated system state
+                    
+                    registry.persistSystems();
+                    updateIdentificationProgress();
+                });
+            }
+            
+            @Override
+            public void onJobCancelled(String jobId) {
+                javafx.application.Platform.runLater(() -> {
+                    logResult(jobId + " - cancelled");
+                });
+            }
+        });
+    }
+    
+    private void logResult(String message) {
+        resultsPanel.logMessage(message);
+    }
+    
+    private String getComponentSuffix(int numComponents) {
+        switch (numComponents) {
+            case 2: return "bin";
+            case 3: return "tern";
+            case 4: return "quat";
+            case 5: return "quint";
+            default: return "comp" + numComponents;
         }
     }
     
-    public void updateJobProgress() {
-        Collection<BackgroundJob> activeJobs = jobManager.getActiveJobs();
-        if (activeJobs.isEmpty()) {
-            jobProgressBar.setProgress(0);
+    private boolean startClusterIdentificationForSystem(SystemInfo system) {
+        // Show dialog only if we don't have cached input
+        if (cachedIdentificationInput == null) {
+            Optional<IdentificationInput> inputOpt = showIdentificationDialog(system, "Cluster Identification");
+            if (inputOpt.isEmpty()) {
+                logResult("⚠ Identification cancelled by user.");
+                return false;
+            }
+            cachedIdentificationInput = inputOpt.get();
+            logResult("→ Input files cached for subsequent operations");
         } else {
-            // Average progress of all active jobs
-            double avgProgress = activeJobs.stream()
-                .mapToInt(BackgroundJob::getProgress)
-                .average()
-                .orElse(0);
-            jobProgressBar.setProgress(avgProgress / 100.0);
+            logResult("→ Reusing input files from previous step");
         }
-    }
-
-    private SystemInfo getSelectedSystem() {
-        TreeItem<String> selected = systemTree.getSelectionModel().getSelectedItem();
-        if (selected == null) {
-            return null;
-        }
-        SystemInfo direct = systemItemMap.get(selected);
-        if (direct != null) {
-            return direct;
-        }
-        TreeItem<String> parent = selected.getParent();
-        return parent == null ? null : systemItemMap.get(parent);
-    }
-
-    private void startClusterIdentification() {
-        SystemInfo system = getSelectedSystem();
-        if (system == null) {
-            showAlert("No system selected", "Please select a system to run cluster identification.");
-            return;
-        }
-
-        Optional<IdentificationInput> inputOpt = showIdentificationDialog(system, "Cluster Identification");
-        if (inputOpt.isEmpty()) {
-            return;
-        }
-
-        IdentificationInput input = inputOpt.get();
+        
+        IdentificationInput input = cachedIdentificationInput;
+        logResult("  Disordered cluster: " + input.disorderedClusterFile);
+        logResult("  Ordered cluster: " + input.orderedClusterFile);
+        logResult("  Disordered symmetry: " + input.disorderedSymmetryGroup);
+        logResult("  Ordered symmetry: " + input.orderedSymmetryGroup);
+        
         ClusterIdentificationJob job = new ClusterIdentificationJob(
             system,
             input.disorderedClusterFile,
@@ -401,22 +327,21 @@ public class SystemRegistryPanel extends VBox {
             resolveTranslation(system)
         );
         jobManager.submitJob(job);
-        logJobEvent("Submitted cluster identification for " + system.getName());
+        system.setClusterJobId(job.getId());
+        logResult("Submitted cluster identification job: " + job.getId());
+        return true;
     }
 
-    private void startCfIdentification() {
-        SystemInfo system = getSelectedSystem();
-        if (system == null) {
-            showAlert("No system selected", "Please select a system to run CF identification.");
-            return;
+    private boolean startCfIdentificationForSystem(SystemInfo system) {
+        // Use cached input from cluster identification (same files)
+        if (cachedIdentificationInput == null) {
+            logResult("⚠ No cached identification input. Please run cluster identification first.");
+            return false;
         }
-
-        Optional<IdentificationInput> inputOpt = showIdentificationDialog(system, "CF Identification");
-        if (inputOpt.isEmpty()) {
-            return;
-        }
-
-        IdentificationInput input = inputOpt.get();
+        
+        IdentificationInput input = cachedIdentificationInput;
+        logResult("→ Using same input files for CF identification");
+        
         CFIdentificationJob job = new CFIdentificationJob(
             system,
             input.disorderedClusterFile,
@@ -428,7 +353,33 @@ public class SystemRegistryPanel extends VBox {
             system.getNumComponents()
         );
         jobManager.submitJob(job);
-        logJobEvent("Submitted CF identification for " + system.getName());
+        logResult("Submitted CF identification job: " + job.getId());
+        return true;
+    }
+
+    
+    private void updateIdentificationProgress() {
+        Collection<BackgroundJob> activeJobs = jobManager.getActiveJobs();
+        if (activeJobs.isEmpty()) {
+            resultsPanel.setProgress(0);
+        } else {
+            // Average progress of all active jobs
+            double avgProgress = activeJobs.stream()
+                .mapToInt(BackgroundJob::getProgress)
+                .average()
+                .orElse(0);
+            resultsPanel.setProgress(avgProgress / 100.0);
+        }
+    }
+
+
+    private boolean confirmAction(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        Optional<ButtonType> result = alert.showAndWait();
+        return result.isPresent() && result.get() == ButtonType.OK;
     }
 
     private Optional<IdentificationInput> showIdentificationDialog(SystemInfo system, String title) {
@@ -444,10 +395,11 @@ public class SystemRegistryPanel extends VBox {
         grid.setVgap(10);
         grid.setPadding(new Insets(10));
 
+        // Pre-fill with resolved values from system
         TextField disClusterField = new TextField(defaultIfNull(system.getClusterFilePath()));
-        TextField ordClusterField = new TextField();
+        TextField ordClusterField = new TextField(defaultIfNull(system.getClusterFilePath()));
         TextField disSymField = new TextField(defaultIfNull(system.getSymmetryGroupName()));
-        TextField ordSymField = new TextField();
+        TextField ordSymField = new TextField(defaultIfNull(system.getSymmetryGroupName()));
 
         addDialogRow(grid, 0, "Disordered cluster file", disClusterField);
         addDialogRow(grid, 1, "Ordered cluster file", ordClusterField);

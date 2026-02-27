@@ -27,6 +27,8 @@ public class SystemInfo {
     private String clusterFilePath;
     private String symmetryGroupName;
     
+    private String clusterJobId;  // Job ID from ClusterIdentificationJob
+    
     public SystemInfo(String id, String name, String structure, String phase, String model, String[] components) {
         this.id = Objects.requireNonNull(id, "id");
         this.name = Objects.requireNonNull(name, "name");
@@ -93,6 +95,14 @@ public class SystemInfo {
     
     public void setSymmetryGroupName(String name) {
         this.symmetryGroupName = name;
+    }
+    
+    public String getClusterJobId() {
+        return clusterJobId;
+    }
+    
+    public void setClusterJobId(String jobId) {
+        this.clusterJobId = jobId;
     }
     
     /**

@@ -7,6 +7,7 @@ import org.ce.identification.engine.Cluster;
 import org.ce.identification.engine.ClusCoordListGenerator;
 import org.ce.identification.engine.ClusCoordListResult;
 import org.ce.identification.engine.Vector3D;
+import org.ce.workbench.util.ClusterDataCache;
 
 import java.util.List;
 import java.util.UUID;
@@ -99,8 +100,36 @@ public class ClusterIdentificationJob extends AbstractBackgroundJob {
             
             if (cancelled) return;
             
-            // Update system info
+            // Update system info and save cluster data before marking complete
             system.setClustersComputed(true);
+            
+            // Save cluster identification result to project resources
+            System.out.println("[ClusterJob] Starting cluster data save for system: " + system.getId());
+            System.out.println("[ClusterJob] Result is null? " + (result == null));
+            if (result != null) {
+                System.out.println("[ClusterJob] Result tc: " + result.getTc());
+                System.out.println("[ClusterJob] Result multiplicities count: " + result.getMultiplicities().size());
+            }
+            
+            try {
+                if (result != null) {
+                    boolean saved = ClusterDataCache.saveClusterData(result, system.getId());
+                    System.out.println("[ClusterJob] Save result: " + saved);
+                    if (saved) {
+                        setStatusMessage("Cluster data persisted to project resources");
+                        System.out.println("[ClusterJob] ✓ Cluster data saved successfully");
+                    } else {
+                        System.out.println("[ClusterJob] ✗ Save returned false");
+                    }
+                } else {
+                    System.out.println("[ClusterJob] ✗ Result is null, cannot save");
+                }
+            } catch (Exception e) {
+                setStatusMessage("Warning: Failed to save cluster data: " + e.getMessage());
+                System.err.println("[ClusterJob] ClusterDataCache save failed: " + e.getMessage());
+                e.printStackTrace();
+            }
+            
             setProgress(100);
             setStatusMessage("Cluster identification completed");
             
