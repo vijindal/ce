@@ -7,21 +7,21 @@
   "numComponents": 2,
   "clusterCount": 6,
   "cecValues": [
+    0.0,
+    0.0,
     -390.0,
     -260.0,
-    0.0,
-    0.0,
     0.0,
     0.0
   ],
   "units": "J/mol",
   "description": [
-    "Tetrahedron 4-body (rc=4, mult=6)",
-    "Triangle (rc=3, mult=12)",
-    "1-neighbor pair (rc=2, mult=4)",
-    "II-neighbor pair (rc=2, mult=3)",
-    "Point cluster (rc=1)",
-    "Empty/Reference cluster (rc=0)"
+    "Tetrahedron 4-body (rc=4, mult=6) = 0.0",
+    "Triangle (rc=3, mult=12) = 0.0",
+    "1-neighbor pair (rc=2, mult=4) = -390.0",
+    "II-neighbor pair (rc=2, mult=3) = -260.0",
+    "Point cluster (rc=1) = 0.0",
+    "Empty/Reference cluster (rc=0) = 0.0"
   ],
   "reference": "Optimized from Nb-Ti BCC phase diagram fitting",
   "timestamp": "2026-02-27T17:00:00Z",
