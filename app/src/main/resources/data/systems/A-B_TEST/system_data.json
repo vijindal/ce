@@ -1,0 +1,44 @@
+{
+  "systemId": "A-B_TEST",
+  "elements": "A-B",
+  "structure": "BCC",
+  "phase": "A2",
+  "model": "T",
+  "numComponents": 2,
+  "cecValues": [
+    0.0,
+    0.0,
+    -1.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "cecUnits": "R=1 (legacy, for reproducibility only)",
+  "cecDescription": [
+    "Tetrahedron 4-body (rc=4, mult=6) = 0.0",
+    "Triangle (rc=3, mult=12) = 0.0",
+    "1-neighbor pair (rc=2, mult=4) = -1.0 (legacy R=1 scaling)",
+    "II-neighbor pair (rc=2, mult=3) = 0.0",
+    "Point cluster (rc=1, excluded) = 0.0",
+    "Reference cluster (rc=0, excluded) = 0.0"
+  ],
+  "clusterData": {
+    "tcdis": 5,
+    "nxcdis": 1,
+    "tc": 6,
+    "nxc": 1,
+    "clusterFile": "cluster/A2-T.txt",
+    "symmetryGroup": "A2-SG",
+    "computed": false
+  },
+  "cfData": {
+    "tcf": 15,
+    "nxcf": 2,
+    "ncf": 13,
+    "tcfdis": 15,
+    "computed": false
+  },
+  "description": "A-B binary BCC test system (legacy R=1 convention for reproducibility)",
+  "reference": "Dummy system to reproduce old MCS calculations with R=1",
+  "notes": "Uses same BCC_A2_T cluster model as Nb-Ti. R parameter will be set to 1.0 via MCSRunner builder when using this system."
+}

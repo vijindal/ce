@@ -1,0 +1,29 @@
+{
+  "cecKey": "A-B_TEST",
+  "elements": "A-B",
+  "structure": "BCC",
+  "phase": "A2",
+  "model": "T",
+  "numComponents": 2,
+  "clusterCount": 6,
+  "cecValues": [
+    0.0,
+    0.0,
+    -1.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "units": "R=1 legacy (for reproducibility only)",
+  "description": [
+    "Tetrahedron 4-body (rc=4, mult=6) = 0.0",
+    "Triangle (rc=3, mult=12) = 0.0",
+    "1-neighbor pair (rc=2, mult=4) = -1.0 (original test setup)",
+    "II-neighbor pair (rc=2, mult=3) = 0.0",
+    "Point cluster (rc=1) = 0.0",
+    "Empty/Reference cluster (rc=0) = 0.0"
+  ],
+  "reference": "Dummy system for legacy MCS reproducibility testing",
+  "timestamp": "2026-02-27T18:00:00Z",
+  "notes": "Binary A-B system with minimal interactions. Use T=6.2 K and R=1.0 to reproduce old calculations exactly. Same BCC_A2_T cluster model as Nb-Ti_BCC_A2_T."
+}
