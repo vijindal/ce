@@ -252,7 +252,7 @@ public class MCSRunner {
         /** Random seed for reproducibility. */
         public Builder seed(long s) { this.seed = s; return this; }
 
-        /** Phase gas constant (eV/K). Default 1.0 to match original code. */
+        /** Phase gas constant in J/(mol·K). Must match energy units (CEC in J/mol requires R=8.314). */
         public Builder R(double r) { this.R = r; return this; }
 
         public MCSRunner build() {

@@ -41,6 +41,10 @@ public class MCSExecutor {
             // Build and run MCS
             resultsPanel.logMessage("\nBuilding MCS configuration...");
             
+            // Gas constant for J/(mol·K) energies at T in Kelvin
+            // R = 8.314 J/(mol·K) ensures correct Boltzmann statistics
+            final double GAS_CONSTANT = 8.314;  // J/(mol·K)
+            
             MCSRunner runner = MCSRunner.builder()
                 .clusterData(context.getClusterData())
                 .eci(context.getECI())
@@ -51,6 +55,7 @@ public class MCSExecutor {
                 .nAvg(context.getAveragingSteps())
                 .L(context.getSupercellSize())
                 .seed(context.getSeed())
+                .R(GAS_CONSTANT)  // Set correct gas constant for J/mol energies
                 .build();
             
             resultsPanel.logMessage("Configuration built. Starting Monte Carlo simulation...");
