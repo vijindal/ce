@@ -1,0 +1,29 @@
+{
+  "systemId": "Ti-Nb_BCC_A2_T",
+  "elements": "Ti-Nb",
+  "structure": "BCC",
+  "phase": "A2",
+  "model": "T",
+  "numComponents": 2,
+  "clusterCount": 6,
+  "cecValues": [
+    -390.0,
+    -260.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "units": "J/mol",
+  "description": [
+    "Point (1-body)",
+    "1-neighbor pair",
+    "II-neighbor pair",
+    "Triangle",
+    "Tetrahedron (4-body)",
+    "Mixed tetrahedra"
+  ],
+  "reference": "Optimized from phase diagram fitting (Ti-Nb system)",
+  "timestamp": "2026-02-27T17:00:00Z",
+  "notes": "6 cluster types from BCC_A2_T model; higher-order values set to zero as approximation"
+}
