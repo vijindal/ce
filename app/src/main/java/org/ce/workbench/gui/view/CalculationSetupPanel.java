@@ -36,6 +36,7 @@ public class CalculationSetupPanel extends VBox {
     private final TextField compositionField;
     
     // MCS parameters
+    private final TextField mcsSupercellSizeField;
     private final TextField mcsEquilibrationField;
     private final TextField mcsAveragingField;
     private final TextField mcsSeedField;
@@ -77,6 +78,7 @@ public class CalculationSetupPanel extends VBox {
         compositionField = new TextField("0.5");
         
         // Initialize MCS parameters
+        mcsSupercellSizeField = new TextField("4");
         mcsEquilibrationField = new TextField("5000");
         mcsAveragingField = new TextField("10000");
         // Use random seed by default to avoid deterministic behavior
@@ -145,13 +147,15 @@ public class CalculationSetupPanel extends VBox {
         grid.setVgap(6);
         grid.setPadding(new Insets(0));
         
+        mcsSupercellSizeField.setPrefHeight(22);
         mcsEquilibrationField.setPrefHeight(22);
         mcsAveragingField.setPrefHeight(22);
         mcsSeedField.setPrefHeight(22);
         
-        addCompactRow(grid, 0, "Equilibration", mcsEquilibrationField);
-        addCompactRow(grid, 1, "Averaging", mcsAveragingField);
-        addCompactRow(grid, 2, "Seed", mcsSeedField);
+        addCompactRow(grid, 0, "Supercell Size (L)", mcsSupercellSizeField);
+        addCompactRow(grid, 1, "Equilibration", mcsEquilibrationField);
+        addCompactRow(grid, 2, "Averaging", mcsAveragingField);
+        addCompactRow(grid, 3, "Seed", mcsSeedField);
         
         section.getChildren().addAll(label, grid);
         return section;
@@ -196,6 +200,7 @@ public class CalculationSetupPanel extends VBox {
         resetButton.setOnAction(e -> {
             temperatureField.setText("800");
             compositionField.setText("0.5");
+            mcsSupercellSizeField.setText("4");
             mcsEquilibrationField.setText("5000");
             mcsAveragingField.setText("10000");
             mcsSeedField.setText(String.valueOf(System.currentTimeMillis() % 100000));
@@ -230,6 +235,7 @@ public class CalculationSetupPanel extends VBox {
         // Parse parameters
         double temperature;
         double composition;
+        int supercellSize;
         int equilibration;
         int averaging;
         long seed;
@@ -237,12 +243,14 @@ public class CalculationSetupPanel extends VBox {
         try {
             temperature = Double.parseDouble(temperatureField.getText().trim());
             composition = Double.parseDouble(compositionField.getText().trim());
+            supercellSize = Integer.parseInt(mcsSupercellSizeField.getText().trim());
             equilibration = Integer.parseInt(mcsEquilibrationField.getText().trim());
             averaging = Integer.parseInt(mcsAveragingField.getText().trim());
             seed = Long.parseLong(mcsSeedField.getText().trim());
             
             if (temperature <= 0) throw new NumberFormatException("Temperature must be positive");
             if (composition < 0 || composition > 1) throw new NumberFormatException("Composition must be between 0 and 1");
+            if (supercellSize < 1) throw new NumberFormatException("Supercell size must be >= 1");
             if (equilibration <= 0) throw new NumberFormatException("Equilibration steps must be positive");
             if (averaging <= 0) throw new NumberFormatException("Averaging steps must be positive");
             
@@ -260,7 +268,7 @@ public class CalculationSetupPanel extends VBox {
             selectedSystem,
             temperature,
             composition,
-            4,  // Supercell size - could be parameterized
+            supercellSize,  // User-defined supercell size
             equilibration,
             averaging,
             seed

@@ -108,13 +108,17 @@ public class EmbeddingGenerator {
                 List<org.ce.identification.engine.Site> sites = orbit.get(omIdx).getAllSites();
                 int anchorIdx = template.getAnchorIndex();
                 int[] alphas = new int[sites.size()];
-                alphas[0] = SiteOperatorBasis.alphaFromSymbol(sites.get(anchorIdx).getSymbol());
-                int slot = 1;
-                for (int k = 0; k < sites.size(); k++) {
-                    if (k == anchorIdx) continue;
-                    alphas[slot++] = SiteOperatorBasis.alphaFromSymbol(sites.get(k).getSymbol());
+                
+                // For non-empty clusters, populate alphas array
+                if (!sites.isEmpty()) {
+                    alphas[0] = SiteOperatorBasis.alphaFromSymbol(sites.get(anchorIdx).getSymbol());
+                    int slot = 1;
+                    for (int k = 0; k < sites.size(); k++) {
+                        if (k == anchorIdx) continue;
+                        alphas[slot++] = SiteOperatorBasis.alphaFromSymbol(sites.get(k).getSymbol());
+                    }
                 }
-
+                
                 raw.add(new Embedding(
                         template.getClusterType(),
                         template.getOrbitMemberIndex(),
@@ -182,7 +186,13 @@ public class EmbeddingGenerator {
 
             for (int o = 0; o < orbit.size(); o++) {
                 List<Site> sites = orbit.get(o).getAllSites();
-                if (sites.isEmpty()) continue;
+
+                if (sites.isEmpty()) {
+                    // Empty cluster (constant term): single template with no sites
+                    // Relative vectors are empty; used as anchor for each supercell site
+                    templates.add(new ClusterTemplate(t, o, new Vector3D[0], 0));
+                    continue;
+                }
 
                 int n = sites.size();
 

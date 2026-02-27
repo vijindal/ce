@@ -18,17 +18,17 @@ import java.util.List;
  * <h2>CF formula</h2>
  * <pre>
  *   u_t = Σ_{e ∈ allEmbeddings, e.type==t} Φ(e)
- *         ────────────────────────────────────────
- *                    N · orbitSize_t
+ *         ──────────────────────────────────
+ *               embedCount_t
  * </pre>
- * <p>The numerator counts each physical cluster {@code clusterSize_t} times,
- * so dividing by {@code N · orbitSize_t} correctly normalises to a per-site,
- * per-cluster-instance average.  {@link LocalEnergyCalc#clusterProduct} is
- * called with orbit data to evaluate {@code Φ(e)} for any number of
+ * <p>CORRECTED FORMULA (v2): Normalizes by the total embedding count for each
+ * cluster type. This gives the average cluster product, which is the
+ * mathematically correct basis for the CVM. {@link LocalEnergyCalc#clusterProduct}
+ * is called with orbit data to evaluate {@code Φ(e)} for any number of
  * components.</p>
  *
  * @author  CE Project
- * @version 1.0
+ * @version 2.0
  * @see     MCEngine
  */
 public class MCSampler {
@@ -77,7 +77,16 @@ public class MCSampler {
     // -------------------------------------------------------------------------
 
     /**
-     * Records one sample.
+     * Accumulates one sample of observables.
+     *
+     * <h2>Updated CF formula</h2>
+     * <pre>
+     *   u_t = Σ_{e ∈ allEmbeddings, e.type==t} Φ(e)
+     *         ─────────────────────────────────────
+     *              embedCount_t
+     * </pre>
+     * <p>This averages the cluster product over all embeddings of type t,
+     * which is the mathematically correct normalization for the CVM.</p>
      *
      * @param config current configuration
      * @param emb    embedding data
@@ -92,16 +101,21 @@ public class MCSampler {
         sumE  += H;
         sumE2 += H * H;
 
-        // Accumulate CF numerators per cluster type
+        // Accumulate CF numerators and embedding counts per cluster type
         double[] cfNum = new double[tc];
+        int[] embedCount = new int[tc];
         for (Embedding e : emb.getAllEmbeddings()) {
             int t = e.getClusterType();
             if (t < tc) {
+                embedCount[t]++;
                 cfNum[t] += LocalEnergyCalc.clusterProduct(e, config, orbits);
             }
         }
+        // Normalize by embedding count for each type
         for (int t = 0; t < tc; t++) {
-            sumCF[t] += cfNum[t] / ((double) N * orbitSizes[t]);
+            if (embedCount[t] > 0) {
+                sumCF[t] += cfNum[t] / embedCount[t];
+            }
         }
         nSamples++;
 

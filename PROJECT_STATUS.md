@@ -65,29 +65,42 @@ app/src/main/resources/
 ## Recent Changes (Feb 2026)
 
 ### ✅ Completed (Week of Feb 27)
-1. **Cluster Data Persistence** - NEW
+1. **CF Normalization Fix** - CRITICAL BUG FIX ⚠️
+   - Fixed incorrect correlation function normalization formula in MCSampler
+   - OLD (WRONG): `CF = Σ(Φ) / (N × orbitSize)` caused CFs to scale incorrectly
+   - NEW (CORRECT): `CF = Σ(Φ) / embedCount` - average cluster product per embedding
+   - Fixed empty cluster generation (Type 5 was being skipped)
+   - All cluster types now correctly produce CF=1.0 for all-B configuration
+   - See [CF_NORMALIZATION_FIX_SUMMARY.md](CF_NORMALIZATION_FIX_SUMMARY.md) for detailed analysis
+   
+2. **MCS UI Enhancements**
+   - Added Supercell Size (L) parameter to CalculationSetupPanel
+   - Standardized gas constant to R=8.314 J/(mol·K) for all calculations
+   - Removed legacy R=1.0 convention
+
+3. **Cluster Data Persistence** - NEW
    - ClusterDataCache utility for JSON serialization
    - Results saved to `cluster_data/{systemId}/cluster_result.json`
    - Project-based storage (not user home directory) for distribution
    
-2. **UX Improvements** - MAJOR
+4. **UX Improvements** - MAJOR
    - **Single identification dialog** - Eliminated duplicate file prompts
    - **Cached input pattern** - CF identification reuses cluster identification inputs
    - **Pre-filled fields** - Ordered cluster/symmetry auto-populated with resolved values
    - **Diagnostic logging** - Component-prefixed console output (`[ClusterJob]`, `[ClusterDataCache]`)
    
-3. **Bug Fixes** - CRITICAL
+5. **Bug Fixes** - CRITICAL
    - Fixed system availability check (now checks actual `cluster_result.json`)
    - Fixed job timing issue (cluster data saved before job removed from queue)
    - Fixed dialog redundancy (single prompt for entire identification pipeline)
 
 ### ✅ Completed (Week of Feb 20-26)
-4. **Window Sizing** - Responsive sizing (90% screen, centered)
-5. **UI Redesign** - Replaced periodic table with guided text fields
-6. **Data Separation** - Split CECs from model data for proper reuse
-7. **SystemDataLoader** - Rewritten for new dual-source loading
-8. **Nb-Ti System** - Added CEC data (4 values from phase diagram)
-9. **BCC_A2_T Model** - Added shared model data (tcdis=5, tcf=15)
+6. **Window Sizing** - Responsive sizing (90% screen, centered)
+7. **UI Redesign** - Replaced periodic table with guided text fields
+8. **Data Separation** - Split CECs from model data for proper reuse
+9. **SystemDataLoader** - Rewritten for new dual-source loading
+10. **Nb-Ti System** - Added CEC data (4 values from phase diagram)
+11. **BCC_A2_T Model** - Added shared model data (tcdis=5, tcf=15)
 
 ---
 

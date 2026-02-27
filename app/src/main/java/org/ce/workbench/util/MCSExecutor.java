@@ -41,16 +41,9 @@ public class MCSExecutor {
             // Build and run MCS
             resultsPanel.logMessage("\nBuilding MCS configuration...");
             
-            // Determine gas constant based on system
-            // Legacy test systems use R=1.0 for reproducibility with old calculations
-            String systemId = context.getSystem().getName();
-            final double GAS_CONSTANT;
-            if (systemId.contains("TEST") || systemId.contains("A-B")) {
-                GAS_CONSTANT = 1.0;  // Legacy: use old R=1 convention for reproducibility
-                resultsPanel.logMessage("⚠ Using legacy gas constant R=1.0 for test system: " + systemId);
-            } else {
-                GAS_CONSTANT = 8.314;  // Standard: J/(mol·K) for proper Boltzmann statistics
-            }
+            // Gas constant for J/(mol·K) energies at T in Kelvin
+            // R = 8.314 J/(mol·K) ensures correct Boltzmann statistics
+            final double GAS_CONSTANT = 8.314;  // J/(mol·K)
             
             MCSRunner runner = MCSRunner.builder()
                 .clusterData(context.getClusterData())
@@ -62,7 +55,7 @@ public class MCSExecutor {
                 .nAvg(context.getAveragingSteps())
                 .L(context.getSupercellSize())
                 .seed(context.getSeed())
-                .R(GAS_CONSTANT)  // Set appropriate gas constant
+                .R(GAS_CONSTANT)  // Set correct gas constant for J/mol energies
                 .build();
             
             resultsPanel.logMessage("Configuration built. Starting Monte Carlo simulation...");
