@@ -43,6 +43,29 @@ result.printDebug();
 
 ---
 
+## Directory Structure
+
+This project uses a **dual `src/` structure** by design:
+
+```
+ce/
+├── app/src/              # Application source code (Gradle module)
+│   ├── main/java/        # Java source files (org.ce.*)
+│   ├── main/resources/   # Static configs (cluster defs, YAML, symmetry)
+│   └── test/java/        # Unit tests
+│
+└── src/                  # Runtime data resources (project root)
+    └── main/resources/   # Pre-computed cluster results (auto-generated)
+        └── cluster_data/ # Background job outputs (*.json)
+```
+
+- **`app/src/`**: All application code and static configuration files
+- **`src/` (root)**: Runtime-generated cluster identification results packaged into JAR
+
+Both are packaged together at build time. See [src/README.md](src/README.md) for details.
+
+---
+
 ## Package Structure
 
 Packages follow the **data flow** exactly — each package owns one
