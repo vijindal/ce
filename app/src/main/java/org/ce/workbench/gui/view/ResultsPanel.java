@@ -171,16 +171,20 @@ public class ResultsPanel extends VBox {
     }
     
     private void updateMCSDataUI(MCSUpdate update) {
-        // Add data point to chart (Energy vs Step)
-        energySeries.getData().add(new XYChart.Data<>(update.getStep(), update.getE_total()));
+        mcsDataPointCount++;
         
-        // Prune old data if too many points (keep chart responsive)
-        if (energySeries.getData().size() > 10000) {
-            energySeries.getData().remove(0, 2000);
+        // Sample chart updates every 10 sweeps to avoid expensive redraws
+        if (update.getStep() % 10 == 0) {
+            energySeries.getData().add(new XYChart.Data<>(update.getStep(), update.getE_total()));
+            
+            // Aggressive pruning: keep only recent 300 points (avoids ~10k point redraws)
+            if (energySeries.getData().size() > 300) {
+                energySeries.getData().remove(0, 50);
+            }
         }
         
-        // Detailed output to text area
-        if (mcsDataPointCount % 100 == 0) {  // Log every 100 updates
+        // Sampled text output every 50 sweeps (not every update)
+        if (update.getStep() % 50 == 0) {
             String output = String.format(
                 "[Sweep %d] E=%.6f eV | ΔE=%.8f | σ(ΔE)=%.6f | Accept=%.1f%% | %s | Time=%dms%n",
                 update.getStep(),
@@ -196,13 +200,12 @@ public class ResultsPanel extends VBox {
             // Auto-scroll to bottom
             Platform.runLater(() -> outputArea.setScrollTop(Double.MAX_VALUE));
         }
-        mcsDataPointCount++;
     }
     
     /**
      * Initialize MCS monitoring for a new run.
      */
-    public void initializeMCS(int eqSteps, int avgSteps) {
+    public void initializeMCS(int eqSteps, int avgSteps, long seed) {
         Platform.runLater(() -> {
             energySeries.getData().clear();
             outputArea.clear();
@@ -212,10 +215,11 @@ public class ResultsPanel extends VBox {
             
             appendText(String.format(
                 "=== MCS Simulation Started ===\n" +
+                "Seed: %d\n" +
                 "Equilibration: %d sweeps\n" +
                 "Averaging: %d sweeps\n" +
                 "Total: %d sweeps\n\n",
-                eqSteps, avgSteps, eqSteps + avgSteps
+                seed, eqSteps, avgSteps, eqSteps + avgSteps
             ));
         });
     }

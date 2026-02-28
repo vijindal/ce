@@ -126,9 +126,7 @@ public class MCEngine {
             
             for (int m = 0; m < N; m++) {
                 double stepDeltaE = step.attempt(config);
-                if (stepDeltaE != 0.0) {
-                    deltaEWindow.add(stepDeltaE);  // Only track accepted moves
-                }
+                deltaEWindow.add(stepDeltaE);  // Track all attempts; rejected moves contribute 0.0
                 currentEnergy += stepDeltaE;  // Accumulate (0 if rejected)
                 sweepDeltaE += stepDeltaE;   // Track sweep aggregate
             }
@@ -161,9 +159,7 @@ public class MCEngine {
             
             for (int m = 0; m < N; m++) {
                 double stepDeltaE = step.attempt(config);
-                if (stepDeltaE != 0.0) {
-                    deltaEWindow.add(stepDeltaE);  // Only track accepted moves
-                }
+                deltaEWindow.add(stepDeltaE);  // Track all attempts; rejected moves contribute 0.0
                 currentEnergy += stepDeltaE;  // Accumulate (0 if rejected)
                 sweepDeltaE += stepDeltaE;   // Track sweep aggregate
             }
@@ -207,9 +203,7 @@ public class MCEngine {
             
             for (int m = 0; m < N; m++) {
                 double stepDeltaE = step.attempt(config);
-                if (stepDeltaE != 0.0) {
-                    deltaEWindow.add(stepDeltaE);  // Only track accepted moves
-                }
+                deltaEWindow.add(stepDeltaE);  // Track all attempts; rejected moves contribute 0.0
                 currentEnergy += stepDeltaE;  // Accumulate (0 if rejected)
                 sweepDeltaE += stepDeltaE;   // Track sweep aggregate
             }
@@ -243,9 +237,7 @@ public class MCEngine {
             
             for (int m = 0; m < N; m++) {
                 double stepDeltaE = step.attempt(config);
-                if (stepDeltaE != 0.0) {
-                    deltaEWindow.add(stepDeltaE);  // Only track accepted moves
-                }
+                deltaEWindow.add(stepDeltaE);  // Track all attempts; rejected moves contribute 0.0
                 currentEnergy += stepDeltaE;  // Accumulate (0 if rejected)
                 sweepDeltaE += stepDeltaE;   // Track sweep aggregate
             }

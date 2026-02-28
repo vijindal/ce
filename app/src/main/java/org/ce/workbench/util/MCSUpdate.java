@@ -62,24 +62,30 @@ public class MCSUpdate {
     public long getElapsedMs() { return elapsedMs; }
     
     /**
-     * Convergence status based on σ(ΔE).
-     * σ(ΔE) indicates how wide the energy fluctuations are.
+     * Convergence status based on drift-to-fluctuation ratio.
+     *
+     * Uses |mean(ΔE)| / (σ(ΔE) + ε) so the metric is unit-agnostic and
+     * remains meaningful across different system sizes and energy scales.
      */
     public enum ConvergenceStatus {
-        CONVERGED,      // σ(ΔE) < 0.05 - Ready to average
-        CONVERGING,     // 0.05 ≤ σ(ΔE) < 0.15 - Still equilibrating
-        EARLY_STAGE,    // 0.15 ≤ σ(ΔE) < 0.50 - Early equilibration
-        FAR_FROM_EQ     // σ(ΔE) ≥ 0.50 - Very far from equilibrium
+        CONVERGED,      // |μ|/σ < 0.05
+        CONVERGING,     // 0.05 ≤ |μ|/σ < 0.15
+        EARLY_STAGE,    // 0.15 ≤ |μ|/σ < 0.35
+        FAR_FROM_EQ     // |μ|/σ ≥ 0.35
     }
     
     /**
-     * Get convergence status based on σ(ΔE).
+     * Get convergence status based on normalized energy drift.
      * @return convergence status indicator
      */
     public ConvergenceStatus getConvergenceStatus() {
-        if (sigmaDE < 0.05) return ConvergenceStatus.CONVERGED;
-        if (sigmaDE < 0.15) return ConvergenceStatus.CONVERGING;
-        if (sigmaDE < 0.50) return ConvergenceStatus.EARLY_STAGE;
+        if (sigmaDE < 1e-12) return ConvergenceStatus.CONVERGED;
+
+        double driftRatio = Math.abs(meanDE) / (sigmaDE + 1e-12);
+
+        if (driftRatio < 0.05) return ConvergenceStatus.CONVERGED;
+        if (driftRatio < 0.15) return ConvergenceStatus.CONVERGING;
+        if (driftRatio < 0.35) return ConvergenceStatus.EARLY_STAGE;
         return ConvergenceStatus.FAR_FROM_EQ;
     }
     
@@ -105,7 +111,7 @@ public class MCSUpdate {
             case CONVERGED -> "✅ Converged";
             case CONVERGING -> "🟡 Converging";
             case EARLY_STAGE -> "🟠 Early Stage";
-            case FAR_FROM_EQ -> "🔴 Far from Equilib.";
+            case FAR_FROM_EQ -> "🔴 Drift Dominant";
         };
     }
     

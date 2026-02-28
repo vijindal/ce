@@ -42,8 +42,8 @@ public class EnergyConvergenceChart extends VBox {
     
     // Data tracking for memory management
     private int lastDataPointsCount = 0;
-    private static final int MAX_POINTS_BEFORE_PRUNE = 10000;
-    private static final int PRUNE_OLDEST = 2000;
+    private static final int MAX_POINTS_BEFORE_PRUNE = 500;    // Prune at 500 points (5+ sweeps with sampling)
+    private static final int PRUNE_OLDEST = 100;                // Remove oldest 100 points per prune
     
     public EnergyConvergenceChart() {
         // Set up layout
@@ -131,7 +131,10 @@ public class EnergyConvergenceChart extends VBox {
     
     /**
      * Remove oldest data points if we exceed reasonable chart size.
-     * Keeps memory usage bounded for long-running simulations.
+     * Keeps memory usage bounded and rendering fast for long-running simulations.
+     * 
+     * This is a rolling-window approach: as new points come in,
+     * oldest points are discarded to maintain constant memory footprint.
      */
     private void pruneDataIfNeeded() {
         int totalPoints = seriesDeltaEq.getData().size() + 
@@ -139,29 +142,20 @@ public class EnergyConvergenceChart extends VBox {
                          seriesCumulativeE.getData().size();
         
         if (totalPoints > MAX_POINTS_BEFORE_PRUNE) {
-            // Remove oldest points from each series
-            if (seriesDeltaEq.getData().size() > PRUNE_OLDEST) {
-                for (int i = 0; i < PRUNE_OLDEST; i++) {
-                    if (!seriesDeltaEq.getData().isEmpty()) {
-                        seriesDeltaEq.getData().remove(0);
-                    }
-                }
+            // Efficient bulk removal: remove all points up to index PRUNE_OLDEST
+            int removeCount = Math.min(PRUNE_OLDEST, seriesDeltaEq.getData().size());
+            if (removeCount > 0) {
+                seriesDeltaEq.getData().remove(0, removeCount);
             }
             
-            if (seriesDeltaAvg.getData().size() > PRUNE_OLDEST) {
-                for (int i = 0; i < PRUNE_OLDEST; i++) {
-                    if (!seriesDeltaAvg.getData().isEmpty()) {
-                        seriesDeltaAvg.getData().remove(0);
-                    }
-                }
+            removeCount = Math.min(PRUNE_OLDEST, seriesDeltaAvg.getData().size());
+            if (removeCount > 0) {
+                seriesDeltaAvg.getData().remove(0, removeCount);
             }
             
-            if (seriesCumulativeE.getData().size() > PRUNE_OLDEST) {
-                for (int i = 0; i < PRUNE_OLDEST; i++) {
-                    if (!seriesCumulativeE.getData().isEmpty()) {
-                        seriesCumulativeE.getData().remove(0);
-                    }
-                }
+            removeCount = Math.min(PRUNE_OLDEST, seriesCumulativeE.getData().size());
+            if (removeCount > 0) {
+                seriesCumulativeE.getData().remove(0, removeCount);
             }
         }
     }

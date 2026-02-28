@@ -63,7 +63,8 @@ public class MCSExecutor {
             resultsPanel.setProgress(0.2);
             resultsPanel.initializeMCS(
                 context.getEquilibrationSteps(),
-                context.getAveragingSteps()
+                context.getAveragingSteps(),
+                context.getSeed()
             );
             
             // Execute MCS
