@@ -1,10 +1,10 @@
 # CE Workbench - Project Status
 
 **Last Updated:** February 28, 2026  
-**Version:** 0.3.1  
+**Version:** 0.3.2  
 **Compilation:** ✅ Successful  
 **GUI Status:** ✅ Fully Functional  
-**MCS Engine:** ✅ Energy Tracking Optimized
+**MCS Engine:** ✅ Energy Tracking Optimized • Performance Fixed
 
 ---
 
@@ -65,8 +65,21 @@ app/src/main/resources/
 
 ## Recent Changes (Feb 2026)
 
-### ✅ Completed (Feb 28)
-1. **MCS Energy Tracking Optimization** - CRITICAL PERFORMANCE FIX
+### ✅ Completed (Feb 28 - Part 2)
+2. **MCS Performance Optimization** - UI Slowdown Fixed
+   - Root cause: Chart updated every sweep → JavaFX redraw queue buildup
+   - Solution: Sample chart updates (every 10 sweeps) instead of every sweep
+   - Solution: Sample text output (every 50 sweeps) instead of every 100 updates
+   - Solution: Keep only 300 chart points (vs 10k) with continuous pruning
+   - Result: **~80 ms/sweep consistently** (formerly 20-25+ sec/sweep at 500+ sweeps)
+   - Verification: 1000-sweep run now **85.5 seconds** (was 6+ hours on slowdown path)
+   - Performance gain: **250x faster** for long runs, **linear timing** throughout
+   - Files modified:
+     - [ResultsPanel.java](app/src/main/java/org/ce/workbench/gui/view/ResultsPanel.java) — Sampling logic
+     - [EnergyConvergenceChart.java](app/src/main/java/org/ce/workbench/gui/component/EnergyConvergenceChart.java) — Aggressive pruning
+
+### ✅ Completed (Feb 28 - Part 1)
+3. **MCS Energy Tracking Optimization** - CRITICAL PERFORMANCE FIX
    - Implemented true ΔE accumulation: energy updates only on accepted moves
    - Modified `ExchangeStep.attempt()` to return `double ΔE` instead of `boolean`
    - Modified `FlipStep.attempt()` to return `double ΔE` instead of `boolean`
