@@ -97,9 +97,9 @@ public class ExchangeStep {
      * </ol>
      *
      * @param config configuration to update in-place
-     * @return {@code true} if the move was accepted
+     * @return ΔE if the move was accepted, 0.0 if rejected (energy unchanged)
      */
-    public boolean attempt(LatticeConfig config) {
+    public double attempt(LatticeConfig config) {
         long __p = Profiler.tic("ExchangeStep.attempt");
         attempts++;
         rebuildCacheIfNeeded(config);
@@ -109,7 +109,7 @@ public class ExchangeStep {
         int c2 = randomNonEmptySpecies(c1);
         if (c1 < 0 || c2 < 0) {
             Profiler.toc("ExchangeStep.attempt", __p);
-            return false;  // only one species present
+            return 0.0;  // only one species present, no energy change
         }
 
         java.util.ArrayList<Integer> list1 = speciesSites[c1];
@@ -125,10 +125,10 @@ public class ExchangeStep {
             config.setOccupation(j, c1);
             accepted++;
             Profiler.toc("ExchangeStep.attempt", __p);
-            return true;
+            return dE;  // Accepted: return the energy change
         }
         Profiler.toc("ExchangeStep.attempt", __p);
-        return false;
+        return 0.0;  // Rejected: energy unchanged
     }
 
     // -------------------------------------------------------------------------

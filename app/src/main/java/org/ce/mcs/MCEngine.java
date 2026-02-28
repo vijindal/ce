@@ -1,9 +1,12 @@
 package org.ce.mcs;
 
 import org.ce.identification.engine.Cluster;
+import org.ce.workbench.util.MCSUpdate;
+import org.ce.workbench.util.RollingWindow;
 
 import java.util.List;
 import java.util.Random;
+import java.util.function.Consumer;
 
 /**
  * Metropolis Monte Carlo engine: equilibration then averaging sweeps.
@@ -41,6 +44,10 @@ public class MCEngine {
     private final boolean             useFlipStep;
     private final double[]            deltaMu;
     private final Random              rng;
+    
+    // MCS monitoring callback and state
+    private Consumer<MCSUpdate>       updateListener = null;
+    private RollingWindow             deltaEWindow = new RollingWindow(500);
 
     // -------------------------------------------------------------------------
     // Constructors
@@ -80,6 +87,15 @@ public class MCEngine {
     // -------------------------------------------------------------------------
 
     /**
+     * Registers a callback for real-time MCS update events.
+     * Used for GUI monitoring and visualization.
+     * @param listener callback to receive MCSUpdate events
+     */
+    public void setUpdateListener(Consumer<MCSUpdate> listener) {
+        this.updateListener = listener;
+    }
+
+    /**
      * Runs equilibration + averaging and returns the result.
      *
      * @param config  initial configuration; modified in-place
@@ -98,17 +114,79 @@ public class MCEngine {
         ExchangeStep step = new ExchangeStep(emb, eci, orbits, numComp, T, R, rng);
         int N = config.getN();
 
-        System.out.printf("[MCEngine] Equilibrating (canonical): %d sweeps%n", nEquil);
-        for (int s = 0; s < nEquil; s++)
-            for (int m = 0; m < N; m++) step.attempt(config);
+        // Initialize MCS monitoring  
+        deltaEWindow.clear();
+        long startTime = System.currentTimeMillis();
+        
+        // Calculate initial total energy (expensive, done once at start)
+        double currentEnergy = LocalEnergyCalc.totalEnergy(config, emb, eci, orbits);
+
+        for (int s = 0; s < nEquil; s++) {
+            double sweepDeltaE = 0.0;
+            
+            for (int m = 0; m < N; m++) {
+                double stepDeltaE = step.attempt(config);
+                if (stepDeltaE != 0.0) {
+                    deltaEWindow.add(stepDeltaE);  // Only track accepted moves
+                }
+                currentEnergy += stepDeltaE;  // Accumulate (0 if rejected)
+                sweepDeltaE += stepDeltaE;   // Track sweep aggregate
+            }
+            
+            // Emit update after each sweep (step = sweep number)
+            if (updateListener != null) {
+                long elapsedMs = System.currentTimeMillis() - startTime;
+                int sweepNum = s + 1;  // Sweep number (1, 2, 3, ...)
+                
+                MCSUpdate update = new MCSUpdate(
+                    sweepNum,
+                    currentEnergy,
+                    sweepDeltaE,
+                    deltaEWindow.getStdDev(),
+                    deltaEWindow.getMean(),
+                    MCSUpdate.Phase.EQUILIBRATION,
+                    step.acceptRate(),
+                    System.currentTimeMillis(),
+                    elapsedMs
+                );
+                updateListener.accept(update);
+            }
+        }
 
         step.resetCounters();
         sampler.reset();
 
-        System.out.printf("[MCEngine] Averaging (canonical):     %d sweeps%n", nAvg);
         for (int s = 0; s < nAvg; s++) {
-            for (int m = 0; m < N; m++) step.attempt(config);
+            double sweepDeltaE = 0.0;
+            
+            for (int m = 0; m < N; m++) {
+                double stepDeltaE = step.attempt(config);
+                if (stepDeltaE != 0.0) {
+                    deltaEWindow.add(stepDeltaE);  // Only track accepted moves
+                }
+                currentEnergy += stepDeltaE;  // Accumulate (0 if rejected)
+                sweepDeltaE += stepDeltaE;   // Track sweep aggregate
+            }
             sampler.sample(config, emb, eci);
+            
+            // Emit update after each sweep (step = cumulative sweep number)
+            if (updateListener != null) {
+                long elapsedMs = System.currentTimeMillis() - startTime;
+                int sweepNum = nEquil + s + 1;  // Cumulative sweep count
+                
+                MCSUpdate update = new MCSUpdate(
+                    sweepNum,
+                    currentEnergy,
+                    sweepDeltaE,
+                    deltaEWindow.getStdDev(),
+                    deltaEWindow.getMean(),
+                    MCSUpdate.Phase.AVERAGING,
+                    step.acceptRate(),
+                    System.currentTimeMillis(),
+                    elapsedMs
+                );
+                updateListener.accept(update);
+            }
         }
         return buildResult(config, sampler, step.acceptRate());
     }
@@ -117,17 +195,80 @@ public class MCEngine {
         FlipStep step = new FlipStep(emb, eci, orbits, numComp, T, deltaMu, R, rng);
         int N = config.getN();
 
-        System.out.printf("[MCEngine] Equilibrating (grand-canonical): %d sweeps%n", nEquil);
-        for (int s = 0; s < nEquil; s++)
-            for (int m = 0; m < N; m++) step.attempt(config);
+        // Initialize MCS monitoring
+        deltaEWindow.clear();
+        long startTime = System.currentTimeMillis();
+        
+        // Calculate initial total energy (expensive, done once at start)
+        double currentEnergy = LocalEnergyCalc.totalEnergy(config, emb, eci, orbits);
+
+        for (int s = 0; s < nEquil; s++) {
+            double sweepDeltaE = 0.0;
+            
+            for (int m = 0; m < N; m++) {
+                double stepDeltaE = step.attempt(config);
+                if (stepDeltaE != 0.0) {
+                    deltaEWindow.add(stepDeltaE);  // Only track accepted moves
+                }
+                currentEnergy += stepDeltaE;  // Accumulate (0 if rejected)
+                sweepDeltaE += stepDeltaE;   // Track sweep aggregate
+            }
+            
+
+            // Emit update after each sweep (step = sweep number)
+            if (updateListener != null) {
+                long elapsedMs = System.currentTimeMillis() - startTime;
+                int sweepNum = s + 1;  // Sweep number (1, 2, 3, ...)
+                
+                MCSUpdate update = new MCSUpdate(
+                    sweepNum,
+                    currentEnergy,
+                    sweepDeltaE,
+                    deltaEWindow.getStdDev(),
+                    deltaEWindow.getMean(),
+                    MCSUpdate.Phase.EQUILIBRATION,
+                    step.acceptRate(),
+                    System.currentTimeMillis(),
+                    elapsedMs
+                );
+                updateListener.accept(update);
+            }
+        }
 
         step.resetCounters();
         sampler.reset();
 
-        System.out.printf("[MCEngine] Averaging (grand-canonical):     %d sweeps%n", nAvg);
         for (int s = 0; s < nAvg; s++) {
-            for (int m = 0; m < N; m++) step.attempt(config);
+            double sweepDeltaE = 0.0;
+            
+            for (int m = 0; m < N; m++) {
+                double stepDeltaE = step.attempt(config);
+                if (stepDeltaE != 0.0) {
+                    deltaEWindow.add(stepDeltaE);  // Only track accepted moves
+                }
+                currentEnergy += stepDeltaE;  // Accumulate (0 if rejected)
+                sweepDeltaE += stepDeltaE;   // Track sweep aggregate
+            }
             sampler.sample(config, emb, eci);
+            
+            // Emit update after each sweep (step = cumulative sweep number)
+            if (updateListener != null) {
+                long elapsedMs = System.currentTimeMillis() - startTime;
+                int sweepNum = nEquil + s + 1;  // Cumulative sweep count
+                
+                MCSUpdate update = new MCSUpdate(
+                    sweepNum,
+                    currentEnergy,
+                    sweepDeltaE,
+                    deltaEWindow.getStdDev(),
+                    deltaEWindow.getMean(),
+                    MCSUpdate.Phase.AVERAGING,
+                    step.acceptRate(),
+                    System.currentTimeMillis(),
+                    elapsedMs
+                );
+                updateListener.accept(update);
+            }
         }
         return buildResult(config, sampler, step.acceptRate());
     }

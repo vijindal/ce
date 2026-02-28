@@ -17,6 +17,7 @@ import org.ce.identification.engine.ClusCoordListResult;
 
 import java.util.Comparator;
 import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Calculation setup panel with system selection and MCS/CVM inputs.
@@ -39,7 +40,6 @@ public class CalculationSetupPanel extends VBox {
     private final TextField mcsSupercellSizeField;
     private final TextField mcsEquilibrationField;
     private final TextField mcsAveragingField;
-    private final TextField mcsSeedField;
     
     // CVM parameters
     private final TextField cvmMaxClusterField;
@@ -81,8 +81,6 @@ public class CalculationSetupPanel extends VBox {
         mcsSupercellSizeField = new TextField("4");
         mcsEquilibrationField = new TextField("5000");
         mcsAveragingField = new TextField("10000");
-        // Use random seed by default to avoid deterministic behavior
-        mcsSeedField = new TextField(String.valueOf(System.currentTimeMillis() % 100000));
         
         // Initialize CVM parameters
         cvmMaxClusterField = new TextField("4");
@@ -150,12 +148,10 @@ public class CalculationSetupPanel extends VBox {
         mcsSupercellSizeField.setPrefHeight(22);
         mcsEquilibrationField.setPrefHeight(22);
         mcsAveragingField.setPrefHeight(22);
-        mcsSeedField.setPrefHeight(22);
         
         addCompactRow(grid, 0, "Supercell Size (L)", mcsSupercellSizeField);
         addCompactRow(grid, 1, "Equilibration", mcsEquilibrationField);
         addCompactRow(grid, 2, "Averaging", mcsAveragingField);
-        addCompactRow(grid, 3, "Seed", mcsSeedField);
         
         section.getChildren().addAll(label, grid);
         return section;
@@ -203,7 +199,6 @@ public class CalculationSetupPanel extends VBox {
             mcsSupercellSizeField.setText("4");
             mcsEquilibrationField.setText("5000");
             mcsAveragingField.setText("10000");
-            mcsSeedField.setText(String.valueOf(System.currentTimeMillis() % 100000));
             cvmMaxClusterField.setText("4");
             cvmToleranceField.setText("1e-6");
         });
@@ -238,7 +233,6 @@ public class CalculationSetupPanel extends VBox {
         int supercellSize;
         int equilibration;
         int averaging;
-        long seed;
         
         try {
             temperature = Double.parseDouble(temperatureField.getText().trim());
@@ -246,7 +240,6 @@ public class CalculationSetupPanel extends VBox {
             supercellSize = Integer.parseInt(mcsSupercellSizeField.getText().trim());
             equilibration = Integer.parseInt(mcsEquilibrationField.getText().trim());
             averaging = Integer.parseInt(mcsAveragingField.getText().trim());
-            seed = Long.parseLong(mcsSeedField.getText().trim());
             
             if (temperature <= 0) throw new NumberFormatException("Temperature must be positive");
             if (composition < 0 || composition > 1) throw new NumberFormatException("Composition must be between 0 and 1");
@@ -258,9 +251,12 @@ public class CalculationSetupPanel extends VBox {
             showError("Invalid Parameter", "Parameter parsing failed: " + ex.getMessage());
             return;
         }
+
+        long seed = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
         
         resultsPanel.logMessage("\n>>> MCS Calculation Requested");
         resultsPanel.logMessage("System: " + selectedSystem.getName());
+        resultsPanel.logMessage("Seed (auto): " + seed);
         resultsPanel.logMessage("Parameters validated. Loading required data...");
         
         // Create calculation context
@@ -361,8 +357,10 @@ public class CalculationSetupPanel extends VBox {
             return;
         }
 
-        // Execute MCS calculation
-        MCSExecutor.executeMCS(context, resultsPanel);
+        // Execute MCS calculation on a background thread so UI/chart can update live
+        Thread mcsThread = new Thread(() -> MCSExecutor.executeMCS(context, resultsPanel), "mcs-calculation-thread");
+        mcsThread.setDaemon(true);
+        mcsThread.start();
     }
 
     /** Maps component count to the string suffix used in cache keys. */

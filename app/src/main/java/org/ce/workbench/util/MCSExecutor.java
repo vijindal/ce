@@ -55,11 +55,16 @@ public class MCSExecutor {
                 .nAvg(context.getAveragingSteps())
                 .L(context.getSupercellSize())
                 .seed(context.getSeed())
+                .updateListener(resultsPanel::updateMCSData)
                 .R(GAS_CONSTANT)  // Set correct gas constant for J/mol energies
                 .build();
             
             resultsPanel.logMessage("Configuration built. Starting Monte Carlo simulation...");
             resultsPanel.setProgress(0.2);
+            resultsPanel.initializeMCS(
+                context.getEquilibrationSteps(),
+                context.getAveragingSteps()
+            );
             
             // Execute MCS
             long startTime = System.currentTimeMillis();

@@ -130,9 +130,9 @@ public class FlipStep {
      * </ol>
      *
      * @param config configuration to update in-place
-     * @return {@code true} if the move was accepted
+     * @return ΔE if the move was accepted, 0.0 if rejected (energy unchanged)
      */
-    public boolean attempt(LatticeConfig config) {
+    public double attempt(LatticeConfig config) {
         attempts++;
 
         int i      = rng.nextInt(config.getN());
@@ -147,13 +147,14 @@ public class FlipStep {
 
         // Chemical-potential correction: Δx[newOcc] = +1/N, Δx[oldOcc] = -1/N
         double dEMu = (deltaMu[newOcc] - deltaMu[oldOcc]) / config.getN();
+        double dE = dECluster + dEMu;
 
-        if (accept(dECluster + dEMu)) {
+        if (accept(dE)) {
             config.setOccupation(i, newOcc);
             accepted++;
-            return true;
+            return dE;  // Accepted: return the energy change
         }
-        return false;
+        return 0.0;  // Rejected: energy unchanged
     }
 
     // -------------------------------------------------------------------------

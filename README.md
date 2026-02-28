@@ -6,8 +6,12 @@ Method (CVM)** pipeline for alloy thermodynamics, with a Monte Carlo Simulation
 
 **GUI Application:** CE Thermodynamics Workbench - Interactive system management and calculation setup. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for full details.
 
-## ⚠️ Important Update (Feb 27, 2026)
+## 🔧 Latest Updates (Feb 28, 2026)
 
+### MCS Energy Tracking Optimization
+**Performance improvement: O(1) per step instead of O(N²) recalculation** - Implemented true delta-energy (ΔE) accumulation where energy updates only on accepted MC moves. The `ExchangeStep.attempt()` and `FlipStep.attempt()` methods now return the energy change directly instead of a boolean, enabling per-step accumulation. Verified correct with periodic full-energy recalculation (✓ MATCH at multiple time points, zero numerical drift). Threading synchronization fixed for background MCS execution.
+
+### Previous Update (Feb 27, 2026)
 **Critical bug fix for correlation function (CF) normalization** - The CF calculation formula in MCSampler was incorrect, causing CFs to scale improperly with supercell size and orbit symmetry. This has been fixed and validated. See [CF_NORMALIZATION_FIX_SUMMARY.md](CF_NORMALIZATION_FIX_SUMMARY.md) for complete analysis.
 
 ---

@@ -3,10 +3,12 @@ package org.ce.mcs;
 import org.ce.identification.engine.Cluster;
 import org.ce.identification.engine.ClusCoordListResult;
 import org.ce.identification.engine.Vector3D;
+import org.ce.workbench.util.MCSUpdate;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.function.Consumer;
 
 /**
  * Top-level orchestrator for the MCS engine path.
@@ -77,6 +79,7 @@ public class MCSRunner {
     private final boolean             useFlipStep;
     private final double[]            deltaMu;
     private final long                seed;
+    private final Consumer<MCSUpdate> updateListener;
 
     private MCSRunner(Builder b) {
         this.clusterData     = b.clusterData;
@@ -92,6 +95,7 @@ public class MCSRunner {
         this.deltaMu         = b.deltaMu.clone();
         this.seed            = b.seed;
         this.R               = b.R;
+        this.updateListener  = b.updateListener;
     }
 
     // -------------------------------------------------------------------------
@@ -144,6 +148,9 @@ public class MCSRunner {
             emb, eci, orbits, numComp,
             T, nEquil, nAvg,
             useFlipStep, deltaMu, R, rng);
+        if (updateListener != null) {
+            engine.setUpdateListener(updateListener);
+        }
         MCResult result = engine.run(config, sampler);
 
         System.out.println("[MCSRunner] Done.");
@@ -200,6 +207,7 @@ public class MCSRunner {
         private double[]            deltaMu;
         private long                seed        = 0L;
         private double              R           = 1.0;
+        private Consumer<MCSUpdate> updateListener = null;
 
         private Builder() {}
 
@@ -254,6 +262,12 @@ public class MCSRunner {
 
         /** Phase gas constant in J/(mol·K). Must match energy units (CEC in J/mol requires R=8.314). */
         public Builder R(double r) { this.R = r; return this; }
+
+        /** Optional callback for real-time MCS updates (for GUI plotting/logging). */
+        public Builder updateListener(Consumer<MCSUpdate> listener) {
+            this.updateListener = listener;
+            return this;
+        }
 
         public MCSRunner build() {
             if (clusterData == null) throw new IllegalStateException("clusterData required");
