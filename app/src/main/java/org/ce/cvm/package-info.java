@@ -15,9 +15,9 @@
  *   <li><b>Stage 4 — Free-energy functional</b><br>
  *       Assembles {@code F(u) = H(u) − T·S(u)} from the C-matrix, KB
  *       coefficients, and effective cluster interactions (ECIs).</li>
- *   <li><b>Stage 5 — NIM solver</b><br>
- *       Minimizes {@code F(u)} over the CF variables using the Natural
- *       Iteration Method.</li>
+ *   <li><b>Stage 5 — Newton-Raphson solver</b><br>
+ *       Minimizes {@code F(u)} over the CF variables using the Newton-Raphson
+ *       method with step damping.</li>
  * </ol>
  *
  * <h2>Planned classes</h2>
@@ -29,13 +29,12 @@
  *   <li>{@code SubstituteRulesBuilder}— product of site-operators → CF symbol lookup</li>
  *   <li>{@code CMatrixBuilder}        — core C-matrix computation (genCV)</li>
  *   <li>{@code CMatrixResult}         — immutable carrier: cmat, lcv, wcv</li>
- *   <li>{@code ClusterVariables}      — cv = cmat · uList</li>
- *   <li>{@code EnthalpyCalculator}    — H(u) = Σ m·ECI·CF</li>
- *   <li>{@code EntropyCalculator}     — S(u) = −k_B Σ kb·m·Σ wcv·cv·ln(cv)</li>
- *   <li>{@code FreeEnergyFunctional}  — F = H − T·S, with gradient</li>
- *   <li>{@code NaturalIterationSolver}— NIM: iterates u until |ΔF| &lt; ε</li>
+ *   <li>{@code LinearAlgebraUtils}    — Gaussian elimination with partial pivoting</li>
+ *   <li>{@code ClusterVariableEvaluator} — cv = cmat · uList</li>
+ *   <li>{@code CVMFreeEnergy}         — H, S, G with gradient and Hessian</li>
+ *   <li>{@code NewtonRaphsonSolver}   — NR iteration: δu = solve(Gcuu, −Gcu)</li>
+ *   <li>{@code CVMSolverResult}       — equilibrium CFs, free energy, Hmix, Smix</li>
  *   <li>{@code CVMEngine}             — top-level orchestrator</li>
- *   <li>{@code CVMEngineResult}       — equilibrium CFs, free energy, Hmix, Smix</li>
  * </ul>
  *
  * <h2>Inputs consumed</h2>

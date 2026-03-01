@@ -1,10 +1,11 @@
 # CE Workbench - Project Status
 
-**Last Updated:** February 28, 2026  
-**Version:** 0.3.2  
+**Last Updated:** March 1, 2026  
+**Version:** 0.3.3  
 **Compilation:** ✅ Successful  
 **GUI Status:** ✅ Fully Functional  
-**MCS Engine:** ✅ Energy Tracking Optimized • Performance Fixed
+**Binary CVM Solver:** ✅ Phase 5 Complete (K=2) — 13/13 Tests Pass  
+**Ternary CVM Solver:** ⏳ Phase 5 In Progress (K≥3) — 8/11 Tests Pass
 
 ---
 
@@ -64,7 +65,45 @@ app/src/main/resources/
 
 ---
 
-## Recent Changes (Feb 2026)
+## Recent Changes (Mar 2026)
+
+### ✅ Completed (Mar 1, 2026)
+**Phase 5: Multi-Component CVM Solver Generalization (K > 2)**
+
+**Binary System (K=2):** All 13 CVM solver tests **PASSING** ✅
+- Newton-Raphson solver converges in <10 iterations
+- Converges to ||Gcu|| < 1e-10 tolerance (excellent)
+- Point correlation function ordering fixed using `cfBasisIndices`
+- Random-state cluster variable (CV) verification working correctly
+- Entropy at random state validates to ln(2) formula
+- Hessian computation well-conditioned and stable
+
+**Multi-Component API Generalization:**
+- Changed signature from `solve(double composition, ...)` to `solve(double[] moleFractions, int K, ...)`
+- Enables K-component systems (K ≥ 2)
+- Backward-compatible binary wrapper: still supports old API
+- `cfBasisIndices` propagated through entire call chain for proper CF placement
+
+**Ternary System (K=3):** 8/11 tests passing, convergence issue identified
+- Root cause: **Hessian ill-conditioning at random state due to zero cluster variables**
+- For equimolar ternary with basis {-1, 0, 1}: σ¹ = 0
+- Many multi-site CFs = 0 because they are products involving σ¹
+- Zero CVs trigger smooth entropy extension (for CV < 1e-6)
+- Smooth extension sets invEff = 1/EPS = 1e6 for numerical stability
+- This creates massive values in Hessian → ill-conditioned or singular
+- NR solver oscillates at ~1e-8 gradient norm, never reaches 1e-10 tolerance
+- Step sizes collapse to ~1e-15 (numerical precision limit reached)
+
+**Test Status:**
+- Binary CVMSolverTest: **13/13 PASS** ✅
+- Ternary CVMTernaryTest: **8/11 PASS** (3 fail at convergence check)
+
+**Next Phase:** Fix ternary Hessian computation
+- Option 1: CV regularization (add small offset to CV to keep > threshold)
+- Option 2: Revised entropy formulation for K≥3
+- Option 3: Alternative solver approach (gradient descent, trust region, etc.)
+
+### Previous Session (Feb 28, 2026)
 
 ### ✅ Completed (Feb 28 - Part 2)
 2. **MCS Performance Optimization** - UI Slowdown Fixed
@@ -145,6 +184,13 @@ app/src/main/resources/
   - Expected behavior, does not affect functionality
   - Will be resolved when JavaFX updates for JDK 25
 
+### CVM Ternary Convergence Issue (In Progress)
+- NR solver oscillates for K≥3 systems at random state
+- Root cause: Hessian ill-conditioned due to zero cluster variables
+- Affects 3 tests: entropy at equimolar, all CVs positive, entropy approaches ln(3)
+- Binary (K=2) working perfectly — not a systematic CVM issue
+- Next: Implement CV regularization or entropy reformulation for K≥3
+
 ### Known Limitations
 - Cluster data only available during same session as identification
   - Full Cluster objects are not serializable (complex Nd4j dependencies)
@@ -155,12 +201,11 @@ app/src/main/resources/
 
 ## Next Steps
 
-### High Priority
-1. **✅ COMPLETED: Cluster Data Persistence**
-   - ✅ Store cluster_result.json in project folder
-   - ✅ Distribute example cluster data to users
-   - ✅ Fix system availability checks
-   - ✅ Eliminate duplicate identification dialogs
+### High Priority (Phase 5 Completion)
+1. **Fix Ternary CVM Convergence** (In Progress)
+   - Implement CV regularization or entropy reformulation
+   - Target: 11/11 ternary tests passing
+   - Then: Extend to K=4, K=5 systems
 
 2. **Manual CEC Input Workflow**
    - Create dialog for entering CEC values manually
@@ -191,7 +236,7 @@ app/src/main/resources/
 ### Low Priority
 8. **Phase Diagram Plotting** (future)
 9. **MCS Integration** (future)
-10. **Multi-component Systems** (future - ternary, quaternary)
+10. **Quaternary and Higher-Order Systems** (Phase 6+)
 
 ---
 
@@ -210,6 +255,15 @@ app/src/main/resources/
 ### Build Only
 ```bash
 .\gradlew.bat compileJava --no-configuration-cache
+```
+
+### Run Tests
+```bash
+# Binary CVM tests only
+.\gradlew test --tests CVMSolverTest
+
+# Ternary CVM tests
+.\gradlew test --tests CVMTernaryTest
 ```
 
 ---
@@ -232,16 +286,25 @@ ce/
 │   │   │   ├── BackgroundJobManager.java       # Job execution
 │   │   │   ├── data/
 │   │   │   │   ├── SystemDataLoader.java       # Load CECs + model data
-│   │   │   │   └── ClusterDataCache.java       # NEW: JSON persistence
+│   │   │   │   └── ClusterDataCache.java       # JSON persistence
 │   │   │   └── jobs/
 │   │   │       ├── ClusterIdentificationJob.java
 │   │   │       └── CFIdentificationJob.java
 │   │   └── cli/
 │   │       └── CEWorkbenchCLI.java             # Command-line interface
+│   ├── cvm/                                     # CVM Solver (Phase 5)
+│   │   ├── CVMFreeEnergy.java                  # Free-energy evaluation + gradient/Hessian
+│   │   ├── NewtonRaphsonSolver.java            # NR solver with diagnostics
+│   │   ├── ClusterVariableEvaluator.java       # CV computation with CF handling
+│   │   ├── CVMSolverResult.java                # Result wrapper
+│   │   └── ...
 │   └── core/                                    # Core algorithms
 │       ├── CVMConfiguration.java
 │       ├── CVMPipeline.java
 │       └── ...
+├── app/src/test/java/org/ce/cvm/
+│   ├── CVMSolverTest.java                       # Binary tests (13/13 PASS)
+│   └── CVMTernaryTest.java                      # Ternary tests (8/11 PASS)
 ├── data/cluster_cache/                          # Runtime persistence
 │   └── {clusterKey}/
 │       ├── cluster_result.json                  # Cluster identification results
@@ -265,5 +328,5 @@ ce/
 ## Contact & References
 
 **Repository:** vijindal/ce  
-**Built With:** Java 25, JavaFX 20.0.1, Gradle 9.3.1  
+**Built With:** Java 25, JavaFX 22.0.2, Gradle 9.3.1  
 **License:** See LICENSE file

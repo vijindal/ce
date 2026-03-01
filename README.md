@@ -6,9 +6,34 @@ Method (CVM)** pipeline for alloy thermodynamics, with a Monte Carlo Simulation
 
 **GUI Application:** CE Thermodynamics Workbench - Interactive system management and calculation setup. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for full details.
 
-## 🔧 Latest Updates (Feb 28, 2026)
+## 🔧 Latest Updates (Mar 1, 2026)
 
-### MCS Energy Tracking Optimization
+### Phase 5: Multi-Component CVM Solver Generalization (K > 2)
+**Status: Binary (K=2) Complete ✅ | Ternary (K≥3) In Progress**
+
+- **Binary CVM Solver:** All 13 tests **PASSING** — Newton-Raphson converges in <10 iterations
+  - Point correlation function (CF) ordering corrected using `cfBasisIndices`
+  - Random-state CV verification implemented and passing
+  - Entropy computation at random state validates to ln(K) formula
+  - Hessian computation well-conditioned and stable
+  
+- **Multi-Component API Generalized:** Signature changed from binary-only to K-component
+  - Old: `solve(double composition, ...)` → binary shorthands
+  - New: `solve(double[] moleFractions, int K, ...)` → K-component flexible API
+  - Backward-compatible binary wrapper maintains old API
+  
+- **Ternary System (K=3):** 8/11 tests passing, convergence issue identified
+  - Root cause: Hessian ill-conditioning due to zero cluster variables (CVs) at random state
+  - For equimolar ternary with basis {-1, 0, 1}, many CFs = 0 because σ¹ = 0
+  - Zero CVs trigger smooth entropy extension (for CV < 1e-6) with invEff = 1/EPS = 1e6
+  - This creates singular/ill-conditioned Hessian matrix
+  - NR solver oscillates at ~1e-8 gradient norm instead of converging to 1e-10
+  
+- **Next Phase:** Fix Hessian computation for ternary — likely requires CV regularization or revised entropy formulation for K≥3
+
+### Previous Update (Feb 28, 2026)
+
+### MCS Energy Tracking Optimization (Feb 28, 2026)
 **Performance improvement: O(1) per step instead of O(N²) recalculation** - Implemented true delta-energy (ΔE) accumulation where energy updates only on accepted MC moves. The `ExchangeStep.attempt()` and `FlipStep.attempt()` methods now return the energy change directly instead of a boolean, enabling per-step accumulation. Verified correct with periodic full-energy recalculation (✓ MATCH at multiple time points, zero numerical drift). Threading synchronization fixed for background MCS execution.
 
 ### Previous Update (Feb 27, 2026)

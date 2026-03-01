@@ -37,12 +37,15 @@ public final class CMatrixBuilder {
 
         List<List<List<List<SiteOp>>>> cfSiteOpList =
                 CFSiteOpListBuilder.build(cfResult.getGroupedCFData(), siteList);
-        SubstituteRules substituteRules = SubstituteRulesBuilder.build(cfSiteOpList);
+        SubstituteRules substituteRules = SubstituteRulesBuilder.build(cfSiteOpList, siteList);
 
         int totalCfs = cfResult.getTcf();
         int[][] lcf = cfResult.getLcf();
 
         Map<CFIndex, Integer> cfColumn = buildCfColumnMap(lcf);
+
+        // Extract per-CF basis-index decoration patterns (Mathematica: uRandRules)
+        int[][] cfBasisIndices = extractCfBasisIndices(cfSiteOpList, cfColumn, totalCfs);
 
         List<List<Cluster>> ordClustersByType = clusterResult.getOrdClusterData().getCoordList();
 
@@ -95,7 +98,44 @@ public final class CMatrixBuilder {
             wcv.add(wcvType);
         }
 
-        return new CMatrixResult(cmat, lcv, wcv);
+        return new CMatrixResult(cmat, lcv, wcv, cfBasisIndices);
+    }
+
+    /**
+     * Extracts per-CF basis-index decoration patterns from cfSiteOpList.
+     *
+     * <p>For each CF column, stores the array of basis indices (1-based)
+     * that decorate the CF's sites.  This enables computation of
+     * random-state CF values as products of point CFs.</p>
+     *
+     * @param cfSiteOpList  site-operator lists: [t][j][k] → List&lt;SiteOp&gt;
+     * @param cfColumn      mapping from (t,j,k) → column index
+     * @param totalCfs      total number of CFs
+     * @return cfBasisIndices[col] = basis indices for CF at that column
+     */
+    private static int[][] extractCfBasisIndices(
+            List<List<List<List<SiteOp>>>> cfSiteOpList,
+            Map<CFIndex, Integer> cfColumn,
+            int totalCfs) {
+
+        int[][] result = new int[totalCfs][];
+
+        for (int t = 0; t < cfSiteOpList.size(); t++) {
+            List<List<List<SiteOp>>> typeGroups = cfSiteOpList.get(t);
+            for (int j = 0; j < typeGroups.size(); j++) {
+                List<List<SiteOp>> group = typeGroups.get(j);
+                for (int k = 0; k < group.size(); k++) {
+                    int col = cfColumn.get(new CFIndex(t, j, k));
+                    List<SiteOp> ops = group.get(k);
+                    result[col] = new int[ops.size()];
+                    for (int s = 0; s < ops.size(); s++) {
+                        result[col][s] = ops.get(s).getBasisIndex();
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     private static Map<CFIndex, Integer> buildCfColumnMap(int[][] lcf) {
@@ -198,12 +238,10 @@ public final class CMatrixBuilder {
             }
             CFIndex cfIndex = substituteRules.lookup(ops);
             if (cfIndex == null) {
-                // TODO: Handle unmapped site-op products properly
-                // For now, print warning and add to constant term
-                System.err.println("[CMatrixBuilder] WARNING: No CF mapping for site-op product: " + key 
-                        + " (coeff=" + coeff + "), absorbing into constant term");
-                row[totalCfs] += coeff;
-                continue;
+                throw new IllegalStateException(
+                        "[CMatrixBuilder] No CF mapping for site-op product: " + key
+                                + " (coeff=" + coeff + "). "
+                                + "SubstituteRules may be missing geometry-equivalent entries.");
             }
             Integer col = cfColumn.get(cfIndex);
             if (col == null) {

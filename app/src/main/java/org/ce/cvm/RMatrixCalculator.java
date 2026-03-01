@@ -40,7 +40,18 @@ public final class RMatrixCalculator {
         return invert(matM);
     }
 
-    private static double[] buildBasis(int numElements) {
+    /**
+     * Returns the symmetric integer basis sequence for K components.
+     *
+     * <p>For even K: {-K/2, ..., -1, 1, ..., K/2}.<br>
+     * For odd K: {-(K-1)/2, ..., 0, ..., (K-1)/2}.</p>
+     *
+     * <p>Binary (K=2): {-1, 1}. Ternary (K=3): {-1, 0, 1}.</p>
+     *
+     * @param numElements number of components K (≥ 2)
+     * @return basis array of length K
+     */
+    public static double[] buildBasis(int numElements) {
         double[] basis = new double[numElements];
         if (numElements % 2 == 0) {
             int half = numElements / 2;
