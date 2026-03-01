@@ -11,12 +11,13 @@ import org.ce.workbench.backend.registry.SystemRegistry;
 import org.ce.workbench.backend.job.BackgroundJob;
 import org.ce.workbench.gui.model.SystemInfo;
 import org.ce.workbench.backend.data.SystemDataLoader;
-import org.ce.identification.engine.Vector3D;
+import org.ce.identification.geometry.Vector3D;
 import org.ce.workbench.backend.job.CFIdentificationJob;
-import org.ce.workbench.backend.job.ClusterIdentificationJob;
-import org.ce.workbench.util.StructureModelMapping;
-import org.ce.workbench.util.ClusterDataCache;
-import org.ce.identification.engine.ClusCoordListResult;
+import org.ce.workbench.util.mcs.StructureModelMapping;
+import org.ce.workbench.util.cache.ClusterDataCache;
+import org.ce.workbench.util.cache.AllClusterDataCache;
+import org.ce.workbench.util.key.KeyUtils;
+import org.ce.identification.result.ClusCoordListResult;
 
 import java.util.Collection;
 import java.util.Optional;
@@ -107,10 +108,12 @@ public class SystemRegistryPanel extends VBox {
         // Create/Clear buttons
         HBox formButtons = new HBox(10);
         Button createButton = new Button("Create System");
+        Button createClusterButton = new Button("Create Cluster");
         Button clearButton = new Button("Clear");
         createButton.setStyle("-fx-font-size: 11; -fx-padding: 5 15;");
+        createClusterButton.setStyle("-fx-font-size: 11; -fx-padding: 5 15; -fx-text-fill: #0066cc;");
         clearButton.setStyle("-fx-font-size: 11; -fx-padding: 5 15;");
-        formButtons.getChildren().addAll(createButton, clearButton);
+        formButtons.getChildren().addAll(createClusterButton, createButton, clearButton);
         
         grid.add(new Separator(), 0, row, 2, 1);
         row++;
@@ -151,21 +154,21 @@ public class SystemRegistryPanel extends VBox {
             String phase = parts[1];
             String[] componentArray = elements.split("-");
             int numComponents = componentArray.length;
-            String componentSuffix = getComponentSuffix(numComponents);
+            String componentSuffix = KeyUtils.componentSuffix(numComponents);
 
             // systemId: uniquely identifies this system instance (element + model)
             String systemId = SystemInfo.generateSystemId(elements, structure, phase, model);
             // cecKey: element + model — one CEC file per alloy+model combination
-            String cecKey = elements + "_" + structure + "_" + phase + "_" + model;
+            String cecKey = KeyUtils.cecKey(elements, structure, phase, model);
             // clusterKey: component-count + model — shared across all alloys with same topology
-            String clusterKey = structure + "_" + phase + "_" + model + "_" + componentSuffix;
+            String clusterKey = KeyUtils.clusterKey(structure, phase, model, numComponents);
 
             logResult("\n[System Creation] ----------------------------------------");
             logResult("  Elements      : " + elements + " (" + numComponents + " components → " + componentSuffix + ")");
             logResult("  Structure     : " + structure + "  Phase: " + phase + "  Model: " + model);
             logResult("  systemId      : " + systemId);
             logResult("  CEC key       : " + cecKey + "  → /data/systems/" + cecKey + "/cec.json");
-            logResult("  Cluster key   : " + clusterKey + "  → cluster_data/" + clusterKey + "/cluster_result.json");
+            logResult("  Cluster key   : " + clusterKey + "  → data/cluster_cache/" + clusterKey + "/cluster_result.json");
 
             // Resolve mapping
             String resolvedSymmetryGroup;
@@ -224,12 +227,10 @@ public class SystemRegistryPanel extends VBox {
                 registry.registerSystem(system);
                 logResult("  System registered: " + systemId);
 
-                logResult("  Running cluster identification → will save as clusterKey=" + clusterKey);
-                if (!startClusterIdentificationForSystem(system)) {
+                logResult("  Running CF identification (includes stages 1-3)...");
+                if (!startCfIdentificationForSystem(system)) {
                     return;
                 }
-                logResult("  Running CF identification...");
-                startCfIdentificationForSystem(system);
 
             } else {
                 logResult("\n✓ Cluster cache hit (" + clusterKey + ") — no identification needed.");
@@ -259,6 +260,170 @@ public class SystemRegistryPanel extends VBox {
             modelField.clear();
         });
         
+        // Create Cluster button handler - for testing cluster data creation
+        createClusterButton.setOnAction(e -> {
+            String elements = elementsField.getText().trim();
+            String structurePhase = structurePhaseField.getText().trim();
+            String model = modelField.getText().trim();
+            
+            if (structurePhase.isEmpty() || model.isEmpty()) {
+                showAlert("Missing Fields", "Structure/Phase and Model are required for cluster creation.");
+                return;
+            }
+            
+            // Validate structure/phase format
+            if (!StructureModelMapping.isValidStructurePhase(structurePhase)) {
+                showAlert("Invalid Format", "Structure/Phase must be in format: Structure_Phase (e.g., BCC_A2)");
+                return;
+            }
+            
+            // Infer number of components from Elements field
+            int numComponents;
+            if (elements.isEmpty()) {
+                showAlert("Missing Elements",
+                    "The Elements field is required to determine the number of components.\n"
+                    + "Enter element names separated by '-' (e.g., Ti-Nb for binary, Fe-Ni-Cr for ternary).");
+                return;
+            }
+            String[] componentArray = elements.split("-");
+            numComponents = componentArray.length;
+            if (numComponents < 2 || numComponents > 5) {
+                showAlert("Invalid Components",
+                    "Number of components must be between 2 and 5.\n"
+                    + "Found " + numComponents + " from Elements field: '" + elements + "'");
+                return;
+            }
+            
+            String[] parts = structurePhase.split("_");
+            String structure = parts[0];
+            String phase = parts[1];
+            String componentSuffix = KeyUtils.componentSuffix(numComponents);
+            String clusterKey = KeyUtils.clusterKey(structure, phase, model, numComponents);
+            
+            logResult("\n[Cluster Creation] ----------------------------------------");
+            logResult("  Elements: " + elements + " → " + numComponents + " components (" + componentSuffix + ")");
+            logResult("  Structure: " + structure + "  Phase: " + phase + "  Model: " + model);
+            logResult("  Cluster Key: " + clusterKey);
+            
+            // Check if data already exists — warn and offer overwrite
+            boolean mcsDataExists = ClusterDataCache.clusterDataExists(clusterKey);
+            boolean allDataExists = AllClusterDataCache.exists(clusterKey);
+            
+            if (mcsDataExists || allDataExists) {
+                java.nio.file.Path storageDir = AllClusterDataCache.resolveDir(clusterKey);
+                
+                StringBuilder warning = new StringBuilder();
+                warning.append("Cluster data already exists for '").append(clusterKey).append("':\n\n");
+                warning.append("Folder: ").append(storageDir.toAbsolutePath()).append("\n");
+                if (allDataExists)  warning.append("  • all_cluster_data.json (CVM)\n");
+                if (mcsDataExists)  warning.append("  • cluster_result.json (MCS)\n");
+                warning.append("\nDo you want to overwrite the existing data?");
+                
+                logResult("  ⚠ Existing data found at: " + storageDir.toAbsolutePath());
+                
+                boolean overwrite = confirmAction("Data Already Exists", warning.toString());
+                if (!overwrite) {
+                    logResult("  ⚠ Cluster creation cancelled — existing data preserved.");
+                    return;
+                }
+                logResult("  → User chose to overwrite existing data.");
+            }
+            
+            // Show dialog for cluster files
+            // Create a temporary system to pre-fill the dialog
+            String tempId = "temp-cluster-" + clusterKey;
+            String tempName = structure + "_" + phase + "_" + model + "_" + componentSuffix;
+            SystemInfo tempSystem = new SystemInfo(
+                tempId, tempName, structure, phase, model, componentArray
+            );
+            
+            // Resolve default cluster file and symmetry group for dialog pre-fill
+            try {
+                tempSystem.setClusterFilePath(StructureModelMapping.resolveClusterFile(structurePhase, model));
+                tempSystem.setSymmetryGroupName(StructureModelMapping.resolveSymmetryGroup(structurePhase));
+            } catch (IllegalArgumentException ex) {
+                // Not critical — dialog will just show empty fields
+            }
+            
+            Optional<IdentificationInput> inputOpt = showIdentificationDialog(
+                tempSystem,
+                "Cluster Identification Input"
+            );
+            if (inputOpt.isEmpty()) {
+                logResult("⚠ Cluster creation cancelled by user.");
+                return;
+            }
+            
+            IdentificationInput input = inputOpt.get();
+            logResult("→ Using input files:");
+            logResult("  Disordered cluster: " + input.disorderedClusterFile);
+            logResult("  Ordered cluster: " + input.orderedClusterFile);
+            logResult("  Disordered symmetry: " + input.disorderedSymmetryGroup);
+            logResult("  Ordered symmetry: " + input.orderedSymmetryGroup);
+            
+            tempSystem.setClusterFilePath(input.disorderedClusterFile);
+            tempSystem.setSymmetryGroupName(input.disorderedSymmetryGroup);
+            
+            logResult("  Submitting cluster identification job...");
+            
+            // Create and submit the job
+            CFIdentificationJob job = new CFIdentificationJob(
+                tempSystem,
+                clusterKey,
+                input.disorderedClusterFile,
+                input.orderedClusterFile,
+                input.disorderedSymmetryGroup,
+                input.orderedSymmetryGroup,
+                resolveMatrix(tempSystem),
+                resolveTranslation(tempSystem),
+                numComponents
+            );
+            
+            jobManager.submitJob(job);
+            logResult("✓ Job submitted: " + job.getId());
+            
+            // Background thread to monitor job and display results when complete
+            final String finalClusterKey = clusterKey;
+            Thread resultMonitor = new Thread(() -> {
+                boolean wasRunning = true;
+                while (!Thread.currentThread().isInterrupted()) {
+                    try {
+                        Thread.sleep(100); // Check every 100ms if job is complete
+                        
+                        boolean isRunning = job.isRunning();
+                        
+                        // Check if job just finished (was running, now not running)
+                        if (wasRunning && !isRunning) {
+                            // Give it a moment to ensure all data is flushed
+                            Thread.sleep(200);
+                            
+                            if (job.isCompleted() && !job.isFailed()) {
+                                // Job completed successfully — display all results with folder path
+                                javafx.application.Platform.runLater(() -> {
+                                    ClusterDataPresenter.present(job, finalClusterKey, this::logResult);
+                                });
+                            } else if (job.isFailed()) {
+                                javafx.application.Platform.runLater(() -> {
+                                    logResult("❌ Job failed: " + job.getStatusMessage());
+                                });
+                            }
+                            break;
+                        }
+                        
+                        wasRunning = isRunning;
+                        
+                    } catch (InterruptedException ex) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            });
+            
+            resultMonitor.setDaemon(true);
+            resultMonitor.setName("ClusterResultMonitor-" + job.getId());
+            resultMonitor.start();
+        });
+        
         return vbox;
     }
     
@@ -283,9 +448,7 @@ public class SystemRegistryPanel extends VBox {
                 javafx.application.Platform.runLater(() -> {
                     logResult(jobId + " - finished");
                     
-                    // CF identification completion is already logged
-                    // Cluster data is saved directly in ClusterIdentificationJob.run()
-                    // Just persist the updated system state
+                    // CF identification job completes all stages (1-3) and updates system state
                     
                     registry.persistSystems();
                     updateIdentificationProgress();
@@ -305,63 +468,31 @@ public class SystemRegistryPanel extends VBox {
         resultsPanel.logMessage(message);
     }
     
-    private String getComponentSuffix(int numComponents) {
-        switch (numComponents) {
-            case 2: return "bin";
-            case 3: return "tern";
-            case 4: return "quat";
-            case 5: return "quint";
-            default: return "comp" + numComponents;
-        }
-    }
-    
-    private boolean startClusterIdentificationForSystem(SystemInfo system) {
+    // getComponentSuffix() removed — use KeyUtils.componentSuffix() instead
+
+    private boolean startCfIdentificationForSystem(SystemInfo system) {
         // Show dialog only if we don't have cached input
         if (cachedIdentificationInput == null) {
-            Optional<IdentificationInput> inputOpt = showIdentificationDialog(system, "Cluster Identification");
+            Optional<IdentificationInput> inputOpt = showIdentificationDialog(system, "CF Identification");
             if (inputOpt.isEmpty()) {
                 logResult("⚠ Identification cancelled by user.");
                 return false;
             }
             cachedIdentificationInput = inputOpt.get();
-            logResult("→ Input files cached for subsequent operations");
-        } else {
-            logResult("→ Reusing input files from previous step");
+            logResult("→ Input files cached for identification");
         }
         
         IdentificationInput input = cachedIdentificationInput;
+        logResult("→ Using input files for CF identification");
         logResult("  Disordered cluster: " + input.disorderedClusterFile);
         logResult("  Ordered cluster: " + input.orderedClusterFile);
         logResult("  Disordered symmetry: " + input.disorderedSymmetryGroup);
         logResult("  Ordered symmetry: " + input.orderedSymmetryGroup);
         
-        ClusterIdentificationJob job = new ClusterIdentificationJob(
-            system,
-            input.disorderedClusterFile,
-            input.orderedClusterFile,
-            input.disorderedSymmetryGroup,
-            input.orderedSymmetryGroup,
-            resolveMatrix(system),
-            resolveTranslation(system)
-        );
-        jobManager.submitJob(job);
-        system.setClusterJobId(job.getId());
-        logResult("Submitted cluster identification job: " + job.getId());
-        return true;
-    }
-
-    private boolean startCfIdentificationForSystem(SystemInfo system) {
-        // Use cached input from cluster identification (same files)
-        if (cachedIdentificationInput == null) {
-            logResult("⚠ No cached identification input. Please run cluster identification first.");
-            return false;
-        }
-        
-        IdentificationInput input = cachedIdentificationInput;
-        logResult("→ Using same input files for CF identification");
-        
+        String clusterKey = KeyUtils.clusterKey(system);
         CFIdentificationJob job = new CFIdentificationJob(
             system,
+            clusterKey,
             input.disorderedClusterFile,
             input.orderedClusterFile,
             input.disorderedSymmetryGroup,

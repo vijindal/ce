@@ -1,6 +1,6 @@
 package org.ce.mcs;
 
-import org.ce.identification.engine.Vector3D;
+import org.ce.identification.geometry.Vector3D;
 
 public class Vector3DKey {
 

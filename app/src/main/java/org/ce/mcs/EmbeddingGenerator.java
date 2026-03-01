@@ -1,9 +1,9 @@
 package org.ce.mcs;
 
-import org.ce.identification.engine.Cluster;
-import org.ce.identification.engine.Site;
-import org.ce.identification.engine.ClusCoordListResult;
-import org.ce.identification.engine.Vector3D;
+import org.ce.identification.geometry.Cluster;
+import org.ce.identification.geometry.Site;
+import org.ce.identification.result.ClusCoordListResult;
+import org.ce.identification.geometry.Vector3D;
 
 import java.util.*;
 
@@ -104,8 +104,8 @@ public class EmbeddingGenerator {
 
                 int ttype = template.getClusterType();
                 int omIdx = template.getOrbitMemberIndex();
-                List<org.ce.identification.engine.Cluster> orbit = clusterData.getOrbitList().get(ttype);
-                List<org.ce.identification.engine.Site> sites = orbit.get(omIdx).getAllSites();
+                List<org.ce.identification.geometry.Cluster> orbit = clusterData.getOrbitList().get(ttype);
+                List<org.ce.identification.geometry.Site> sites = orbit.get(omIdx).getAllSites();
                 int anchorIdx = template.getAnchorIndex();
                 int[] alphas = new int[sites.size()];
                 

@@ -1,8 +1,8 @@
 package org.ce.identification.cluster;
 
-import org.ce.identification.engine.Cluster;
-import org.ce.identification.engine.SubClusterGenerator;
-import org.ce.identification.engine.OrbitUtils;
+import org.ce.identification.geometry.Cluster;
+import org.ce.identification.subcluster.SubClusterGenerator;
+import org.ce.identification.symmetry.OrbitUtils;
 
 import java.util.List;
 

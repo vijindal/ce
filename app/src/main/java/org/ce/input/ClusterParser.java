@@ -1,9 +1,9 @@
 package org.ce.input;
 
-import org.ce.identification.engine.Cluster;
-import org.ce.identification.engine.Sublattice;
-import org.ce.identification.engine.Site;
-import org.ce.identification.engine.Vector3D;
+import org.ce.identification.geometry.Cluster;
+import org.ce.identification.geometry.Sublattice;
+import org.ce.identification.geometry.Site;
+import org.ce.identification.geometry.Vector3D;
 
 import java.io.BufferedReader;
 import java.io.InputStream;

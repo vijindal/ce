@@ -2,14 +2,14 @@ package org.ce.core;
 
 import org.ce.cvm.CMatrixBuilder;
 import org.ce.cvm.CMatrixResult;
-import org.ce.identification.engine.Cluster;
+import org.ce.identification.geometry.Cluster;
 import org.ce.input.InputLoader;
-import org.ce.identification.engine.SymmetryOperation;
+import org.ce.identification.symmetry.SymmetryOperation;
 import org.ce.identification.cluster.ClusterIdentifier;
 import org.ce.identification.cluster.ClusterIdentificationResult;
 import org.ce.identification.cf.CFIdentifier;
 import org.ce.identification.cf.CFIdentificationResult;
-import org.ce.identification.engine.Vector3D;
+import org.ce.identification.geometry.Vector3D;
 import java.util.List;
 
 /**
@@ -172,7 +172,7 @@ public class CVMPipeline {
             "        {0,1,0},\n" +
             "        {0,0,1}\n" +
             "    })\n" +
-            "    .translationVector(new org.ce.identification.engine.Vector3D(0,0,0))\n" +
+            "    .translationVector(new org.ce.identification.geometry.Vector3D(0,0,0))\n" +
             "    .numComponents(2)\n" +
             "    .build();\n" +
             "\n" +

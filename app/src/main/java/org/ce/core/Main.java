@@ -3,7 +3,7 @@ package org.ce.core;
 import org.ce.core.CVMConfiguration;
 import org.ce.core.CVMPipeline;
 import org.ce.core.CVMResult;
-import org.ce.identification.engine.Vector3D;
+import org.ce.identification.geometry.Vector3D;
 
 /**
  * Simplified application entry point using the new {@link CVMPipeline} facade.

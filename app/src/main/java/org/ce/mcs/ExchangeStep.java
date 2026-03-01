@@ -1,6 +1,6 @@
 package org.ce.mcs;
 
-import org.ce.identification.engine.Cluster;
+import org.ce.identification.geometry.Cluster;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,7 +33,7 @@ public class ExchangeStep {
 
     private final EmbeddingData                              emb;
     private final double[]                                   eci;
-    private final List<List<org.ce.identification.engine.Cluster>> orbits;
+    private final List<List<org.ce.identification.geometry.Cluster>> orbits;
     private final double                                     beta;
     private final double                                     R;
     private final int                                        numComp;

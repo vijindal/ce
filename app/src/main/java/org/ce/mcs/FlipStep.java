@@ -1,6 +1,6 @@
 package org.ce.mcs;
 
-import org.ce.identification.engine.Cluster;
+import org.ce.identification.geometry.Cluster;
 
 import java.util.List;
 import java.util.Random;

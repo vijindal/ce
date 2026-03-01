@@ -14,10 +14,11 @@
 Three-tier data organization:
 
 ```
+data/cluster_cache/                 # Runtime persistence (auto-generated)
+│   └── BCC_A2_T_bin/
+│       ├── cluster_result.json     # Cluster identification results (MCS)
+│       └── all_cluster_data.json   # Full pipeline data (CVM)
 app/src/main/resources/
-├── cluster_data/                   # Runtime persistence (NEW)
-│   └── Ti-Nb_BCC_A2_T/
-│       └── cluster_result.json    # Cluster identification results
 ├── data/
 │   ├── systems/                    # Element-specific CECs
 │   │   ├── Ti-Nb/
@@ -108,7 +109,7 @@ app/src/main/resources/
 
 4. **Cluster Data Persistence** - NEW
    - ClusterDataCache utility for JSON serialization
-   - Results saved to `cluster_data/{systemId}/cluster_result.json`
+   - Results saved to `data/cluster_cache/{clusterKey}/cluster_result.json`
    - Project-based storage (not user home directory) for distribution
    
 5. **UX Improvements** - MAJOR
@@ -241,12 +242,14 @@ ce/
 │       ├── CVMConfiguration.java
 │       ├── CVMPipeline.java
 │       └── ...
+├── data/cluster_cache/                          # Runtime persistence
+│   └── {clusterKey}/
+│       ├── cluster_result.json                  # Cluster identification results
+│       └── all_cluster_data.json                # Full pipeline data
 ├── app/src/main/resources/
-│   ├── cluster_data/                            # NEW: Runtime persistence
-│   │   └── {systemId}/cluster_result.json      # Cluster identification results
-│   └── data/
-│       ├── systems/                             # Element-specific CECs
-│       │   ├── Ti-Nb/cec.json
+│   ├── data/
+│   │   ├── systems/                             # Element-specific CECs
+│   │   │   ├── Ti-Nb/cec.json
 │       │   └── ...
 │       ├── models/                              # Shared model data
 │       │   ├── BCC_A2_T/model_data.json

@@ -1,6 +1,7 @@
 package org.ce.identification.engine;
 
-import org.ce.identification.engine.Cluster;
+import org.ce.identification.geometry.Cluster;
+import org.ce.identification.symmetry.SpaceGroup;
 
 public class NormalizerCalculator {
      private static final double TOL = 1e-6;

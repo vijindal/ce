@@ -1,9 +1,9 @@
 package org.ce.mcs;
 
-import org.ce.identification.engine.Cluster;
-import org.ce.identification.engine.ClusCoordListResult;
-import org.ce.identification.engine.Vector3D;
-import org.ce.workbench.util.MCSUpdate;
+import org.ce.identification.geometry.Cluster;
+import org.ce.identification.result.ClusCoordListResult;
+import org.ce.identification.geometry.Vector3D;
+import org.ce.workbench.util.mcs.MCSUpdate;
 
 import java.util.ArrayList;
 import java.util.List;

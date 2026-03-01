@@ -1,6 +1,6 @@
 package org.ce.mcs;
 
-import org.ce.identification.engine.Site;
+import org.ce.identification.geometry.Site;
 
 import java.util.List;
 
@@ -21,7 +21,7 @@ import java.util.List;
  * <h2>Embedding decoration</h2>
  * <p>Each {@link Embedding} stores its {@code orbitMemberIndex}.  The orbit
  * member cluster is retrieved from
- * {@link org.ce.identification.engine.ClusCoordListResult#getOrbitList()
+ * {@link org.ce.identification.result.ClusCoordListResult#getOrbitList()
  * orbitList[clusterType][orbitMemberIndex]} to read the site symbols.</p>
  *
  * <h2>Energy formula</h2>
@@ -60,12 +60,12 @@ public final class LocalEnergyCalc {
      * @param config  current occupation configuration
      * @param orbits  {@code orbits.get(t).get(o)} = orbit-member cluster for
      *                cluster type {@code t}, orbit member {@code o};
-     *                sourced from {@link org.ce.identification.engine.ClusCoordListResult#getOrbitList()}
+     *                sourced from {@link org.ce.identification.result.ClusCoordListResult#getOrbitList()}
      * @return cluster product {@code Φ(e)}
      */
     public static double clusterProduct(Embedding e,
                                          LatticeConfig config,
-                                         List<List<org.ce.identification.engine.Cluster>> orbits) {
+                                         List<List<org.ce.identification.geometry.Cluster>> orbits) {
         SiteOperatorBasis basis = config.getBasis();
         double prod = 1.0;
         int[] idx = e.getSiteIndices();
@@ -105,7 +105,7 @@ public final class LocalEnergyCalc {
                                       LatticeConfig config,
                                       EmbeddingData emb,
                                       double[] eci,
-                                      List<List<org.ce.identification.engine.Cluster>> orbits) {
+                                      List<List<org.ce.identification.geometry.Cluster>> orbits) {
         double sum = 0.0;
         for (Embedding e : emb.getSiteToEmbeddings()[i]) {
             sum += eci[e.getClusterType()] * clusterProduct(e, config, orbits);
@@ -129,7 +129,7 @@ public final class LocalEnergyCalc {
     public static double totalEnergy(LatticeConfig config,
                                       EmbeddingData emb,
                                       double[] eci,
-                                      List<List<org.ce.identification.engine.Cluster>> orbits) {
+                                      List<List<org.ce.identification.geometry.Cluster>> orbits) {
         double sum = 0.0;
         for (Embedding e : emb.getAllEmbeddings()) {
             int size = e.size();
@@ -148,7 +148,7 @@ public final class LocalEnergyCalc {
     public static double totalEnergyPerSite(LatticeConfig config,
                                              EmbeddingData emb,
                                              double[] eci,
-                                             List<List<org.ce.identification.engine.Cluster>> orbits) {
+                                             List<List<org.ce.identification.geometry.Cluster>> orbits) {
         return totalEnergy(config, emb, eci, orbits) / config.getN();
     }
 
@@ -179,7 +179,7 @@ public final class LocalEnergyCalc {
                                            LatticeConfig config,
                                            EmbeddingData emb,
                                            double[] eci,
-                                           List<List<org.ce.identification.engine.Cluster>> orbits) {
+                                           List<List<org.ce.identification.geometry.Cluster>> orbits) {
         long __p = Profiler.tic("LocalEnergyCalc.deltaESingleSite");
         int oldOcc = config.getOccupation(i);
         if (oldOcc == newOcc) {
@@ -249,7 +249,7 @@ public final class LocalEnergyCalc {
                                          LatticeConfig config,
                                          EmbeddingData emb,
                                          double[] eci,
-                                         List<List<org.ce.identification.engine.Cluster>> orbits) {
+                                         List<List<org.ce.identification.geometry.Cluster>> orbits) {
         long __p = Profiler.tic("LocalEnergyCalc.deltaEExchange");
         int occI = config.getOccupation(i);
         int occJ = config.getOccupation(j);

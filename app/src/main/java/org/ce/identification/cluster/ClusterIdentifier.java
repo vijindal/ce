@@ -1,10 +1,12 @@
 package org.ce.identification.cluster;
 
-import org.ce.identification.engine.Cluster;
-import org.ce.identification.engine.*;
 import org.ce.identification.engine.ClusCoordListGenerator;
-import org.ce.identification.engine.ClusCoordListResult;
-import org.ce.identification.engine.SymmetryOperation;
+import org.ce.identification.geometry.Cluster;
+import org.ce.identification.result.ClassifiedClusterResult;
+import org.ce.identification.result.ClusCoordListResult;
+import org.ce.identification.subcluster.OrderedClusterClassifier;
+import org.ce.identification.subcluster.OrderedToDisorderedTransformer;
+import org.ce.identification.symmetry.SymmetryOperation;
 
 import java.util.List;
 

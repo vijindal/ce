@@ -1,10 +1,13 @@
 package org.ce.identification.engine;
 
-import org.ce.identification.engine.ClusCoordListResult;
-import org.ce.identification.engine.Cluster;
-import org.ce.identification.engine.Sublattice;
-import org.ce.identification.engine.Site;
-import org.ce.identification.engine.*;
+import org.ce.identification.geometry.Cluster;
+import org.ce.identification.geometry.Site;
+import org.ce.identification.geometry.Sublattice;
+import org.ce.identification.result.ClusCoordListResult;
+import org.ce.identification.subcluster.DecoratedSubClusterGenerator;
+import org.ce.identification.subcluster.SubClusterGenerator;
+import org.ce.identification.symmetry.OrbitUtils;
+import org.ce.identification.symmetry.SymmetryOperation;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -21,7 +24,7 @@ import java.util.List;
  *   <li>Enumerates all geometric sub-clusters of each maximal cluster
  *       (or, in the decorated variant, all decorated sub-clusters).</li>
  *   <li>Filters out clusters that are symmetry-equivalent to one already seen
- *       (using {@link org.ce.identification.engine.OrbitUtils#isContained}).</li>
+ *       (using {@link org.ce.identification.symmetry.OrbitUtils#isContained}).</li>
  *   <li>Generates the full symmetry orbit for each new cluster type.</li>
  *   <li>Normalises multiplicities by the total point-cluster orbit count.</li>
  *   <li>Sorts the final list by descending cluster size.</li>

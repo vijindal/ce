@@ -49,24 +49,21 @@ result.printDebug();
 
 ## Directory Structure
 
-This project uses a **dual `src/` structure** by design:
-
 ```
 ce/
 ├── app/src/              # Application source code (Gradle module)
 │   ├── main/java/        # Java source files (org.ce.*)
 │   ├── main/resources/   # Static configs (cluster defs, YAML, symmetry)
-│   └── test/java/        # Unit tests
+│   └── test/java/        # Unit tests + examples + integration tests
 │
-└── src/                  # Runtime data resources (project root)
-    └── main/resources/   # Pre-computed cluster results (auto-generated)
-        └── cluster_data/ # Background job outputs (*.json)
+├── data/                 # Runtime data (project root)
+│   └── cluster_cache/    # Pre-computed cluster results (auto-generated JSON)
+│
+└── docs/                 # Design documents
 ```
 
 - **`app/src/`**: All application code and static configuration files
-- **`src/` (root)**: Runtime-generated cluster identification results packaged into JAR
-
-Both are packaged together at build time. See [src/README.md](src/README.md) for details.
+- **`data/cluster_cache/`**: Runtime-generated cluster identification results
 
 ---
 
@@ -79,12 +76,26 @@ transformation stage and produces a well-defined output consumed by the next.
 org.ce
 ├── input                         Stage 0 — Read files → domain objects
 ├── identification
-│   ├── engine                    Shared kernel — geometry, symmetry, enumeration
+│   ├── geometry                  Foundational types — Cluster, Site, Vector3D, Sublattice
+│   ├── symmetry                  SpaceGroup, SymmetryOperation, OrbitUtils
+│   ├── result                    Stage output types — ClusCoordListResult, ClassifiedClusterResult, etc.
+│   ├── subcluster                Sub-cluster enumeration and classification
+│   ├── engine                    Generators — ClusCoordListGenerator, CFGroupGenerator
 │   ├── cluster                   Stage 1 — Cluster identification (component-independent)
 │   └── cf                        Stage 2 — CF identification (component-dependent)
-├── cvm                           Stage 3-5 — CVM free-energy path  [planned]
-├── mcs                           MCS path — supercell, Metropolis engine  [partial]
-└── app                           Entry points, runners, examples
+├── cvm                           Stage 3-5 — CVM free-energy path
+├── mcs                           MCS path — supercell, Metropolis engine
+├── core                          Pipeline orchestration (CVMPipeline, CVMConfiguration)
+└── workbench
+    ├── gui/                      JavaFX GUI (panels, components, models)
+    ├── cli/                      Command-line interface
+    ├── backend/                  Backend services (jobs, registry, data loading)
+    └── util/                     Utilities
+        ├── cache/                Cluster data serialization & persistence
+        ├── context/              Calculation context holders
+        ├── eci/                  ECI loading from database
+        ├── key/                  Key-building utilities
+        └── mcs/                  MCS execution, monitoring, mapping
 ```
 
 ### Dependency rule
@@ -93,7 +104,9 @@ Dependencies flow **strictly downward**. No package imports anything from a
 package that appears later in the flow:
 
 ```
-org.ce.app
+org.ce.workbench (gui/cli/backend/util)
+  ↓
+org.ce.core
   ↓
 org.ce.cvm  ←(parallel)→  org.ce.mcs
   ↓                              ↓
@@ -102,6 +115,8 @@ org.ce.identification.cf
 org.ce.identification.cluster
   ↓
 org.ce.identification.engine
+  ↓
+org.ce.identification.subcluster / result / symmetry / geometry
   ↓
 org.ce.input
 ```

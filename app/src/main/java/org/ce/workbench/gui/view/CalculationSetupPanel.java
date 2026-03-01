@@ -9,11 +9,15 @@ import javafx.scene.layout.VBox;
 import org.ce.workbench.backend.registry.SystemRegistry;
 import org.ce.workbench.backend.job.BackgroundJobManager;
 import org.ce.workbench.gui.model.SystemInfo;
-import org.ce.workbench.util.CalculationContext;
-import org.ce.workbench.util.ClusterDataCache;
-import org.ce.workbench.util.ECILoader;
-import org.ce.workbench.util.MCSExecutor;
-import org.ce.identification.engine.ClusCoordListResult;
+import org.ce.workbench.util.cache.AllClusterDataCache;
+import org.ce.workbench.util.context.CVMCalculationContext;
+import org.ce.workbench.util.context.CalculationContext;
+import org.ce.workbench.util.cache.ClusterDataCache;
+import org.ce.workbench.util.eci.ECILoader;
+import org.ce.workbench.util.key.KeyUtils;
+import org.ce.workbench.util.mcs.MCSExecutor;
+import org.ce.workbench.backend.data.AllClusterData;
+import org.ce.identification.result.ClusCoordListResult;
 
 import java.util.Comparator;
 import java.util.Optional;
@@ -272,17 +276,11 @@ public class CalculationSetupPanel extends VBox {
         
         // Derive the two keys from the selected system
         String elementsStr     = String.join("-", selectedSystem.getComponents());
-        String componentSuffix = getComponentSuffix(selectedSystem.getNumComponents());
+        String componentSuffix = KeyUtils.componentSuffix(selectedSystem.getNumComponents());
         // CEC key:     elements + model  e.g. "Nb-Ti_BCC_A2_T"
-        String cecKey     = elementsStr + "_"
-                          + selectedSystem.getStructure() + "_"
-                          + selectedSystem.getPhase()     + "_"
-                          + selectedSystem.getModel();
+        String cecKey     = KeyUtils.cecKey(selectedSystem);
         // Cluster key: component-count + model  e.g. "BCC_A2_T_bin"
-        String clusterKey = selectedSystem.getStructure() + "_"
-                          + selectedSystem.getPhase()     + "_"
-                          + selectedSystem.getModel()     + "_"
-                          + componentSuffix;
+        String clusterKey = KeyUtils.clusterKey(selectedSystem);
 
         resultsPanel.logMessage("[MCS] CEC key     : " + cecKey);
         resultsPanel.logMessage("[MCS] Cluster key : " + clusterKey);
@@ -363,20 +361,142 @@ public class CalculationSetupPanel extends VBox {
         mcsThread.start();
     }
 
-    /** Maps component count to the string suffix used in cache keys. */
-    private static String getComponentSuffix(int n) {
-        switch (n) {
-            case 2:  return "bin";
-            case 3:  return "tern";
-            case 4:  return "quat";
-            case 5:  return "quint";
-            default: return "comp" + n;
-        }
-    }
+    // getComponentSuffix() removed — use KeyUtils.componentSuffix() instead
 
     private void runCVMCalculation() {
+        // Get the most recently created system from registry
+        SystemInfo selectedSystem = registry.getAllSystems().stream()
+            .max(Comparator.comparing(SystemInfo::getClustersComputedDate))
+            .orElse(null);
+
+        if (selectedSystem == null) {
+            showError("No System Available", "Please create a system first in the System Setup section.");
+            return;
+        }
+
+        if (!selectedSystem.isCfsComputed()) {
+            showError(
+                "Data Missing",
+                "The system '" + selectedSystem.getName() + "' does not have CF data computed.\n" +
+                "Please complete the identification pipeline first."
+            );
+            return;
+        }
+
+        // Parse parameters
+        double temperature;
+        double composition;
+        double tolerance;
+
+        try {
+            temperature = Double.parseDouble(temperatureField.getText().trim());
+            composition = Double.parseDouble(compositionField.getText().trim());
+            tolerance   = Double.parseDouble(cvmToleranceField.getText().trim());
+
+            if (temperature <= 0) throw new NumberFormatException("Temperature must be positive");
+            if (composition < 0 || composition > 1) throw new NumberFormatException("Composition must be between 0 and 1");
+            if (tolerance <= 0) throw new NumberFormatException("Tolerance must be positive");
+        } catch (NumberFormatException ex) {
+            showError("Invalid Parameter", "Parameter parsing failed: " + ex.getMessage());
+            return;
+        }
+
         resultsPanel.logMessage("\n>>> CVM Calculation Requested");
-        resultsPanel.logMessage("⚠ CVM calculation not yet implemented.");
+        resultsPanel.logMessage("System: " + selectedSystem.getName());
+        resultsPanel.logMessage("Temperature: " + temperature + " K");
+        resultsPanel.logMessage("Composition: " + composition);
+        resultsPanel.logMessage("Tolerance: " + tolerance);
+        resultsPanel.logMessage("Parameters validated. Loading required data...");
+
+        String clusterKey = KeyUtils.clusterKey(selectedSystem);
+        String cecKey     = KeyUtils.cecKey(selectedSystem);
+        resultsPanel.logMessage("[CVM] CEC key     : " + cecKey);
+        resultsPanel.logMessage("[CVM] Cluster key : " + clusterKey);
+
+        // --- Load AllClusterData ---
+        resultsPanel.logMessage("[CVM] Loading AllClusterData from cache...");
+        AllClusterData allData;
+        try {
+            Optional<AllClusterData> cached = AllClusterDataCache.load(clusterKey);
+            if (cached.isEmpty()) {
+                showError("Cluster Data Not Found",
+                    "No AllClusterData found for '" + clusterKey + "'.\n\n"
+                    + "The identification pipeline may not have saved the complete data.\n"
+                    + "Delete this system, recreate it, and run identification again.");
+                return;
+            }
+            allData = cached.get();
+        } catch (Exception ex) {
+            showError("Cluster Data Load Error",
+                "Failed to load AllClusterData for '" + clusterKey + "':\n" + ex.getMessage());
+            return;
+        }
+
+        if (!allData.isComplete()) {
+            showError("Incomplete Cluster Data",
+                "AllClusterData for '" + clusterKey + "' is incomplete.\n\n"
+                + allData.getCompletionStatus());
+            return;
+        }
+
+        resultsPanel.logMessage("✓ AllClusterData loaded: " + allData);
+        resultsPanel.logMessage("  Stage 1: tcdis=" + allData.getTcdis());
+        resultsPanel.logMessage("  Stage 2: tcf=" + allData.getTcf());
+        resultsPanel.logMessage("  Stage 3: C-matrix ready");
+
+        // --- Load ECI/CEC data ---
+        String elementsStr = String.join("-", selectedSystem.getComponents());
+        int requiredECILength = allData.getStage1().getTc();
+        resultsPanel.logMessage("[CVM] Loading CEC  key=" + cecKey
+                + "  required length=" + requiredECILength);
+
+        ECILoader.DBLoadResult dbResult =
+                ECILoader.loadECIFromDatabase(elementsStr,
+                        selectedSystem.getStructure(),
+                        selectedSystem.getPhase(),
+                        selectedSystem.getModel(),
+                        temperature,
+                        requiredECILength);
+        Optional<double[]> eciOpt;
+
+        if (dbResult.status == ECILoader.DBLoadResult.Status.OK) {
+            eciOpt = Optional.of(dbResult.eci);
+            resultsPanel.logMessage("✓ CEC loaded from database: " + dbResult.message);
+            if (dbResult.temperatureEvaluated) {
+                resultsPanel.logMessage("  (T-dependent terms evaluated at T=" + temperature + "K)");
+            }
+        } else {
+            resultsPanel.logMessage("⚠ CEC database load failed: " + dbResult.message);
+            eciOpt = ECILoader.loadOrInputECI(elementsStr,
+                    selectedSystem.getStructure(),
+                    selectedSystem.getPhase(),
+                    selectedSystem.getModel(),
+                    temperature,
+                    requiredECILength);
+        }
+
+        if (eciOpt.isEmpty()) {
+            resultsPanel.logMessage("⚠ ECI loading cancelled or failed. Cannot run CVM.");
+            return;
+        }
+
+        // Build CVM context
+        CVMCalculationContext context = new CVMCalculationContext(
+                selectedSystem, temperature, composition, tolerance);
+        context.setAllClusterData(allData);
+        context.setECI(eciOpt.get());
+        resultsPanel.logMessage("✓ ECI set: " + eciOpt.get().length + " values");
+
+        if (!context.isReady()) {
+            showError("CVM Context Not Ready", context.getReadinessError());
+            return;
+        }
+
+        resultsPanel.logMessage("✓ CVM context is ready");
+        resultsPanel.logMessage(context.getSummary());
+        resultsPanel.logMessage("\n⚠ CVM NIM solver (Stage 4-5) not yet implemented.");
+        resultsPanel.logMessage("  All prerequisite data has been loaded successfully.");
+        resultsPanel.logMessage("  Next step: implement NIM free-energy minimization engine.");
     }
     
     private void showError(String title, String message) {

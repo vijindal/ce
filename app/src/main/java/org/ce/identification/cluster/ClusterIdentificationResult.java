@@ -1,8 +1,8 @@
 package org.ce.identification.cluster;
 
-import org.ce.identification.engine.Cluster;
-import org.ce.identification.engine.ClassifiedClusterResult;
-import org.ce.identification.engine.ClusCoordListResult;
+import org.ce.identification.geometry.Cluster;
+import org.ce.identification.result.ClassifiedClusterResult;
+import org.ce.identification.result.ClusCoordListResult;
 
 import java.util.List;
 

@@ -24,7 +24,7 @@ import java.util.Arrays;
 public class Embedding {
 
     /**
-     * Zero-based index into {@link org.ce.identification.engine.ClusCoordListResult#getClusCoordList()},
+     * Zero-based index into {@link org.ce.identification.result.ClusCoordListResult#getClusCoordList()},
      * identifying the abstract cluster type (e.g. 2 = nearest-neighbour pair).
      */
     private final int clusterType;

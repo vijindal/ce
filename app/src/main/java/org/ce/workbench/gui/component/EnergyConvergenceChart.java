@@ -6,7 +6,7 @@ import javafx.scene.chart.NumberAxis;
 import javafx.scene.chart.XYChart;
 import javafx.scene.layout.VBox;
 import javafx.geometry.Insets;
-import org.ce.workbench.util.MCSUpdate;
+import org.ce.workbench.util.mcs.MCSUpdate;
 
 import java.util.ArrayList;
 import java.util.List;

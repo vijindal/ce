@@ -1,7 +1,7 @@
 package org.ce.input;
 
-import org.ce.identification.engine.SpaceGroup;
-import org.ce.identification.engine.SymmetryOperation;
+import org.ce.identification.symmetry.SpaceGroup;
+import org.ce.identification.symmetry.SymmetryOperation;
 
 import java.io.BufferedReader;
 import java.io.InputStream;

@@ -17,11 +17,6 @@ This directory contains **static configuration files** packaged with the applica
 - `A2-SG.txt`, `B2-SG.txt`, etc.
 - Space group and symmetry operation matrices
 
-## Difference from Root-Level src/
+## Runtime Data
 
-| Location | Purpose | Content Type |
-|----------|---------|--------------|
-| **`app/src/main/resources/`** (here) | Static config | Hand-written definitions |
-| **`src/main/resources/`** (root) | Runtime data | Auto-generated cluster results |
-
-See `../../../../../src/main/resources/README.md` for details on the root-level resources.
+Runtime-generated cluster data (from background jobs) is stored in `data/cluster_cache/` at the project root — separate from these static resources.

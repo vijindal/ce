@@ -1,8 +1,8 @@
 package org.ce.identification.cf;
 
-import org.ce.identification.engine.ClassifiedClusterResult;
-import org.ce.identification.engine.ClusCoordListResult;
-import org.ce.identification.engine.GroupedCFResult;
+import org.ce.identification.result.ClassifiedClusterResult;
+import org.ce.identification.result.ClusCoordListResult;
+import org.ce.identification.result.GroupedCFResult;
 
 import java.util.List;
 

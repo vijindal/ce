@@ -1,6 +1,6 @@
 package org.ce.core;
 
-import org.ce.identification.engine.Vector3D;
+import org.ce.identification.geometry.Vector3D;
 import java.util.Objects;
 
 /**

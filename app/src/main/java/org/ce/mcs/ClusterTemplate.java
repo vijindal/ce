@@ -1,6 +1,6 @@
 package org.ce.mcs;
 
-import org.ce.identification.engine.Vector3D;
+import org.ce.identification.geometry.Vector3D;
 
 /**
  * A lightweight, position-relative representation of one orbit member of a
@@ -27,7 +27,7 @@ public class ClusterTemplate {
 
     /**
      * Zero-based index into the cluster-type list of
-     * {@link org.ce.identification.engine.ClusCoordListResult#getClusCoordList()}.
+     * {@link org.ce.identification.result.ClusCoordListResult#getClusCoordList()}.
      */
     private final int clusterType;
 

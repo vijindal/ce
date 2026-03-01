@@ -1,8 +1,8 @@
 package org.ce.mcs;
 
-import org.ce.identification.engine.Cluster;
-import org.ce.workbench.util.MCSUpdate;
-import org.ce.workbench.util.RollingWindow;
+import org.ce.identification.geometry.Cluster;
+import org.ce.workbench.util.mcs.MCSUpdate;
+import org.ce.workbench.util.mcs.RollingWindow;
 
 import java.util.List;
 import java.util.Random;
