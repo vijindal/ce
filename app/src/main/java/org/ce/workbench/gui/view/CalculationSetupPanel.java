@@ -6,22 +6,17 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import org.ce.workbench.backend.dto.CVMCalculationRequest;
+import org.ce.workbench.backend.dto.CalculationResult;
+import org.ce.workbench.backend.dto.MCSCalculationRequest;
 import org.ce.workbench.backend.registry.SystemRegistry;
 import org.ce.workbench.backend.job.BackgroundJobManager;
-import org.ce.workbench.gui.model.SystemInfo;
-import org.ce.workbench.util.cache.AllClusterDataCache;
+import org.ce.workbench.backend.job.CVMCalculationJob;
+import org.ce.workbench.backend.job.MCSCalculationJob;
+import org.ce.workbench.backend.service.CalculationService;
+import org.ce.workbench.model.SystemIdentity;
 import org.ce.workbench.util.context.CVMCalculationContext;
-import org.ce.workbench.util.context.CalculationContext;
-import org.ce.workbench.util.cache.ClusterDataCache;
-import org.ce.workbench.util.eci.ECILoader;
-import org.ce.workbench.util.key.KeyUtils;
-import org.ce.workbench.util.mcs.MCSExecutor;
-import org.ce.workbench.backend.data.AllClusterData;
-import org.ce.identification.result.ClusCoordListResult;
-
-import java.util.Comparator;
-import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
+import org.ce.workbench.util.context.MCSCalculationContext;
 
 /**
  * Calculation setup panel with system selection and MCS/CVM inputs.
@@ -35,6 +30,10 @@ public class CalculationSetupPanel extends VBox {
     private final RadioButton mcsToggle;
     private final RadioButton cvmToggle;
     private final VBox parametersContainer;
+    
+    // Explicit system selection (set by SystemRegistryPanel)
+    private SystemIdentity selectedSystem;
+    private final Label selectedSystemLabel;
     
     // Common parameters
     private final TextField temperatureField;
@@ -62,6 +61,10 @@ public class CalculationSetupPanel extends VBox {
         // Title
         Label title = new Label("Calculation Setup");
         title.setStyle("-fx-font-size: 12; -fx-font-weight: bold;");
+
+        // Selected system display
+        selectedSystemLabel = new Label("No system selected");
+        selectedSystemLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #666; -fx-font-style: italic;");
 
         // Calculation type toggle
         Label calcTypeLabel = new Label("Type");
@@ -108,6 +111,7 @@ public class CalculationSetupPanel extends VBox {
         // Add all components
         getChildren().addAll(
             title,
+            selectedSystemLabel,
             calcTypeRow,
             new Separator(),
             commonSection,
@@ -212,291 +216,125 @@ public class CalculationSetupPanel extends VBox {
     }
     
     private void runMCSCalculation() {
-        // Get the most recently created system from registry
-        SystemInfo selectedSystem = registry.getAllSystems().stream()
-            .max((s1, s2) -> s1.getClustersComputedDate().compareTo(s2.getClustersComputedDate()))
-            .orElse(null);
-        
         if (selectedSystem == null) {
-            showError("No System Available", "Please create a system first in the System Setup section.");
+            showError("No System Selected", 
+                "Please create a system in the System Setup section first.");
             return;
         }
         
-        if (!selectedSystem.isClustersComputed()) {
-            showError(
-                "Data Missing",
-                "The system '" + selectedSystem.getName() + "' does not have cluster data computed.\n" +
-                "Please complete the identification pipeline first."
-            );
+        // Validate system has required data
+        if (!registry.isClustersComputed(selectedSystem.getId())) {
+            showError("System Not Ready", 
+                "The selected system has not completed cluster identification.\n" +
+                "Please wait for the identification pipeline to complete.");
             return;
         }
         
-        // Parse parameters
-        double temperature;
-        double composition;
-        int supercellSize;
-        int equilibration;
-        int averaging;
-        
+        // Build request from UI fields
+        MCSCalculationRequest request;
         try {
-            temperature = Double.parseDouble(temperatureField.getText().trim());
-            composition = Double.parseDouble(compositionField.getText().trim());
-            supercellSize = Integer.parseInt(mcsSupercellSizeField.getText().trim());
-            equilibration = Integer.parseInt(mcsEquilibrationField.getText().trim());
-            averaging = Integer.parseInt(mcsAveragingField.getText().trim());
-            
-            if (temperature <= 0) throw new NumberFormatException("Temperature must be positive");
-            if (composition < 0 || composition > 1) throw new NumberFormatException("Composition must be between 0 and 1");
-            if (supercellSize < 1) throw new NumberFormatException("Supercell size must be >= 1");
-            if (equilibration <= 0) throw new NumberFormatException("Equilibration steps must be positive");
-            if (averaging <= 0) throw new NumberFormatException("Averaging steps must be positive");
-            
-        } catch (NumberFormatException ex) {
-            showError("Invalid Parameter", "Parameter parsing failed: " + ex.getMessage());
+            request = MCSCalculationRequest.builder()
+                .systemId(selectedSystem.getId())
+                .temperature(Double.parseDouble(temperatureField.getText().trim()))
+                .composition(Double.parseDouble(compositionField.getText().trim()))
+                .supercellSize(Integer.parseInt(mcsSupercellSizeField.getText().trim()))
+                .equilibrationSteps(Integer.parseInt(mcsEquilibrationField.getText().trim()))
+                .averagingSteps(Integer.parseInt(mcsAveragingField.getText().trim()))
+                .build();
+        } catch (IllegalArgumentException ex) {
+            showError("Invalid Parameter", ex.getMessage());
             return;
         }
-
-        long seed = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
         
-        resultsPanel.logMessage("\n>>> MCS Calculation Requested");
-        resultsPanel.logMessage("System: " + selectedSystem.getName());
-        resultsPanel.logMessage("Seed (auto): " + seed);
-        resultsPanel.logMessage("Parameters validated. Loading required data...");
+        // Create service with GUI listener
+        ResultsPanelProgressListener listener = new ResultsPanelProgressListener(resultsPanel);
+        CalculationService service = new CalculationService(registry, listener);
         
-        // Create calculation context
-        CalculationContext context = new CalculationContext(
-            selectedSystem,
-            temperature,
-            composition,
-            supercellSize,  // User-defined supercell size
-            equilibration,
-            averaging,
-            seed
-        );
+        // Prepare context (loads data from cache/database)
+        CalculationResult<MCSCalculationContext> result = service.prepareMCS(request);
         
-        // Derive the two keys from the selected system
-        String elementsStr     = String.join("-", selectedSystem.getComponents());
-        String componentSuffix = KeyUtils.componentSuffix(selectedSystem.getNumComponents());
-        // CEC key:     elements + model  e.g. "Nb-Ti_BCC_A2_T"
-        String cecKey     = KeyUtils.cecKey(selectedSystem);
-        // Cluster key: component-count + model  e.g. "BCC_A2_T_bin"
-        String clusterKey = KeyUtils.clusterKey(selectedSystem);
-
-        resultsPanel.logMessage("[MCS] CEC key     : " + cecKey);
-        resultsPanel.logMessage("[MCS] Cluster key : " + clusterKey);
-
-        // --- Load cluster data ---
-        resultsPanel.logMessage("[MCS] Loading cluster data from cache...");
-        ClusCoordListResult clusterData;
-        try {
-            java.util.Optional<ClusCoordListResult> cached =
-                    ClusterDataCache.loadClusterData(clusterKey);
-            if (cached.isEmpty()) {
-                showError("Cluster Data Not Found",
-                    "No valid cluster data found for '" + clusterKey + "'.\n\n"
-                    + "The identification pipeline has not been run for this "
-                    + componentSuffix + " " + selectedSystem.getStructure()
-                    + "_" + selectedSystem.getPhase() + " system.\n\n"
-                    + "Delete this system, recreate it, and run identification.\n"
-                    + "Check console for [ClusterDataCache] messages for the exact path.");
-                return;
-            }
-            clusterData = cached.get();
-        } catch (Exception ex) {
-            showError("Cluster Data Load Error",
-                "Failed to load cluster data for '" + clusterKey + "':\n" + ex.getMessage());
+        if (result.isFailure()) {
+            showError("MCS Preparation Failed", result.getErrorMessage().orElse("Unknown error"));
             return;
         }
-        context.setClusterData(clusterData);
-        resultsPanel.logMessage("✓ Cluster data loaded: tc=" + clusterData.getTc()
-                + "  orbitList=" + clusterData.getOrbitList().size());
-
-        // --- Load ECI/CEC data using the full CEC key ---
-        // ECI array must have one value for each cluster type (including excluded ones with value 0)
-        int requiredECILength = clusterData.getTc();
-        resultsPanel.logMessage("[MCS] Loading CEC  key=" + cecKey
-                + "  required length=" + requiredECILength);
-
-        ECILoader.DBLoadResult dbResult =
-                ECILoader.loadECIFromDatabase(elementsStr,
-                        selectedSystem.getStructure(),
-                        selectedSystem.getPhase(),
-                        selectedSystem.getModel(),
-                        temperature,
-                        requiredECILength);
-        Optional<double[]> eciOpt;
-
-        if (dbResult.status == ECILoader.DBLoadResult.Status.OK) {
-            eciOpt = Optional.of(dbResult.eci);
-            resultsPanel.logMessage("✓ CEC loaded from database: " + dbResult.message);
-            if (dbResult.temperatureEvaluated) {
-                resultsPanel.logMessage("  (T-dependent terms evaluated at T=" + temperature + "K)");
-            }
-        } else {
-            resultsPanel.logMessage("⚠ CEC database load failed: " + dbResult.message);
-            eciOpt = ECILoader.loadOrInputECI(elementsStr,
-                    selectedSystem.getStructure(),
-                    selectedSystem.getPhase(),
-                    selectedSystem.getModel(),
-                    temperature,
-                    requiredECILength);
-        }
-
-        if (eciOpt.isEmpty()) {
-            resultsPanel.logMessage("⚠ ECI loading cancelled or failed. Cannot run MCS.");
-            return;
-        }
-
-        context.setECI(eciOpt.get());
-        resultsPanel.logMessage("✓ ECI set: " + eciOpt.get().length + " values");
-
-        if (!context.isReady()) {
-            showError("ECI/Cluster Mismatch", context.getReadinessError());
-            return;
-        }
-
-        // Execute MCS calculation on a background thread so UI/chart can update live
-        Thread mcsThread = new Thread(() -> MCSExecutor.executeMCS(context, resultsPanel), "mcs-calculation-thread");
-        mcsThread.setDaemon(true);
-        mcsThread.start();
+        
+        MCSCalculationContext context = result.getContextOrThrow();
+        
+        // Submit MCS job to BackgroundJobManager for managed execution
+        MCSCalculationJob job = new MCSCalculationJob(context, listener);
+        jobManager.submitJob(job);
     }
 
-    // getComponentSuffix() removed — use KeyUtils.componentSuffix() instead
+    /**
+     * Sets the currently selected system for calculations.
+     * Called by SystemRegistryPanel when a system is created or selected.
+     *
+     * @param system the system to use for calculations
+     */
+    public void setSelectedSystem(SystemIdentity system) {
+        this.selectedSystem = system;
+        if (system != null) {
+            selectedSystemLabel.setText("System: " + system.getId());
+            selectedSystemLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #006600; -fx-font-weight: bold;");
+        } else {
+            selectedSystemLabel.setText("No system selected");
+            selectedSystemLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #666; -fx-font-style: italic;");
+        }
+    }
+
+    /**
+     * Returns the currently selected system.
+     */
+    public SystemIdentity getSelectedSystem() {
+        return selectedSystem;
+    }
 
     private void runCVMCalculation() {
-        // Get the most recently created system from registry
-        SystemInfo selectedSystem = registry.getAllSystems().stream()
-            .max(Comparator.comparing(SystemInfo::getClustersComputedDate))
-            .orElse(null);
-
         if (selectedSystem == null) {
-            showError("No System Available", "Please create a system first in the System Setup section.");
+            showError("No System Selected", 
+                "Please create a system in the System Setup section first.");
+            return;
+        }
+        
+        // Validate system has required data
+        if (!registry.isCfsComputed(selectedSystem.getId())) {
+            showError("System Not Ready", 
+                "The selected system has not completed CF identification.\n" +
+                "Please wait for the identification pipeline to complete.");
             return;
         }
 
-        if (!selectedSystem.isCfsComputed()) {
-            showError(
-                "Data Missing",
-                "The system '" + selectedSystem.getName() + "' does not have CF data computed.\n" +
-                "Please complete the identification pipeline first."
-            );
-            return;
-        }
-
-        // Parse parameters
-        double temperature;
-        double composition;
-        double tolerance;
-
+        // Build request from UI fields
+        CVMCalculationRequest request;
         try {
-            temperature = Double.parseDouble(temperatureField.getText().trim());
-            composition = Double.parseDouble(compositionField.getText().trim());
-            tolerance   = Double.parseDouble(cvmToleranceField.getText().trim());
-
-            if (temperature <= 0) throw new NumberFormatException("Temperature must be positive");
-            if (composition < 0 || composition > 1) throw new NumberFormatException("Composition must be between 0 and 1");
-            if (tolerance <= 0) throw new NumberFormatException("Tolerance must be positive");
-        } catch (NumberFormatException ex) {
-            showError("Invalid Parameter", "Parameter parsing failed: " + ex.getMessage());
+            request = CVMCalculationRequest.builder()
+                .systemId(selectedSystem.getId())
+                .temperature(Double.parseDouble(temperatureField.getText().trim()))
+                .composition(Double.parseDouble(compositionField.getText().trim()))
+                .tolerance(Double.parseDouble(cvmToleranceField.getText().trim()))
+                .build();
+        } catch (IllegalArgumentException ex) {
+            showError("Invalid Parameter", ex.getMessage());
             return;
         }
-
-        resultsPanel.logMessage("\n>>> CVM Calculation Requested");
-        resultsPanel.logMessage("System: " + selectedSystem.getName());
-        resultsPanel.logMessage("Temperature: " + temperature + " K");
-        resultsPanel.logMessage("Composition: " + composition);
-        resultsPanel.logMessage("Tolerance: " + tolerance);
-        resultsPanel.logMessage("Parameters validated. Loading required data...");
-
-        String clusterKey = KeyUtils.clusterKey(selectedSystem);
-        String cecKey     = KeyUtils.cecKey(selectedSystem);
-        resultsPanel.logMessage("[CVM] CEC key     : " + cecKey);
-        resultsPanel.logMessage("[CVM] Cluster key : " + clusterKey);
-
-        // --- Load AllClusterData ---
-        resultsPanel.logMessage("[CVM] Loading AllClusterData from cache...");
-        AllClusterData allData;
-        try {
-            Optional<AllClusterData> cached = AllClusterDataCache.load(clusterKey);
-            if (cached.isEmpty()) {
-                showError("Cluster Data Not Found",
-                    "No AllClusterData found for '" + clusterKey + "'.\n\n"
-                    + "The identification pipeline may not have saved the complete data.\n"
-                    + "Delete this system, recreate it, and run identification again.");
-                return;
-            }
-            allData = cached.get();
-        } catch (Exception ex) {
-            showError("Cluster Data Load Error",
-                "Failed to load AllClusterData for '" + clusterKey + "':\n" + ex.getMessage());
+        
+        // Create service with GUI listener
+        ResultsPanelProgressListener listener = new ResultsPanelProgressListener(resultsPanel);
+        CalculationService service = new CalculationService(registry, listener);
+        
+        // Prepare context (loads data from cache/database)
+        CalculationResult<CVMCalculationContext> result = service.prepareCVM(request);
+        
+        if (result.isFailure()) {
+            showError("CVM Preparation Failed", result.getErrorMessage().orElse("Unknown error"));
             return;
         }
-
-        if (!allData.isComplete()) {
-            showError("Incomplete Cluster Data",
-                "AllClusterData for '" + clusterKey + "' is incomplete.\n\n"
-                + allData.getCompletionStatus());
-            return;
-        }
-
-        resultsPanel.logMessage("✓ AllClusterData loaded: " + allData);
-        resultsPanel.logMessage("  Stage 1: tcdis=" + allData.getTcdis());
-        resultsPanel.logMessage("  Stage 2: tcf=" + allData.getTcf());
-        resultsPanel.logMessage("  Stage 3: C-matrix ready");
-
-        // --- Load ECI/CEC data ---
-        String elementsStr = String.join("-", selectedSystem.getComponents());
-        int requiredECILength = allData.getStage1().getTc();
-        resultsPanel.logMessage("[CVM] Loading CEC  key=" + cecKey
-                + "  required length=" + requiredECILength);
-
-        ECILoader.DBLoadResult dbResult =
-                ECILoader.loadECIFromDatabase(elementsStr,
-                        selectedSystem.getStructure(),
-                        selectedSystem.getPhase(),
-                        selectedSystem.getModel(),
-                        temperature,
-                        requiredECILength);
-        Optional<double[]> eciOpt;
-
-        if (dbResult.status == ECILoader.DBLoadResult.Status.OK) {
-            eciOpt = Optional.of(dbResult.eci);
-            resultsPanel.logMessage("✓ CEC loaded from database: " + dbResult.message);
-            if (dbResult.temperatureEvaluated) {
-                resultsPanel.logMessage("  (T-dependent terms evaluated at T=" + temperature + "K)");
-            }
-        } else {
-            resultsPanel.logMessage("⚠ CEC database load failed: " + dbResult.message);
-            eciOpt = ECILoader.loadOrInputECI(elementsStr,
-                    selectedSystem.getStructure(),
-                    selectedSystem.getPhase(),
-                    selectedSystem.getModel(),
-                    temperature,
-                    requiredECILength);
-        }
-
-        if (eciOpt.isEmpty()) {
-            resultsPanel.logMessage("⚠ ECI loading cancelled or failed. Cannot run CVM.");
-            return;
-        }
-
-        // Build CVM context
-        CVMCalculationContext context = new CVMCalculationContext(
-                selectedSystem, temperature, composition, tolerance);
-        context.setAllClusterData(allData);
-        context.setECI(eciOpt.get());
-        resultsPanel.logMessage("✓ ECI set: " + eciOpt.get().length + " values");
-
-        if (!context.isReady()) {
-            showError("CVM Context Not Ready", context.getReadinessError());
-            return;
-        }
-
-        resultsPanel.logMessage("✓ CVM context is ready");
-        resultsPanel.logMessage(context.getSummary());
-        resultsPanel.logMessage("\n⚠ CVM NIM solver (Stage 4-5) not yet implemented.");
-        resultsPanel.logMessage("  All prerequisite data has been loaded successfully.");
-        resultsPanel.logMessage("  Next step: implement NIM free-energy minimization engine.");
+        
+        CVMCalculationContext context = result.getContextOrThrow();
+        
+        // Submit CVM job to BackgroundJobManager for managed execution
+        CVMCalculationJob job = new CVMCalculationJob(context, listener);
+        jobManager.submitJob(job);
     }
     
     private void showError(String title, String message) {

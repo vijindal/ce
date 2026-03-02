@@ -6,6 +6,8 @@ import org.ce.workbench.util.mcs.RollingWindow;
 
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CancellationException;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /**
@@ -48,6 +50,9 @@ public class MCEngine {
     // MCS monitoring callback and state
     private Consumer<MCSUpdate>       updateListener = null;
     private RollingWindow             deltaEWindow = new RollingWindow(500);
+    
+    // Cancellation support for cooperative shutdown
+    private BooleanSupplier           cancellationCheck = () -> false;
 
     // -------------------------------------------------------------------------
     // Constructors
@@ -94,6 +99,15 @@ public class MCEngine {
     public void setUpdateListener(Consumer<MCSUpdate> listener) {
         this.updateListener = listener;
     }
+    
+    /**
+     * Sets a cancellation check supplier.
+     * The supplier is tested every sweep; if it returns true, a CancellationException is thrown.
+     * @param check supplier that returns true when cancellation is requested
+     */
+    public void setCancellationCheck(BooleanSupplier check) {
+        this.cancellationCheck = check != null ? check : () -> false;
+    }
 
     /**
      * Runs equilibration + averaging and returns the result.
@@ -122,6 +136,11 @@ public class MCEngine {
         double currentEnergy = LocalEnergyCalc.totalEnergy(config, emb, eci, orbits);
 
         for (int s = 0; s < nEquil; s++) {
+            // Check for cancellation at the start of each sweep
+            if (cancellationCheck.getAsBoolean()) {
+                throw new CancellationException("MCS calculation cancelled during equilibration (sweep " + s + ")");
+            }
+            
             double sweepDeltaE = 0.0;
             
             for (int m = 0; m < N; m++) {
@@ -155,6 +174,11 @@ public class MCEngine {
         sampler.reset();
 
         for (int s = 0; s < nAvg; s++) {
+            // Check for cancellation at the start of each sweep
+            if (cancellationCheck.getAsBoolean()) {
+                throw new CancellationException("MCS calculation cancelled during averaging (sweep " + (nEquil + s) + ")");
+            }
+            
             double sweepDeltaE = 0.0;
             
             for (int m = 0; m < N; m++) {
@@ -199,6 +223,11 @@ public class MCEngine {
         double currentEnergy = LocalEnergyCalc.totalEnergy(config, emb, eci, orbits);
 
         for (int s = 0; s < nEquil; s++) {
+            // Check for cancellation at the start of each sweep
+            if (cancellationCheck.getAsBoolean()) {
+                throw new CancellationException("MCS calculation cancelled during equilibration (sweep " + s + ")");
+            }
+            
             double sweepDeltaE = 0.0;
             
             for (int m = 0; m < N; m++) {
@@ -233,6 +262,11 @@ public class MCEngine {
         sampler.reset();
 
         for (int s = 0; s < nAvg; s++) {
+            // Check for cancellation at the start of each sweep
+            if (cancellationCheck.getAsBoolean()) {
+                throw new CancellationException("MCS calculation cancelled during averaging (sweep " + (nEquil + s) + ")");
+            }
+            
             double sweepDeltaE = 0.0;
             
             for (int m = 0; m < N; m++) {

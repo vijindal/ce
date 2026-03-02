@@ -1,6 +1,6 @@
 package org.ce.workbench.util.key;
 
-import org.ce.workbench.gui.model.SystemInfo;
+import org.ce.workbench.model.SystemIdentity;
 
 /**
  * Shared utility for computing the various string keys used across the
@@ -71,27 +71,27 @@ public final class KeyUtils {
     }
 
     // =========================================================================
-    // Key builders from SystemInfo
+    // Key builders from SystemIdentity
     // =========================================================================
 
     /**
-     * Derives the CEC key from a {@link SystemInfo} and its element list.
+     * Derives the CEC key from a {@link SystemIdentity} and its element list.
      *
      * @param system the system instance
      * @return e.g. {@code "Ti-Nb_BCC_A2_T"}
      */
-    public static String cecKey(SystemInfo system) {
+    public static String cecKey(SystemIdentity system) {
         String elements = String.join("-", system.getComponents());
         return cecKey(elements, system.getStructure(), system.getPhase(), system.getModel());
     }
 
     /**
-     * Derives the cluster-cache key from a {@link SystemInfo}.
+     * Derives the cluster-cache key from a {@link SystemIdentity}.
      *
      * @param system the system instance
      * @return e.g. {@code "BCC_A2_T_bin"}
      */
-    public static String clusterKey(SystemInfo system) {
+    public static String clusterKey(SystemIdentity system) {
         return clusterKey(system.getStructure(), system.getPhase(),
                           system.getModel(), system.getNumComponents());
     }

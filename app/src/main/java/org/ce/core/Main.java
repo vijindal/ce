@@ -2,22 +2,22 @@ package org.ce.core;
 
 import org.ce.core.CVMConfiguration;
 import org.ce.core.CVMPipeline;
-import org.ce.core.CVMResult;
+import org.ce.workbench.backend.data.AllClusterData;
 import org.ce.identification.geometry.Vector3D;
 
 /**
- * Simplified application entry point using the new {@link CVMPipeline} facade.
+ * Simplified application entry point using the {@link CVMPipeline} facade.
  *
- * <p>This demonstrates the unified orchestration API for the full two-stage
+ * <p>This demonstrates the unified orchestration API for the full three-stage
  * CVM identification pipeline. Configuration is done via {@link CVMConfiguration}
  * with a builder pattern, and the entire pipeline is invoked with a single
  * call to {@link CVMPipeline#identify(CVMConfiguration)}.</p>
  *
  * @author  CVM Project
- * @version 1.0
+ * @version 2.0
  * @see     CVMPipeline
  * @see     CVMConfiguration
- * @see     CVMResult
+ * @see     AllClusterData
  */
 public class Main {
 
@@ -53,16 +53,19 @@ public class Main {
         System.out.println("  Components       : " + config.getNumComponents());
 
         // ============================================================
-        // Execute the unified pipeline
+        // Execute the unified pipeline (all 3 stages)
         // ============================================================
         System.out.println("\n[Pipeline Execution]");
-        CVMResult result = CVMPipeline.identify(config);
+        AllClusterData allData = CVMPipeline.identify(config);
 
         // ============================================================
         // Access results via unified interface
         // ============================================================
         System.out.println("\n[Results]");
-        result.printDebug();
+        System.out.println("  Stage 1 (Clusters): tcdis = " + allData.getTcdis());
+        System.out.println("  Stage 2 (CFs):      tcf   = " + allData.getTcf());
+        System.out.println("  Stage 3 (C-matrix): built = " + (allData.getStage3() != null));
+        System.out.println("  Computation time:   " + allData.getComputationTimeMs() + " ms");
 
         System.out.println("\n================================================");
         System.out.println("  Pipeline execution complete");

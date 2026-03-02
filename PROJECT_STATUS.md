@@ -17,8 +17,7 @@ Three-tier data organization:
 ```
 data/cluster_cache/                 # Runtime persistence (auto-generated)
 │   └── BCC_A2_T_bin/
-│       ├── cluster_result.json     # Cluster identification results (MCS)
-│       └── all_cluster_data.json   # Full pipeline data (CVM)
+│       └── all_cluster_data.json   # Full pipeline data (Stages 1-3)
 app/src/main/resources/
 ├── data/
 │   ├── systems/                    # Element-specific CECs
@@ -54,7 +53,7 @@ app/src/main/resources/
 - **CalculationSetupPanel** - Configure and run calculations
 - **BackgroundJobManager** - Async job execution
 - **SystemDataLoader** - Load from separated data structure
-- **ClusterDataCache** (NEW) - JSON persistence for cluster identification results
+- **AllClusterDataCache** - JSON persistence for all cluster data (Stages 1-3)
 
 ### Backend
 - **SystemRegistry** - System registration and metadata management
@@ -147,15 +146,15 @@ app/src/main/resources/
    - Removed legacy R=1.0 convention
 
 4. **Cluster Data Persistence** - NEW
-   - ClusterDataCache utility for JSON serialization
-   - Results saved to `data/cluster_cache/{clusterKey}/cluster_result.json`
+   - AllClusterDataCache for unified JSON serialization (Stages 1-3)
+   - Results saved to `data/cluster_cache/{clusterKey}/all_cluster_data.json`
    - Project-based storage (not user home directory) for distribution
    
 5. **UX Improvements** - MAJOR
    - **Single identification dialog** - Eliminated duplicate file prompts
    - **Cached input pattern** - CF identification reuses cluster identification inputs
    - **Pre-filled fields** - Ordered cluster/symmetry auto-populated with resolved values
-   - **Diagnostic logging** - Component-prefixed console output (`[ClusterJob]`, `[ClusterDataCache]`)
+   - **Diagnostic logging** - Component-prefixed console output (`[ClusterJob]`, `[AllClusterDataCache]`)
    
 6. **Bug Fixes** - CRITICAL
    - Fixed system availability check (now checks actual `cluster_result.json`)
@@ -194,7 +193,7 @@ app/src/main/resources/
 ### Known Limitations
 - Cluster data only available during same session as identification
   - Full Cluster objects are not serializable (complex Nd4j dependencies)
-  - Workaround: cluster_result.json stores essential metadata
+  - Workaround: all_cluster_data.json stores essential metadata
   - App restart requires re-running identification
 
 ---
@@ -285,8 +284,7 @@ ce/
 │   │   │   ├── SystemRegistry.java             # Central system registry
 │   │   │   ├── BackgroundJobManager.java       # Job execution
 │   │   │   ├── data/
-│   │   │   │   ├── SystemDataLoader.java       # Load CECs + model data
-│   │   │   │   └── ClusterDataCache.java       # JSON persistence
+│   │   │   │   └── SystemDataLoader.java       # Load CECs + model data
 │   │   │   └── jobs/
 │   │   │       ├── ClusterIdentificationJob.java
 │   │   │       └── CFIdentificationJob.java
@@ -307,8 +305,7 @@ ce/
 │   └── CVMTernaryTest.java                      # Ternary tests (8/11 PASS)
 ├── data/cluster_cache/                          # Runtime persistence
 │   └── {clusterKey}/
-│       ├── cluster_result.json                  # Cluster identification results
-│       └── all_cluster_data.json                # Full pipeline data
+│       └── all_cluster_data.json                # Full pipeline data (Stages 1-3)
 ├── app/src/main/resources/
 │   ├── data/
 │   │   ├── systems/                             # Element-specific CECs

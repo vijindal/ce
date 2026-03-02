@@ -1,69 +1,93 @@
 package org.ce.workbench.backend.registry;
 
-import org.ce.workbench.gui.model.CalculationResults;
-import org.ce.workbench.gui.model.SystemInfo;
+import org.ce.workbench.model.SystemIdentity;
+import org.ce.workbench.model.SystemStatus;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Central registry for managing systems and their cached computation results.
- * Handles system lifecycle, cluster/CF cache management, and persistence.
+ * Central registry for managing systems and their computation status.
+ *
+ * <p>Owns both {@link SystemIdentity} (immutable) and {@link SystemStatus}
+ * (thread-safe mutable) for each registered system. Status updates must go
+ * through this registry to ensure thread safety.</p>
+ *
+ * <p>Calculation results are managed separately by {@link ResultRepository},
+ * following the Single Responsibility Principle.</p>
+ *
+ * <h2>Persistence Strategy</h2>
+ * <p>Uses deferred persistence to avoid synchronous disk I/O on every operation.
+ * Changes are tracked via a dirty flag and persisted:</p>
+ * <ul>
+ *   <li>Explicitly via {@link #persistIfDirty()}</li>
+ *   <li>On application shutdown via {@link #shutdown()}</li>
+ * </ul>
  */
 public class SystemRegistry {
     
     private final Path registryRoot;
-    private final Map<String, SystemInfo> systems;
-    private final Map<String, CalculationResults> results;
+    private final Map<String, SystemIdentity> identities;
+    private final Map<String, SystemStatus> statuses;
+    
+    /** Tracks whether in-memory state differs from disk. */
+    private final AtomicBoolean dirty = new AtomicBoolean(false);
     
     private static final String CACHE_DIR = "cache";
-    private static final String RESULTS_DIR = "results";
     private static final String SYSTEMS_FILE = "systems.dat";
     
     public SystemRegistry(Path workspaceRoot) throws IOException {
         this.registryRoot = workspaceRoot.resolve(".ce-workbench");
-        this.systems = new ConcurrentHashMap<>();
-        this.results = new ConcurrentHashMap<>();
+        this.identities = new ConcurrentHashMap<>();
+        this.statuses = new ConcurrentHashMap<>();
         
         // Initialize workspace
         Files.createDirectories(registryRoot);
         Files.createDirectories(registryRoot.resolve(CACHE_DIR));
-        Files.createDirectories(registryRoot.resolve(RESULTS_DIR));
         
         // Load existing systems
         loadSystemsFromDisk();
-        scanResultsFromDisk();
     }
     
+    // =========================================================================
+    // System Identity Management
+    // =========================================================================
+
     /**
      * Register a new system in the registry.
+     * 
+     * <p>Note: Changes are deferred to disk. Call {@link #persistIfDirty()} or
+     * {@link #shutdown()} to persist.</p>
      */
-    public void registerSystem(SystemInfo system) {
+    public void registerSystem(SystemIdentity system) {
         Objects.requireNonNull(system, "system");
-        systems.put(system.getId(), system);
-        saveSystemsToDisk();
+        identities.put(system.getId(), system);
+        statuses.put(system.getId(), new SystemStatus());
+        dirty.set(true);
     }
     
     /**
-     * Retrieve a system by ID.
+     * Retrieve a system identity by ID.
      */
-    public SystemInfo getSystem(String systemId) {
-        return systems.get(systemId);
+    public SystemIdentity getSystem(String systemId) {
+        return identities.get(systemId);
     }
     
     /**
      * Get all registered systems.
      */
-    public Collection<SystemInfo> getAllSystems() {
-        return new ArrayList<>(systems.values());
+    public Collection<SystemIdentity> getAllSystems() {
+        return new ArrayList<>(identities.values());
     }
     
     /**
      * Remove a system and its cached data.
      */
     public void removeSystem(String systemId) throws IOException {
-        systems.remove(systemId);
+        identities.remove(systemId);
+        statuses.remove(systemId);
         
         // Delete cached data
         Path systemCacheDir = registryRoot.resolve(CACHE_DIR).resolve(systemId);
@@ -71,17 +95,77 @@ public class SystemRegistry {
             deleteDirectory(systemCacheDir);
         }
         
-        // Delete results
-        Path systemResultsDir = registryRoot.resolve(RESULTS_DIR).resolve(systemId);
-        if (Files.exists(systemResultsDir)) {
-            deleteDirectory(systemResultsDir);
-        }
-        
-        // Delete results from memory
-        results.entrySet().removeIf(e -> e.getValue().getConfig().getSystem().getId().equals(systemId));
-        
-        saveSystemsToDisk();
+        dirty.set(true);
     }
+
+    // =========================================================================
+    // System Status Management (thread-safe)
+    // =========================================================================
+
+    /**
+     * Get the status for a system.
+     */
+    public SystemStatus getStatus(String systemId) {
+        return statuses.get(systemId);
+    }
+
+    /**
+     * Mark clusters as computed for a system.
+     */
+    public void markClustersComputed(String systemId, boolean computed) {
+        SystemStatus status = statuses.get(systemId);
+        if (status != null) {
+            status.setClustersComputed(computed);
+        }
+    }
+
+    /**
+     * Mark CFs as computed for a system.
+     */
+    public void markCfsComputed(String systemId, boolean computed) {
+        SystemStatus status = statuses.get(systemId);
+        if (status != null) {
+            status.setCfsComputed(computed);
+        }
+    }
+
+    /**
+     * Mark CEC availability for a system.
+     */
+    public void markCecAvailable(String systemId, boolean available) {
+        SystemStatus status = statuses.get(systemId);
+        if (status != null) {
+            status.setCecAvailable(available);
+        }
+    }
+
+    /**
+     * Convenience: check if clusters are computed.
+     */
+    public boolean isClustersComputed(String systemId) {
+        SystemStatus status = statuses.get(systemId);
+        return status != null && status.isClustersComputed();
+    }
+
+    /**
+     * Convenience: check if CFs are computed.
+     */
+    public boolean isCfsComputed(String systemId) {
+        SystemStatus status = statuses.get(systemId);
+        return status != null && status.isCfsComputed();
+    }
+
+    /**
+     * Convenience: check if CEC is available.
+     */
+    public boolean isCecAvailable(String systemId) {
+        SystemStatus status = statuses.get(systemId);
+        return status != null && status.isCecAvailable();
+    }
+
+    // =========================================================================
+    // Cache Directory Management
+    // =========================================================================
     
     /**
      * Get the cache directory for a specific system.
@@ -92,82 +176,29 @@ public class SystemRegistry {
         return cacheDir;
     }
     
+    // =========================================================================
+    // Persistence
+    // =========================================================================
+
     /**
-     * Store calculation results.
+     * Persist registry to disk if there are unsaved changes.
+     * 
+     * @return true if data was written, false if already up-to-date
      */
-    public void storeResult(String resultId, CalculationResults results) {
-        Objects.requireNonNull(resultId, "resultId");
-        Objects.requireNonNull(results, "results");
-        
-        this.results.put(resultId, results);
-        
-        // Serialize to disk (JSON format)
-        try {
-            Path systemId = Paths.get(results.getConfig().getSystem().getId());
-            Path resultsDir = registryRoot.resolve(RESULTS_DIR).resolve(systemId);
-            Files.createDirectories(resultsDir);
-            
-            Path resultFile = resultsDir.resolve(resultId + ".json");
-            // TODO: Implement JSON serialization
-            Files.writeString(resultFile, serializeResult(results));
-        } catch (IOException e) {
-            System.err.println("Failed to serialize results: " + e.getMessage());
+    public boolean persistIfDirty() {
+        if (dirty.compareAndSet(true, false)) {
+            saveSystemsToDisk();
+            return true;
         }
+        return false;
     }
     
     /**
-     * Retrieve stored results.
+     * Shutdown hook: persist any unsaved changes.
+     * Call this on application exit.
      */
-    public CalculationResults getResult(String resultId) {
-        return results.get(resultId);
-    }
-    
-    /**
-     * Get all results for a specific system.
-     */
-    public List<CalculationResults> getSystemResults(String systemId) {
-        List<CalculationResults> systemResults = new ArrayList<>();
-        results.forEach((id, result) -> {
-            if (result.getConfig().getSystem().getId().equals(systemId)) {
-                systemResults.add(result);
-            }
-        });
-        return systemResults;
-    }
-    
-    /**
-     * Get all stored results.
-     */
-    public Collection<CalculationResults> getAllResults() {
-        return new ArrayList<>(results.values());
-    }
-    
-    /**
-     * Clear old results (older than specified days).
-     */
-    public void purgeOldResults(int daysOld) throws IOException {
-        long cutoffTime = System.currentTimeMillis() - (daysOld * 24L * 60 * 60 * 1000);
-        
-        results.entrySet().removeIf(e -> {
-            long resultTime = e.getValue().getWallClockTimeMs();
-            return resultTime < cutoffTime;
-        });
-        
-        // Also delete from disk
-        Path resultsDir = registryRoot.resolve(RESULTS_DIR);
-        if (Files.exists(resultsDir)) {
-            Files.walk(resultsDir)
-                .filter(Files::isRegularFile)
-                .filter(p -> p.toString().endsWith(".json"))
-                .filter(p -> p.toFile().lastModified() < cutoffTime)
-                .forEach(p -> {
-                    try {
-                        Files.delete(p);
-                    } catch (IOException e) {
-                        System.err.println("Failed to delete: " + p);
-                    }
-                });
-        }
+    public void shutdown() {
+        persistIfDirty();
     }
     
     /**
@@ -175,18 +206,10 @@ public class SystemRegistry {
      */
     public RegistryStats getStats() {
         return new RegistryStats(
-            systems.size(),
-            results.size(),
+            identities.size(),
             registryRoot.toFile().getTotalSpace(),
             getDirectorySize(registryRoot)
         );
-    }
-
-    /**
-     * Persist current system registry to disk.
-     */
-    public void persistSystems() {
-        saveSystemsToDisk();
     }
     
     // ===================== PRIVATE HELPERS =====================
@@ -214,33 +237,7 @@ public class SystemRegistry {
         }
     }
     
-    private void scanResultsFromDisk() {
-        Path resultsDir = registryRoot.resolve(RESULTS_DIR);
-        if (!Files.exists(resultsDir)) {
-            return;
-        }
-        
-        try {
-            Files.walk(resultsDir)
-                .filter(Files::isRegularFile)
-                .filter(p -> p.toString().endsWith(".json"))
-                .forEach(p -> {
-                    try {
-                        // TODO: Load and deserialize result
-                    } catch (Exception e) {
-                        System.err.println("Failed to load result: " + p);
-                    }
-                });
-        } catch (IOException e) {
-            System.err.println("Failed to scan results: " + e.getMessage());
-        }
-    }
-    
-    private String serializeResult(CalculationResults result) {
-        // TODO: Implement proper JSON serialization
-        return "{}";
-    }
-    
+
     private void deleteDirectory(Path path) throws IOException {
         Files.walk(path)
             .sorted(Comparator.reverseOrder())
@@ -277,13 +274,11 @@ public class SystemRegistry {
      */
     public static class RegistryStats {
         public final int systemCount;
-        public final int resultCount;
         public final long totalSpace;
         public final long usedSpace;
         
-        public RegistryStats(int systemCount, int resultCount, long totalSpace, long usedSpace) {
+        public RegistryStats(int systemCount, long totalSpace, long usedSpace) {
             this.systemCount = systemCount;
-            this.resultCount = resultCount;
             this.totalSpace = totalSpace;
             this.usedSpace = usedSpace;
         }

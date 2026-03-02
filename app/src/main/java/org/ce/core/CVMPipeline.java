@@ -10,10 +10,11 @@ import org.ce.identification.cluster.ClusterIdentificationResult;
 import org.ce.identification.cf.CFIdentifier;
 import org.ce.identification.cf.CFIdentificationResult;
 import org.ce.identification.geometry.Vector3D;
+import org.ce.workbench.backend.data.AllClusterData;
 import java.util.List;
 
 /**
- * Single-entry-point orchestrator for the two-stage CVM identification pipeline.
+ * Single-entry-point orchestrator for the three-stage CVM identification pipeline.
  *
  * <p>This class implements the complete CVM workflow:
  * <ol>
@@ -24,6 +25,8 @@ import java.util.List;
  *   <li><strong>Stage 2: Correlation Function Identification</strong> — Enumerates
  *       and groups all distinct correlation functions (decorated clusters) for a
  *       specified number of components.</li>
+ *   <li><strong>Stage 3: C-matrix Construction</strong> — Builds the C-matrix that
+ *       transforms correlation functions to cluster variables.</li>
  * </ol></p>
  *
  * <h2>Usage Example</h2>
@@ -39,21 +42,22 @@ import java.util.List;
  *     .numComponents(2)
  *     .build();
  *
- * // Run pipeline
- * CVMResult result = CVMPipeline.identify(config);
+ * // Run pipeline (all 3 stages in one call)
+ * AllClusterData allData = CVMPipeline.identify(config);
  *
  * // Access results
- * result.printDebug();
- * ClusterIdentificationResult stage1 = result.getClusters();
- * CFIdentificationResult stage2 = result.getCorrelationFunctions();
+ * ClusterIdentificationResult stage1 = allData.getStage1();
+ * CFIdentificationResult stage2 = allData.getStage2();
+ * CMatrixResult stage3 = allData.getStage3();
  * }</pre>
  *
  * @author  CVM Project
- * @version 1.0
+ * @version 2.0
  * @see     CVMConfiguration
- * @see     CVMResult
+ * @see     AllClusterData
  * @see     ClusterIdentifier
  * @see     CFIdentifier
+ * @see     CMatrixBuilder
  */
 public class CVMPipeline {
 
@@ -62,29 +66,31 @@ public class CVMPipeline {
     }
 
     /**
-     * Runs the complete two-stage CVM identification pipeline.
+     * Runs the complete three-stage CVM identification pipeline.
      *
      * <p>This method:
      * <ol>
      *   <li>Loads cluster and symmetry data from files specified in {@code config}</li>
      *   <li>Executes Stage 1 (ClusterIdentifier) to determine cluster types and properties</li>
      *   <li>Executes Stage 2 (CFIdentifier) to enumerate correlation functions</li>
-     *   <li>Wraps both results in a unified {@link CVMResult}</li>
+     *   <li>Executes Stage 3 (CMatrixBuilder) to construct the C-matrix</li>
+     *   <li>Wraps all results in a unified {@link AllClusterData}</li>
      * </ol></p>
      *
      * @param config the configuration object specifying files, symmetries, and parameters
-     * @return a unified {@link CVMResult} containing both stage outputs
+     * @return a unified {@link AllClusterData} containing all three stage outputs
      * @throws IllegalArgumentException if configuration is invalid or files cannot be loaded
-     * @throws RuntimeException if either stage fails
+     * @throws RuntimeException if any stage fails
      */
-    public static CVMResult identify(CVMConfiguration config) {
+    public static AllClusterData identify(CVMConfiguration config) {
+        long startTime = System.currentTimeMillis();
 
         if (config == null) {
             throw new IllegalArgumentException("config must not be null");
         }
 
         // =====================================================================
-        // Load inputs from configuration
+        // Load inputs from configuration (ONCE - no duplicate parsing)
         // =====================================================================
         List<Cluster> disMaxClus =
                 InputLoader.parseClusterFile(config.getDisorderedClusterFile());
@@ -122,33 +128,26 @@ public class CVMPipeline {
                         numComp);
 
         // =====================================================================
+        // Stage 3: C-matrix Construction
+        // =====================================================================
+        CMatrixResult stage3Result = CMatrixBuilder.build(
+                stage1Result,
+                stage2Result,
+                ordMaxClus,
+                numComp);
+
+        // =====================================================================
         // Wrap and return unified result
         // =====================================================================
-        return new CVMResult(stage1Result, stage2Result);
-    }
-
-    /**
-     * Runs the identification pipeline and builds the C-matrix for the
-     * ordered-phase maximal cluster set defined in {@code config}.
-     *
-     * @param config configuration for the target structure and approximation
-     * @return C-matrix result (cmat, lcv, wcv)
-     */
-    public static CMatrixResult buildCMatrix(CVMConfiguration config) {
-
-        if (config == null) {
-            throw new IllegalArgumentException("config must not be null");
-        }
-
-        CVMResult result = identify(config);
-        List<Cluster> ordMaxClus =
-                InputLoader.parseClusterFile(config.getOrderedClusterFile());
-
-        return CMatrixBuilder.build(
-                result.getClusterIdentification(),
-                result.getCorrelationFunctionIdentification(),
-                ordMaxClus,
-                config.getNumComponents());
+        long computationTime = System.currentTimeMillis() - startTime;
+        
+        return new AllClusterData(
+                null,  // systemId not available from config alone
+                numComp,
+                stage1Result,
+                stage2Result,
+                stage3Result,
+                computationTime);
     }
 
     /**
@@ -176,13 +175,13 @@ public class CVMPipeline {
             "    .numComponents(2)\n" +
             "    .build();\n" +
             "\n" +
-            "// 2. Run pipeline (static method)\n" +
-            "CVMResult result = CVMPipeline.identify(config);\n" +
+            "// 2. Run pipeline (all 3 stages)\n" +
+            "AllClusterData allData = CVMPipeline.identify(config);\n" +
             "\n" +
             "// 3. Access results\n" +
-            "result.printDebug();\n" +
-            "ClusterIdentificationResult clusters = result.getClusterIdentification();\n" +
-            "CFIdentificationResult correlationFunctions = result.getCorrelationFunctionIdentification();\n" +
+            "ClusterIdentificationResult stage1 = allData.getStage1();\n" +
+            "CFIdentificationResult stage2 = allData.getStage2();\n" +
+            "CMatrixResult stage3 = allData.getStage3();\n" +
             "\n" +
             "=========================================================\n"
         );

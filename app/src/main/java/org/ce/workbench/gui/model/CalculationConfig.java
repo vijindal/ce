@@ -1,5 +1,6 @@
 package org.ce.workbench.gui.model;
 
+import org.ce.workbench.model.SystemIdentity;
 import java.util.Objects;
 
 /**
@@ -18,7 +19,7 @@ public class CalculationConfig {
     }
     
     private final CalculationType type;
-    private final SystemInfo system;
+    private final SystemIdentity system;
     
     // Common parameters
     private double[] eci; // Energy Cluster Interaction vector
@@ -45,7 +46,7 @@ public class CalculationConfig {
     private double compositionSweepMax;
     private double compositionSweepDelta;
     
-    public CalculationConfig(CalculationType type, SystemInfo system) {
+    public CalculationConfig(CalculationType type, SystemIdentity system) {
         this.type = Objects.requireNonNull(type, "type");
         this.system = Objects.requireNonNull(system, "system");
         
@@ -61,7 +62,8 @@ public class CalculationConfig {
     
     // Getters
     public CalculationType getType() { return type; }
-    public SystemInfo getSystem() { return system; }
+    public SystemIdentity getSystem() { return system; }
+    public String getSystemId() { return system.getId(); }
     public double[] getEci() { return eci; }
     public double getTemperature() { return temperature; }
     public double getComposition() { return composition; }

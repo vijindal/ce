@@ -1,6 +1,6 @@
 package org.ce.workbench.backend.job;
 
-import org.ce.workbench.gui.model.SystemInfo;
+import org.ce.workbench.model.SystemIdentity;
 
 /**
  * Interface for background jobs (cluster identification, CF identification, etc).
@@ -19,9 +19,14 @@ public interface BackgroundJob extends Runnable {
     String getName();
     
     /**
-     * Get associated system.
+     * Get associated system identity (immutable).
      */
-    SystemInfo getSystem();
+    SystemIdentity getSystem();
+
+    /**
+     * Get associated system ID (convenience method).
+     */
+    default String getSystemId() { return getSystem().getId(); }
     
     /**
      * Get current progress (0-100).

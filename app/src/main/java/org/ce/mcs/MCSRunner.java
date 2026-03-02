@@ -8,6 +8,7 @@ import org.ce.workbench.util.mcs.MCSUpdate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /**
@@ -80,6 +81,7 @@ public class MCSRunner {
     private final double[]            deltaMu;
     private final long                seed;
     private final Consumer<MCSUpdate> updateListener;
+    private final BooleanSupplier     cancellationCheck;
 
     private MCSRunner(Builder b) {
         this.clusterData     = b.clusterData;
@@ -96,6 +98,7 @@ public class MCSRunner {
         this.seed            = b.seed;
         this.R               = b.R;
         this.updateListener  = b.updateListener;
+        this.cancellationCheck = b.cancellationCheck;
     }
 
     // -------------------------------------------------------------------------
@@ -150,6 +153,9 @@ public class MCSRunner {
             useFlipStep, deltaMu, R, rng);
         if (updateListener != null) {
             engine.setUpdateListener(updateListener);
+        }
+        if (cancellationCheck != null) {
+            engine.setCancellationCheck(cancellationCheck);
         }
         MCResult result = engine.run(config, sampler);
 
@@ -208,6 +214,7 @@ public class MCSRunner {
         private long                seed        = 0L;
         private double              R           = 1.0;
         private Consumer<MCSUpdate> updateListener = null;
+        private BooleanSupplier     cancellationCheck = null;
 
         private Builder() {}
 
@@ -266,6 +273,12 @@ public class MCSRunner {
         /** Optional callback for real-time MCS updates (for GUI plotting/logging). */
         public Builder updateListener(Consumer<MCSUpdate> listener) {
             this.updateListener = listener;
+            return this;
+        }
+
+        /** Optional cancellation check; if returns true, the simulation throws CancellationException. */
+        public Builder cancellationCheck(BooleanSupplier check) {
+            this.cancellationCheck = check;
             return this;
         }
 

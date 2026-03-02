@@ -27,8 +27,18 @@ import java.util.Optional;
  *   data/cluster_cache/{clusterKey}/all_cluster_data.json
  * </pre>
  *
- * <p>This replaces nothing — it supplements {@link ClusterDataCache} which
- * persists only the MCS-relevant {@link ClusCoordListResult}.</p>
+ * <p>This is the <b>single source of truth</b> for all cluster topology data.
+ * Both CVM and MCS load from this cache:</p>
+ * <ul>
+ *   <li><b>CVM</b>: Uses the full {@link AllClusterData} (all three stages)</li>
+ *   <li><b>MCS</b>: Extracts {@code stage1.getDisClusterData()} for the
+ *       {@link ClusCoordListResult} needed by the Monte Carlo engine</li>
+ * </ul>
+ *
+ * <p>Writing both MCS and CVM data atomically in a single file eliminates the
+ * risk of cache inconsistency that existed when they were stored separately.</p>
+ *
+ * @see AllClusterData
  */
 public final class AllClusterDataCache {
 
@@ -240,6 +250,9 @@ public final class AllClusterDataCache {
         }
         obj.put("wcv", wcvOuter);
 
+        // cfBasisIndices: int[][]
+        obj.put("cfBasisIndices", ClusterDataSerializer.int2DToJson(s3.getCfBasisIndices()));
+
         return obj;
     }
 
@@ -269,7 +282,10 @@ public final class AllClusterDataCache {
             wcv.add(row);
         }
 
-        return new CMatrixResult(cmat, lcv, wcv);
+        // cfBasisIndices
+        int[][] cfBasisIndices = ClusterDataSerializer.jsonToInt2D(obj.getJSONArray("cfBasisIndices"));
+
+        return new CMatrixResult(cmat, lcv, wcv, cfBasisIndices);
     }
 
     // =========================================================================

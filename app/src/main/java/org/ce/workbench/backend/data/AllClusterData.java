@@ -1,6 +1,5 @@
 package org.ce.workbench.backend.data;
 
-import org.ce.core.CVMResult;
 import org.ce.cvm.CMatrixResult;
 import org.ce.identification.cluster.ClusterIdentificationResult;
 import org.ce.identification.cf.CFIdentificationResult;

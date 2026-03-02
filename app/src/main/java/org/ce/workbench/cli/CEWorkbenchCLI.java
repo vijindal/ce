@@ -1,12 +1,20 @@
 package org.ce.workbench.cli;
 
+import org.ce.workbench.backend.dto.CVMCalculationRequest;
+import org.ce.workbench.backend.dto.CalculationResult;
+import org.ce.workbench.backend.dto.MCSCalculationRequest;
 import org.ce.workbench.backend.job.BackgroundJobManager;
+import org.ce.workbench.backend.registry.ResultRepository;
 import org.ce.workbench.backend.registry.SystemRegistry;
 import org.ce.workbench.backend.job.BackgroundJob;
 import org.ce.workbench.backend.job.CFIdentificationJob;
 import org.ce.workbench.backend.job.JobListener;
+import org.ce.workbench.backend.service.CalculationService;
 import org.ce.workbench.gui.model.CalculationConfig;
-import org.ce.workbench.gui.model.SystemInfo;
+import org.ce.workbench.model.SystemIdentity;
+import org.ce.workbench.model.SystemStatus;
+import org.ce.workbench.util.context.CVMCalculationContext;
+import org.ce.workbench.util.context.MCSCalculationContext;
 
 import java.nio.file.Paths;
 import java.util.Scanner;
@@ -18,12 +26,14 @@ import java.util.Scanner;
 public class CEWorkbenchCLI {
     
     private final SystemRegistry registry;
+    private final ResultRepository resultRepository;
     private final BackgroundJobManager jobManager;
     private final Scanner scanner;
     
     public CEWorkbenchCLI() throws Exception {
         String userHome = System.getProperty("user.home");
         this.registry = new SystemRegistry(Paths.get(userHome));
+        this.resultRepository = new ResultRepository(Paths.get(userHome).resolve(".ce-workbench"));
         this.jobManager = new BackgroundJobManager(2);
         this.scanner = new Scanner(System.in);
     }
@@ -119,7 +129,14 @@ public class CEWorkbenchCLI {
             components[i] = scanner.nextLine().trim();
         }
         
-        SystemInfo system = new SystemInfo(id, name, structure, phase, model, components);
+        SystemIdentity system = SystemIdentity.builder()
+            .id(id)
+            .name(name)
+            .structure(structure)
+            .phase(phase)
+            .model(model)
+            .components(components)
+            .build();
         registry.registerSystem(system);
         
         System.out.println("✓ System registered successfully!");
@@ -139,15 +156,16 @@ public class CEWorkbenchCLI {
             "Name", "Structure", "Phase", "Components", "Status"));
         System.out.println(new String(new char[80]).replace('\0', '─'));
         
-        for (SystemInfo system : systems) {
-            String status = (system.isClustersComputed() ? "✓" : "✗") + " Clusters | " +
-                          (system.isCfsComputed() ? "✓" : "✗") + " CFs";
+        for (SystemIdentity system : systems) {
+            SystemStatus status = registry.getStatus(system.getId());
+            String statusStr = (status != null && status.isClustersComputed() ? "✓" : "✗") + " Clusters | " +
+                          (status != null && status.isCfsComputed() ? "✓" : "✗") + " CFs";
             System.out.println(String.format("%-20s %-15s %-10s %-10d %-20s",
                 system.getName(),
                 system.getStructure(),
                 system.getPhase(),
                 system.getNumComponents(),
-                status));
+                statusStr));
         }
     }
     
@@ -174,7 +192,7 @@ public class CEWorkbenchCLI {
                 return;
             }
             
-            SystemInfo system = systemList.get(choice);
+            SystemIdentity system = systemList.get(choice);
             
             System.out.println("\nCalculation Type:");
             System.out.println("1. Cluster Identification (Stage 1)");
@@ -223,7 +241,7 @@ public class CEWorkbenchCLI {
     }
     
     private void setupCalculation() {
-        System.out.println("\n=== MCS/CVM Calculation Setup ===");
+        System.out.println("\n=== MCS/CVM Calculation ===" );
         
         var systems = registry.getAllSystems();
         if (systems.isEmpty()) {
@@ -234,7 +252,10 @@ public class CEWorkbenchCLI {
         System.out.println("Available Systems:");
         var systemList = systems.stream().toList();
         for (int i = 0; i < systemList.size(); i++) {
-            System.out.println((i + 1) + ". " + systemList.get(i));
+            SystemIdentity sys = systemList.get(i);
+            SystemStatus status = registry.getStatus(sys.getId());
+            String statusStr = (status != null && status.isClustersComputed() ? "✓" : "✗") + " clusters";
+            System.out.println((i + 1) + ". " + sys.getName() + " [" + statusStr + "]");
         }
         
         System.out.print("Select system: ");
@@ -242,7 +263,7 @@ public class CEWorkbenchCLI {
             int idx = Integer.parseInt(scanner.nextLine().trim()) - 1;
             if (idx < 0 || idx >= systemList.size()) return;
             
-            SystemInfo system = systemList.get(idx);
+            SystemIdentity system = systemList.get(idx);
             
             System.out.println("\nCalculation Type:");
             System.out.println("1. Monte Carlo Simulation (MCS)");
@@ -250,29 +271,138 @@ public class CEWorkbenchCLI {
             System.out.print("Select: ");
             
             String typeChoice = scanner.nextLine().trim();
-            CalculationConfig.CalculationType type = "1".equals(typeChoice) ?
-                CalculationConfig.CalculationType.MCS :
-                CalculationConfig.CalculationType.CVM;
+            boolean isMCS = "1".equals(typeChoice);
             
-            CalculationConfig config = new CalculationConfig(type, system);
-            
-            System.out.print("Temperature (K) [default 1000]: ");
+            // Get common parameters
+            System.out.print("Temperature (K) [default 800]: ");
+            double temperature = 800.0;
             try {
-                double temp = Double.parseDouble(scanner.nextLine().trim());
-                config.setTemperature(temp);
+                String input = scanner.nextLine().trim();
+                if (!input.isEmpty()) {
+                    temperature = Double.parseDouble(input);
+                }
             } catch (NumberFormatException e) {
                 // Use default
             }
             
-            System.out.println("\n✓ Configuration prepared:");
-            System.out.println("  System: " + system.getName());
-            System.out.println("  Type: " + type.getDisplayName());
-            System.out.println("  Temperature: " + config.getTemperature() + " K");
-            System.out.println("\n[Ready to execute - GUI will handle this]");
+            System.out.print("Composition (0-1) [default 0.5]: ");
+            double composition = 0.5;
+            try {
+                String input = scanner.nextLine().trim();
+                if (!input.isEmpty()) {
+                    composition = Double.parseDouble(input);
+                }
+            } catch (NumberFormatException e) {
+                // Use default
+            }
+            
+            // Create service with console listener
+            ConsoleProgressListener listener = new ConsoleProgressListener();
+            CalculationService calcService = new CalculationService(registry, listener);
+            
+            if (isMCS) {
+                runMCSCalculation(system, temperature, composition, calcService);
+            } else {
+                runCVMCalculation(system, temperature, composition, calcService);
+            }
             
         } catch (NumberFormatException e) {
             System.out.println("Invalid input.");
         }
+    }
+    
+    private void runMCSCalculation(SystemIdentity system, double temperature, 
+                                   double composition, CalculationService calcService) {
+        // Get MCS-specific parameters
+        System.out.print("Supercell size (L) [default 4]: ");
+        int supercellSize = 4;
+        try {
+            String input = scanner.nextLine().trim();
+            if (!input.isEmpty()) supercellSize = Integer.parseInt(input);
+        } catch (NumberFormatException e) { /* use default */ }
+        
+        System.out.print("Equilibration steps [default 5000]: ");
+        int equilibration = 5000;
+        try {
+            String input = scanner.nextLine().trim();
+            if (!input.isEmpty()) equilibration = Integer.parseInt(input);
+        } catch (NumberFormatException e) { /* use default */ }
+        
+        System.out.print("Averaging steps [default 10000]: ");
+        int averaging = 10000;
+        try {
+            String input = scanner.nextLine().trim();
+            if (!input.isEmpty()) averaging = Integer.parseInt(input);
+        } catch (NumberFormatException e) { /* use default */ }
+        
+        // Build request
+        MCSCalculationRequest request;
+        try {
+            request = MCSCalculationRequest.builder()
+                .systemId(system.getId())
+                .temperature(temperature)
+                .composition(composition)
+                .supercellSize(supercellSize)
+                .equilibrationSteps(equilibration)
+                .averagingSteps(averaging)
+                .build();
+        } catch (IllegalArgumentException ex) {
+            System.out.println("✗ Invalid parameters: " + ex.getMessage());
+            return;
+        }
+        
+        System.out.println("\n" + "=".repeat(60));
+        System.out.println("Starting MCS Calculation");
+        System.out.println("=".repeat(60));
+        
+        // Prepare and execute
+        CalculationResult<MCSCalculationContext> result = calcService.prepareMCS(request);
+        
+        if (result.isFailure()) {
+            System.out.println("\n✗ Preparation failed: " + result.getErrorMessage().orElse("Unknown error"));
+            return;
+        }
+        
+        calcService.executeMCS(result.getContextOrThrow());
+    }
+    
+    private void runCVMCalculation(SystemIdentity system, double temperature, 
+                                   double composition, CalculationService calcService) {
+        // Get CVM-specific parameters
+        System.out.print("Tolerance [default 1e-6]: ");
+        double tolerance = 1e-6;
+        try {
+            String input = scanner.nextLine().trim();
+            if (!input.isEmpty()) tolerance = Double.parseDouble(input);
+        } catch (NumberFormatException e) { /* use default */ }
+        
+        // Build request
+        CVMCalculationRequest request;
+        try {
+            request = CVMCalculationRequest.builder()
+                .systemId(system.getId())
+                .temperature(temperature)
+                .composition(composition)
+                .tolerance(tolerance)
+                .build();
+        } catch (IllegalArgumentException ex) {
+            System.out.println("✗ Invalid parameters: " + ex.getMessage());
+            return;
+        }
+        
+        System.out.println("\n" + "=".repeat(60));
+        System.out.println("Starting CVM Calculation");
+        System.out.println("=".repeat(60));
+        
+        // Prepare and execute
+        CalculationResult<CVMCalculationContext> result = calcService.prepareCVM(request);
+        
+        if (result.isFailure()) {
+            System.out.println("\n✗ Preparation failed: " + result.getErrorMessage().orElse("Unknown error"));
+            return;
+        }
+        
+        calcService.executeCVM(result.getContextOrThrow());
     }
     
     private void showStats() {
@@ -281,7 +411,7 @@ public class CEWorkbenchCLI {
         var stats = registry.getStats();
         
         System.out.println("Registered Systems: " + stats.systemCount);
-        System.out.println("Total Results Stored: " + stats.resultCount);
+        System.out.println("Total Results Stored: " + resultRepository.count());
         System.out.println("Workspace Size: " + formatBytes(stats.usedSpace) + " / " + 
                           formatBytes(stats.totalSpace));
         
@@ -293,6 +423,7 @@ public class CEWorkbenchCLI {
     private void shutdown() {
         System.out.println("\nShutting down...");
         jobManager.shutdown();
+        registry.shutdown();
         System.out.println("Goodbye!");
     }
     

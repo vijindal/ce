@@ -16,7 +16,7 @@ import java.util.List;
  *
  * <p>This class bridges the workbench context layer and the core CVM
  * solver. It extracts all necessary arrays from the context and delegates
- * to {@link NewtonRaphsonSolver}.</p>
+ * to {@link NewtonRaphsonSolverSimple}.</p>
  *
  * <h2>Usage</h2>
  * <pre>{@code
@@ -62,14 +62,16 @@ public final class CVMEngine {
 
         double[] eci         = context.getECI();
         double temperature   = context.getTemperature();
-        double[] moleFractions = context.getMoleFractions();
+        // Convert binary composition to mole fractions: [composition, 1.0 - composition]
+        double composition   = context.getComposition();
+        double[] moleFractions = {composition, 1.0 - composition};
         int numElements      = allData.getNumComponents();
         double tolerance     = context.getTolerance();
         int[][] lcf          = stage2.getLcf();
         int[][] cfBasisIndices = stage3.getCfBasisIndices();
 
-        // Run Newton-Raphson solver
-        return NewtonRaphsonSolver.solve(
+        // Run Newton-Raphson solver (simple version based on proven working code)
+        return NewtonRaphsonSolverSimple.solve(
                 moleFractions, numElements,
                 temperature, eci,
                 mhdis, kb, mh, lc,

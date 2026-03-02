@@ -65,9 +65,13 @@ CVMConfiguration config = CVMConfiguration.builder()
     .numComponents(2)
     .build();
 
-// Run the two-stage identification pipeline
-CVMResult result = CVMPipeline.identify(config);
-result.printDebug();
+// Run the three-stage identification pipeline (Stages 1-3 in one call)
+AllClusterData allData = CVMPipeline.identify(config);
+
+// Access results
+ClusterIdentificationResult stage1 = allData.getStage1();
+CFIdentificationResult stage2 = allData.getStage2();
+CMatrixResult stage3 = allData.getStage3();
 ```
 
 ---
@@ -188,11 +192,11 @@ org.ce.input
  │                      │    │                                  │
  │  Stage 3: C-Matrix   │    │  EmbeddingGenerator              │
  │  Stage 4: F = H − TS │    │  EmbeddingData  (supercell)      │
- │  Stage 5: NIM solver │    │  LatticeConfig  [planned]        │
- │  [planned]           │    │  MCEngine       [planned]        │
- └──────────┬───────────┘    │  MCSampler      [planned]        │
-            │  CVMEngineResult└────────────────┬────────────────┘
-            │  { u[], F, Hmix }               │  MCResult
+ │  Stage 5: NIM solver │    │  LatticeConfig                   │
+ │                      │    │  MCEngine                        │
+ └──────────┬───────────┘    │  MCSampler                       │
+            │  CVMSolverResult└────────────────┬────────────────┘
+            │  { u[], G, H, S }               │  MCResult
             └──────────────┬──────────────────┘
                            ▼
                     org.ce.app   (RunHybrid, comparison)
@@ -303,9 +307,9 @@ Entry points, pipeline API, and examples.
 
 | Class | Role |
 |---|---|
-| `CVMPipeline` | Single-call orchestrator: `CVMPipeline.identify(config)` |
+| `CVMPipeline` | Single-call orchestrator: `CVMPipeline.identify(config)` returns `AllClusterData` |
 | `CVMConfiguration` | Builder for all pipeline inputs |
-| `CVMResult` | Unified wrapper for Stage 1 + Stage 2 results |
+| `AllClusterData` | Unified wrapper for Stages 1-3 results (clusters, CFs, C-matrix) |
 | `CVMPipelineRunner` | Integration test with Nij, KB, and lcf validation |
 | `Main` | Demo: A2 binary identification pipeline |
 | `examples/SimpleDemo` | Minimal A2 binary example |

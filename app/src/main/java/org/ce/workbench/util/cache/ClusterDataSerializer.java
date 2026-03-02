@@ -15,8 +15,7 @@ import java.util.List;
 
 /**
  * Centralised JSON serialization / deserialization for cluster-related domain
- * objects.  Used by both {@link ClusterDataCache} (MCS-only cache) and
- * {@link AllClusterDataCache} (full CVM cache).
+ * objects.  Used by {@link AllClusterDataCache} for persisting cluster data.
  *
  * <p>All methods are stateless and thread-safe.</p>
  */

@@ -1,56 +1,38 @@
 package org.ce.workbench.util.context;
 
 import org.ce.workbench.backend.data.AllClusterData;
-import org.ce.workbench.gui.model.SystemInfo;
+import org.ce.workbench.model.SystemIdentity;
 
 /**
  * Context holder for a CVM free-energy calculation.
  *
- * <p>Contains all required data: the pre-computed {@link AllClusterData}
- * (Stages 1–3), ECI values, temperature, and composition.  An instance is
- * considered <em>ready</em> once both {@code allClusterData} and {@code eci}
- * have been set and their dimensions are consistent.</p>
+ * <p>Extends {@link AbstractCalculationContext} with CVM-specific parameters:
+ * tolerance and the pre-computed {@link AllClusterData} (Stages 1–3).</p>
  */
-public class CVMCalculationContext {
+public class CVMCalculationContext extends AbstractCalculationContext {
 
-    private final SystemInfo system;
-    private final double temperature;
-    private final double composition;
     private final double tolerance;
 
     private AllClusterData allClusterData;
-    private double[] eci;
-    private boolean isReady;
-    private String readinessError;
 
     public CVMCalculationContext(
-            SystemInfo system,
+            SystemIdentity system,
             double temperature,
             double composition,
             double tolerance) {
-
-        this.system      = system;
-        this.temperature = temperature;
-        this.composition = composition;
-        this.tolerance   = tolerance;
-        this.isReady     = false;
+        super(system, temperature, composition);
+        this.tolerance = tolerance;
     }
 
     // -------------------------------------------------------------------------
-    // Accessors
+    // CVM-specific Accessors
     // -------------------------------------------------------------------------
 
-    public SystemInfo      getSystem()         { return system; }
-    public double          getTemperature()    { return temperature; }
-    public double          getComposition()    { return composition; }
-    public double          getTolerance()      { return tolerance; }
-    public AllClusterData  getAllClusterData()  { return allClusterData; }
-    public double[]        getECI()            { return eci; }
-    public boolean         isReady()           { return isReady; }
-    public String          getReadinessError() { return readinessError; }
+    public double getTolerance() { return tolerance; }
+    public AllClusterData getAllClusterData() { return allClusterData; }
 
     // -------------------------------------------------------------------------
-    // Setters (trigger validation)
+    // CVM-specific Setter
     // -------------------------------------------------------------------------
 
     public void setAllClusterData(AllClusterData data) {
@@ -58,16 +40,12 @@ public class CVMCalculationContext {
         validateReadiness();
     }
 
-    public void setECI(double[] eci) {
-        this.eci = eci;
-        validateReadiness();
-    }
-
     // -------------------------------------------------------------------------
-    // Validation
+    // Abstract Method Implementations
     // -------------------------------------------------------------------------
 
-    private void validateReadiness() {
+    @Override
+    protected void validateReadiness() {
         if (allClusterData == null || eci == null) return;
 
         if (!allClusterData.isComplete()) {
@@ -77,39 +55,33 @@ public class CVMCalculationContext {
             return;
         }
 
-        // ECI count must match the total ordered cluster-type count (tc) from Stage 1
-        int requiredLength = allClusterData.getStage1().getTc();
-        if (eci.length != requiredLength) {
-            this.isReady = false;
-            this.readinessError =
-                    "ECI length (" + eci.length + ") ≠ cluster type count ("
-                    + requiredLength + ") for " + system.getName();
-            return;
+        if (validateECICount()) {
+            this.isReady = true;
+            this.readinessError = null;
         }
-
-        this.isReady = true;
-        this.readinessError = null;
     }
 
-    // -------------------------------------------------------------------------
-    // Summary
-    // -------------------------------------------------------------------------
+    @Override
+    protected int getClusterTypeCount() {
+        return (allClusterData != null && allClusterData.getStage1() != null)
+                ? allClusterData.getStage1().getTc()
+                : 0;
+    }
 
-    public String getSummary() {
+    @Override
+    protected String getMethodName() {
+        return "CVM";
+    }
+
+    @Override
+    protected String getMethodSpecificSummary() {
         StringBuilder sb = new StringBuilder();
-        sb.append("System: ").append(system.getName()).append("\n");
-        sb.append("Temperature: ").append(temperature).append(" K\n");
-        sb.append("Composition: ").append(composition).append("\n");
         sb.append("Tolerance: ").append(tolerance).append("\n");
-        sb.append("AllClusterData: ")
-          .append(allClusterData == null ? "NOT LOADED" : allClusterData)
-          .append("\n");
-        sb.append("ECI: ")
-          .append(eci == null ? "NOT LOADED" : eci.length + " values")
-          .append("\n");
-        sb.append("Ready: ").append(isReady);
-        if (!isReady && readinessError != null) {
-            sb.append("  (").append(readinessError).append(")");
+        sb.append("AllClusterData: ");
+        if (allClusterData == null) {
+            sb.append("NOT LOADED\n");
+        } else {
+            sb.append(allClusterData).append("\n");
         }
         return sb.toString();
     }

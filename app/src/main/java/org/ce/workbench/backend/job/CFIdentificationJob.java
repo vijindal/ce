@@ -2,36 +2,32 @@ package org.ce.workbench.backend.job;
 
 import org.ce.core.CVMConfiguration;
 import org.ce.core.CVMPipeline;
-import org.ce.core.CVMResult;
-import org.ce.cvm.CMatrixBuilder;
 import org.ce.cvm.CMatrixResult;
-import org.ce.identification.geometry.Cluster;
-import org.ce.input.InputLoader;
 import org.ce.workbench.backend.data.AllClusterData;
-import org.ce.workbench.gui.model.SystemInfo;
+import org.ce.workbench.backend.registry.SystemRegistry;
+import org.ce.workbench.model.SystemIdentity;
 import org.ce.workbench.util.cache.AllClusterDataCache;
-import org.ce.workbench.util.cache.ClusterDataCache;
 import org.ce.identification.geometry.Vector3D;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
- * Background job for correlation function (CF) identification and C-matrix construction.
+ * Background job for the complete CVM identification pipeline.
  * 
- * <p>Executes the three-stage identification pipeline:</p>
+ * <p>Executes all three stages in a single call to {@link CVMPipeline#identify}:</p>
  * <ul>
- *   <li><b>Stage 1</b>: Cluster identification (via {@link CVMPipeline#identify})</li>
- *   <li><b>Stage 2</b>: CF identification (via {@link CVMPipeline#identify})</li>
- *   <li><b>Stage 3</b>: C-matrix construction (via {@link CMatrixBuilder#build})</li>
+ *   <li><b>Stage 1</b>: Cluster identification</li>
+ *   <li><b>Stage 2</b>: CF identification</li>
+ *   <li><b>Stage 3</b>: C-matrix construction</li>
  * </ul>
  * 
- * <p>All three stages are required for a complete cluster data set ready for CVM calculations.</p>
+ * <p>Supports cooperative pause and cancellation via {@code checkPausePoint()} and
+ * {@code shouldStop()} at each progress checkpoint.</p>
+ *
+ * <p>All stages are bundled in the returned {@link AllClusterData}, ready for CVM calculations.</p>
  */
 public class CFIdentificationJob extends AbstractBackgroundJob {
     
-    private CVMResult result;
-    private CMatrixResult cmatrixResult;
     private AllClusterData allData;
     private final String clusterKey;
     private final String disorderedClusterFile;
@@ -41,9 +37,11 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
     private final double[][] transformationMatrix;
     private final Vector3D translationVector;
     private final int numComponents;
+    private final SystemRegistry registry;  // For thread-safe status updates
     
     public CFIdentificationJob(
-            SystemInfo system,
+            SystemIdentity system,
+            SystemRegistry registry,
             String clusterKey,
             String disorderedClusterFile,
             String orderedClusterFile,
@@ -59,6 +57,7 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
             system
         );
         
+        this.registry = registry;
         this.clusterKey = clusterKey;
         this.disorderedClusterFile = disorderedClusterFile;
         this.orderedClusterFile = orderedClusterFile;
@@ -71,16 +70,14 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
     
     @Override
     public void run() {
-        long startTime = System.currentTimeMillis();
-        
-        if (cancelled) return;
+        if (shouldStop()) return;
         
         try {
             running = true;
             setStatusMessage("Building CVM configuration...");
             setProgress(10);
             
-            if (cancelled) return;
+            if (shouldStop()) return;
             
             // Build configuration
             CVMConfiguration config = CVMConfiguration.builder()
@@ -95,75 +92,59 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
             
             setProgress(20);
             
-            if (cancelled) return;
+            if (shouldStop()) return;
             
-            setStatusMessage("Stage 1-2: Cluster and CF identification...");
+            setStatusMessage("Running identification pipeline (Stages 1-3)...");
             setProgress(30);
             
-            if (cancelled) return;
+            if (shouldStop()) return;
             
-            // ===== Stages 1-2: Run CVM pipeline (cluster + CF identification) =====
-            this.result = CVMPipeline.identify(config);
-            setProgress(70);
+            // ===== Run complete pipeline: Stages 1-3 in one call =====
+            // No duplicate file parsing - all done inside CVMPipeline.identify()
+            this.allData = CVMPipeline.identify(config);
             
-            if (cancelled) return;
-            
-            setStatusMessage("Stage 3: Constructing C-matrix...");
-            setProgress(75);
-            
-            if (cancelled) return;
-            
-            // ===== Stage 3: Build C-matrix =====
-            // Load ordered cluster data for C-matrix construction
-            List<Cluster> ordMaxClus = InputLoader.parseClusterFile(orderedClusterFile);
-            
-            this.cmatrixResult = CMatrixBuilder.build(
-                result.getClusterIdentification(),
-                result.getCorrelationFunctionIdentification(),
-                ordMaxClus,
-                numComponents
+            // Update with system ID (not available to CVMPipeline)
+            this.allData = new AllClusterData(
+                system.getId(),
+                numComponents,
+                allData.getStage1(),
+                allData.getStage2(),
+                allData.getStage3(),
+                allData.getComputationTimeMs()
             );
             
             setProgress(90);
             
-            if (cancelled) return;
-            
-            // ===== Bundle all results =====
-            long computationTime = System.currentTimeMillis() - startTime;
-            this.allData = new AllClusterData(
-                system.getId(),
-                numComponents,
-                result.getClusterIdentification(),
-                result.getCorrelationFunctionIdentification(),
-                cmatrixResult,
-                computationTime
-            );
+            if (shouldStop()) return;
             
             setStatusMessage("Finalizing cluster data...");
             setProgress(95);
             
-            if (cancelled) return;
+            if (shouldStop()) return;
             
-            // ===== Persist computed data =====
+            // ===== Persist computed data atomically =====
+            boolean persistSuccess = false;
             if (clusterKey != null && !clusterKey.isEmpty()) {
                 try {
-                    // Save full AllClusterData (for CVM)
+                    // Save AllClusterData - the single source of truth for both CVM and MCS.
+                    // MCS extracts ClusCoordListResult via stage1.getDisClusterData().
                     AllClusterDataCache.save(allData, clusterKey);
                     System.out.println("[CFIdentificationJob] AllClusterData saved to key: " + clusterKey);
-
-                    // Also save the ClusCoordListResult (for MCS)
-                    var disClus = result.getClusterIdentification().getDisClusterData();
-                    ClusterDataCache.saveClusterData(disClus, clusterKey);
-                    System.out.println("[CFIdentificationJob] ClusCoordListResult saved to key: " + clusterKey);
+                    persistSuccess = true;
                 } catch (Exception saveEx) {
-                    System.err.println("[CFIdentificationJob] WARNING: save failed: " + saveEx.getMessage());
+                    System.err.println("[CFIdentificationJob] WARNING: cache save failed: " + saveEx.getMessage());
                     saveEx.printStackTrace();
-                    // Don't fail the job for a save error — data is still in memory
+                    // Data is still in memory, but cfsComputed won't be set
                 }
+            } else {
+                // No clusterKey - data is only in memory
+                persistSuccess = true;
             }
             
-            // Update system info
-            system.setCfsComputed(true);
+            // Only mark CFs computed if persistence succeeded (or no persistence was needed)
+            if (persistSuccess && registry != null) {
+                registry.markCfsComputed(system.getId(), true);
+            }
             setProgress(100);
             setStatusMessage("All identification stages completed");
             
@@ -183,15 +164,6 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
     public String getClusterKey() {
         return clusterKey;
     }
-
-    /**
-     * Returns the CVMResult from Stages 1-2 (cluster and CF identification).
-     *
-     * @return CVMResult; {@code null} if job failed or not yet completed
-     */
-    public CVMResult getResult() {
-        return result;
-    }
     
     /**
      * Returns the CMatrixResult from Stage 3 (C-matrix construction).
@@ -199,7 +171,7 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
      * @return CMatrixResult; {@code null} if job failed or not yet completed
      */
     public CMatrixResult getCMatrixResult() {
-        return cmatrixResult;
+        return (allData != null) ? allData.getStage3() : null;
     }
     
     /**

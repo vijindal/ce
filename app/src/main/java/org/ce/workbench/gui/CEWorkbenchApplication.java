@@ -9,6 +9,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.ce.workbench.backend.job.BackgroundJobManager;
+import org.ce.workbench.backend.registry.ResultRepository;
 import org.ce.workbench.backend.registry.SystemRegistry;
 import org.ce.workbench.gui.view.CalculationSetupPanel;
 import org.ce.workbench.gui.view.SystemRegistryPanel;
@@ -23,6 +24,7 @@ import java.nio.file.Paths;
 public class CEWorkbenchApplication extends Application {
     
     private SystemRegistry systemRegistry;
+    private ResultRepository resultRepository;
     private BackgroundJobManager jobManager;
     private SystemRegistryPanel registryPanel;
     private ResultsPanel resultsPanel;
@@ -61,6 +63,7 @@ public class CEWorkbenchApplication extends Application {
         // Initialize registry with workspace directory
         String userHome = System.getProperty("user.home");
         systemRegistry = new SystemRegistry(Paths.get(userHome));
+        resultRepository = new ResultRepository(Paths.get(userHome).resolve(".ce-workbench"));
         
         // Initialize job manager with 2 concurrent jobs
         jobManager = new BackgroundJobManager(2);
@@ -173,6 +176,9 @@ public class CEWorkbenchApplication extends Application {
     public void stop() throws Exception {
         if (jobManager != null) {
             jobManager.shutdown();
+        }
+        if (systemRegistry != null) {
+            systemRegistry.shutdown();
         }
         super.stop();
     }

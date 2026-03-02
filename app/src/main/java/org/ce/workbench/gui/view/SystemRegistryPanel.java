@@ -9,15 +9,13 @@ import javafx.scene.layout.Priority;
 import org.ce.workbench.backend.job.BackgroundJobManager;
 import org.ce.workbench.backend.registry.SystemRegistry;
 import org.ce.workbench.backend.job.BackgroundJob;
-import org.ce.workbench.gui.model.SystemInfo;
+import org.ce.workbench.model.SystemIdentity;
 import org.ce.workbench.backend.data.SystemDataLoader;
 import org.ce.identification.geometry.Vector3D;
 import org.ce.workbench.backend.job.CFIdentificationJob;
 import org.ce.workbench.util.mcs.StructureModelMapping;
-import org.ce.workbench.util.cache.ClusterDataCache;
 import org.ce.workbench.util.cache.AllClusterDataCache;
 import org.ce.workbench.util.key.KeyUtils;
-import org.ce.identification.result.ClusCoordListResult;
 
 import java.util.Collection;
 import java.util.Optional;
@@ -31,6 +29,9 @@ public class SystemRegistryPanel extends VBox {
     private final SystemRegistry registry;
     private final BackgroundJobManager jobManager;
     private final ResultsPanel resultsPanel;
+    
+    // Calculation setup panel - updated when system is selected
+    private CalculationSetupPanel calcSetupPanel;
     
     // Cache identification input to avoid asking twice
     private IdentificationInput cachedIdentificationInput;
@@ -122,7 +123,7 @@ public class SystemRegistryPanel extends VBox {
         formScroll.setContent(grid);
         
         // Add calculation setup section
-        CalculationSetupPanel calcSetupPanel = new CalculationSetupPanel(registry, jobManager, resultsPanel);
+        calcSetupPanel = new CalculationSetupPanel(registry, jobManager, resultsPanel);
         
         vbox.getChildren().addAll(titleLabel, formScroll, new Separator(), calcSetupPanel);
         VBox.setVgrow(formScroll, Priority.SOMETIMES);
@@ -157,7 +158,7 @@ public class SystemRegistryPanel extends VBox {
             String componentSuffix = KeyUtils.componentSuffix(numComponents);
 
             // systemId: uniquely identifies this system instance (element + model)
-            String systemId = SystemInfo.generateSystemId(elements, structure, phase, model);
+            String systemId = SystemIdentity.generateSystemId(elements, structure, phase, model);
             // cecKey: element + model — one CEC file per alloy+model combination
             String cecKey = KeyUtils.cecKey(elements, structure, phase, model);
             // clusterKey: component-count + model — shared across all alloys with same topology
@@ -168,7 +169,7 @@ public class SystemRegistryPanel extends VBox {
             logResult("  Structure     : " + structure + "  Phase: " + phase + "  Model: " + model);
             logResult("  systemId      : " + systemId);
             logResult("  CEC key       : " + cecKey + "  → /data/systems/" + cecKey + "/cec.json");
-            logResult("  Cluster key   : " + clusterKey + "  → data/cluster_cache/" + clusterKey + "/cluster_result.json");
+            logResult("  Cluster key   : " + clusterKey + "  → data/cluster_cache/" + clusterKey + "/all_cluster_data.json");
 
             // Resolve mapping
             String resolvedSymmetryGroup;
@@ -197,7 +198,7 @@ public class SystemRegistryPanel extends VBox {
 
             // --- (ii) Cluster data check — component-count + model specific ---
             logResult("  Checking cluster cache: " + clusterKey + " ...");
-            boolean clusterDataExists = ClusterDataCache.clusterDataExists(clusterKey);
+            boolean clusterDataExists = AllClusterDataCache.exists(clusterKey);
             logResult("  Cluster data (" + clusterKey + "): " + (clusterDataExists
                     ? "✓ found in cache" : "⚠ not in cache — identification pipeline needed"));
             
@@ -218,13 +219,21 @@ public class SystemRegistryPanel extends VBox {
                 logResult("\n→ Starting identification pipeline  clusterKey=" + clusterKey);
 
                 String systemName = elements + " " + structure + " " + phase + " (" + model + ")";
-                SystemInfo system = new SystemInfo(systemId, systemName, structure, phase, model, componentArray);
-                system.setCecAvailable(cecAvailable);
-                system.setClustersComputed(false);
-                system.setCfsComputed(false);
-                system.setClusterFilePath(resolvedClusterFile);
-                system.setSymmetryGroupName(resolvedSymmetryGroup);
+                SystemIdentity system = SystemIdentity.builder()
+                    .id(systemId)
+                    .name(systemName)
+                    .structure(structure)
+                    .phase(phase)
+                    .model(model)
+                    .components(componentArray)
+                    .clusterFilePath(resolvedClusterFile)
+                    .symmetryGroupName(resolvedSymmetryGroup)
+                    .build();
                 registry.registerSystem(system);
+                registry.markCecAvailable(systemId, cecAvailable);
+                registry.markClustersComputed(systemId, false);
+                registry.markCfsComputed(systemId, false);
+                calcSetupPanel.setSelectedSystem(system);
                 logResult("  System registered: " + systemId);
 
                 logResult("  Running CF identification (includes stages 1-3)...");
@@ -236,13 +245,21 @@ public class SystemRegistryPanel extends VBox {
                 logResult("\n✓ Cluster cache hit (" + clusterKey + ") — no identification needed.");
 
                 String systemName = elements + " " + structure + " " + phase + " (" + model + ")";
-                SystemInfo system = new SystemInfo(systemId, systemName, structure, phase, model, componentArray);
-                system.setCecAvailable(cecAvailable);
-                system.setClustersComputed(true);
-                system.setCfsComputed(true);
-                system.setClusterFilePath(resolvedClusterFile);
-                system.setSymmetryGroupName(resolvedSymmetryGroup);
+                SystemIdentity system = SystemIdentity.builder()
+                    .id(systemId)
+                    .name(systemName)
+                    .structure(structure)
+                    .phase(phase)
+                    .model(model)
+                    .components(componentArray)
+                    .clusterFilePath(resolvedClusterFile)
+                    .symmetryGroupName(resolvedSymmetryGroup)
+                    .build();
                 registry.registerSystem(system);
+                registry.markCecAvailable(systemId, cecAvailable);
+                registry.markClustersComputed(systemId, true);
+                registry.markCfsComputed(systemId, true);
+                calcSetupPanel.setSelectedSystem(system);
                 logResult("✓ System created: " + systemName);
                 logResult("  At MCS time → CEC loaded from key: " + cecKey);
                 logResult("  At MCS time → cluster data loaded from key: " + clusterKey);
@@ -306,17 +323,15 @@ public class SystemRegistryPanel extends VBox {
             logResult("  Cluster Key: " + clusterKey);
             
             // Check if data already exists — warn and offer overwrite
-            boolean mcsDataExists = ClusterDataCache.clusterDataExists(clusterKey);
             boolean allDataExists = AllClusterDataCache.exists(clusterKey);
             
-            if (mcsDataExists || allDataExists) {
+            if (allDataExists) {
                 java.nio.file.Path storageDir = AllClusterDataCache.resolveDir(clusterKey);
                 
                 StringBuilder warning = new StringBuilder();
                 warning.append("Cluster data already exists for '").append(clusterKey).append("':\n\n");
                 warning.append("Folder: ").append(storageDir.toAbsolutePath()).append("\n");
-                if (allDataExists)  warning.append("  • all_cluster_data.json (CVM)\n");
-                if (mcsDataExists)  warning.append("  • cluster_result.json (MCS)\n");
+                warning.append("  • all_cluster_data.json\n");
                 warning.append("\nDo you want to overwrite the existing data?");
                 
                 logResult("  ⚠ Existing data found at: " + storageDir.toAbsolutePath());
@@ -333,17 +348,27 @@ public class SystemRegistryPanel extends VBox {
             // Create a temporary system to pre-fill the dialog
             String tempId = "temp-cluster-" + clusterKey;
             String tempName = structure + "_" + phase + "_" + model + "_" + componentSuffix;
-            SystemInfo tempSystem = new SystemInfo(
-                tempId, tempName, structure, phase, model, componentArray
-            );
+            String resolvedClusterFile = null;
+            String resolvedSymGroup = null;
             
             // Resolve default cluster file and symmetry group for dialog pre-fill
             try {
-                tempSystem.setClusterFilePath(StructureModelMapping.resolveClusterFile(structurePhase, model));
-                tempSystem.setSymmetryGroupName(StructureModelMapping.resolveSymmetryGroup(structurePhase));
+                resolvedClusterFile = StructureModelMapping.resolveClusterFile(structurePhase, model);
+                resolvedSymGroup = StructureModelMapping.resolveSymmetryGroup(structurePhase);
             } catch (IllegalArgumentException ex) {
                 // Not critical — dialog will just show empty fields
             }
+            
+            SystemIdentity tempSystem = SystemIdentity.builder()
+                .id(tempId)
+                .name(tempName)
+                .structure(structure)
+                .phase(phase)
+                .model(model)
+                .components(componentArray)
+                .clusterFilePath(resolvedClusterFile)
+                .symmetryGroupName(resolvedSymGroup)
+                .build();
             
             Optional<IdentificationInput> inputOpt = showIdentificationDialog(
                 tempSystem,
@@ -361,14 +386,24 @@ public class SystemRegistryPanel extends VBox {
             logResult("  Disordered symmetry: " + input.disorderedSymmetryGroup);
             logResult("  Ordered symmetry: " + input.orderedSymmetryGroup);
             
-            tempSystem.setClusterFilePath(input.disorderedClusterFile);
-            tempSystem.setSymmetryGroupName(input.disorderedSymmetryGroup);
+            // Rebuild tempSystem with the input values (SystemIdentity is immutable)
+            tempSystem = SystemIdentity.builder()
+                .id(tempId)
+                .name(tempName)
+                .structure(structure)
+                .phase(phase)
+                .model(model)
+                .components(componentArray)
+                .clusterFilePath(input.disorderedClusterFile)
+                .symmetryGroupName(input.disorderedSymmetryGroup)
+                .build();
             
             logResult("  Submitting cluster identification job...");
             
             // Create and submit the job
             CFIdentificationJob job = new CFIdentificationJob(
                 tempSystem,
+                registry,  // Pass registry for thread-safe status updates
                 clusterKey,
                 input.disorderedClusterFile,
                 input.orderedClusterFile,
@@ -450,7 +485,7 @@ public class SystemRegistryPanel extends VBox {
                     
                     // CF identification job completes all stages (1-3) and updates system state
                     
-                    registry.persistSystems();
+                    registry.persistIfDirty();
                     updateIdentificationProgress();
                 });
             }
@@ -470,7 +505,7 @@ public class SystemRegistryPanel extends VBox {
     
     // getComponentSuffix() removed — use KeyUtils.componentSuffix() instead
 
-    private boolean startCfIdentificationForSystem(SystemInfo system) {
+    private boolean startCfIdentificationForSystem(SystemIdentity system) {
         // Show dialog only if we don't have cached input
         if (cachedIdentificationInput == null) {
             Optional<IdentificationInput> inputOpt = showIdentificationDialog(system, "CF Identification");
@@ -492,6 +527,7 @@ public class SystemRegistryPanel extends VBox {
         String clusterKey = KeyUtils.clusterKey(system);
         CFIdentificationJob job = new CFIdentificationJob(
             system,
+            registry,  // Pass registry for thread-safe status updates
             clusterKey,
             input.disorderedClusterFile,
             input.orderedClusterFile,
@@ -531,7 +567,7 @@ public class SystemRegistryPanel extends VBox {
         return result.isPresent() && result.get() == ButtonType.OK;
     }
 
-    private Optional<IdentificationInput> showIdentificationDialog(SystemInfo system, String title) {
+    private Optional<IdentificationInput> showIdentificationDialog(SystemIdentity system, String title) {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle(title);
         dialog.setHeaderText("Provide cluster files and symmetry groups for " + system.getName());
@@ -594,7 +630,7 @@ public class SystemRegistryPanel extends VBox {
         return value == null ? "" : value;
     }
 
-    private double[][] resolveMatrix(SystemInfo system) {
+    private double[][] resolveMatrix(SystemIdentity system) {
         double[][] matrix = system.getTransformationMatrix();
         if (matrix != null && matrix.length == 3) {
             return matrix;
@@ -606,7 +642,7 @@ public class SystemRegistryPanel extends VBox {
         };
     }
 
-    private Vector3D resolveTranslation(SystemInfo system) {
+    private Vector3D resolveTranslation(SystemIdentity system) {
         double[] vector = system.getTranslationVector();
         if (vector != null && vector.length == 3) {
             return new Vector3D(vector[0], vector[1], vector[2]);

@@ -1,6 +1,6 @@
 package org.ce.workbench.backend.job;
 
-import org.ce.workbench.gui.model.SystemInfo;
+import org.ce.workbench.model.SystemIdentity;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -12,7 +12,7 @@ public abstract class AbstractBackgroundJob implements BackgroundJob {
     
     protected final String id;
     protected final String name;
-    protected final SystemInfo system;
+    protected final SystemIdentity system;
     
     protected volatile int progress = 0;
     protected volatile String statusMessage = "Initializing...";
@@ -26,7 +26,7 @@ public abstract class AbstractBackgroundJob implements BackgroundJob {
     
     protected final List<JobListener> listeners = new CopyOnWriteArrayList<>();
     
-    public AbstractBackgroundJob(String id, String name, SystemInfo system) {
+    public AbstractBackgroundJob(String id, String name, SystemIdentity system) {
         this.id = Objects.requireNonNull(id, "id");
         this.name = Objects.requireNonNull(name, "name");
         this.system = Objects.requireNonNull(system, "system");
@@ -39,7 +39,7 @@ public abstract class AbstractBackgroundJob implements BackgroundJob {
     public String getName() { return name; }
     
     @Override
-    public SystemInfo getSystem() { return system; }
+    public SystemIdentity getSystem() { return system; }
     
     @Override
     public int getProgress() { return progress; }
@@ -117,5 +117,47 @@ public abstract class AbstractBackgroundJob implements BackgroundJob {
         failed = true;
         errorMessage = error;
         listeners.forEach(l -> l.onJobFailed(id, error));
+    }
+    
+    /**
+     * Cooperative pause point for jobs to call at natural boundaries.
+     * 
+     * <p>Blocks the calling thread while the job is paused. Returns immediately
+     * if the job is cancelled (allowing cancel to interrupt a paused job).
+     * Jobs should call this at natural pause points such as:</p>
+     * <ul>
+     *   <li>After each major computation step</li>
+     *   <li>At the start/end of loops</li>
+     *   <li>In progress update callbacks</li>
+     * </ul>
+     * 
+     * <p>This method is interruptible - if the thread is interrupted while
+     * waiting, it will return and restore the interrupt status.</p>
+     */
+    protected void checkPausePoint() {
+        while (paused && !cancelled) {
+            try {
+                Thread.sleep(100); // Check every 100ms
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+    
+    /**
+     * Checks if the job should stop (either cancelled or failed).
+     * 
+     * <p>Combines pause check with cancellation check. Jobs can use this
+     * as a single check point:</p>
+     * <pre>{@code
+     * if (shouldStop()) return;
+     * }</pre>
+     * 
+     * @return true if the job should stop execution
+     */
+    protected boolean shouldStop() {
+        checkPausePoint();
+        return cancelled || failed;
     }
 }

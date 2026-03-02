@@ -4,7 +4,7 @@ import org.ce.identification.geometry.Vector3D;
 import java.util.Objects;
 
 /**
- * Configuration object for the two-stage CVM pipeline.
+ * Configuration object for the three-stage CVM pipeline.
  *
  * <p>Encapsulates all input parameters required to run the CVM identification
  * procedure: cluster files, symmetry groups, transformation matrices, and
@@ -22,14 +22,13 @@ import java.util.Objects;
  *     .numComponents(2)
  *     .build();
  *
- * CVMPipeline pipeline = new CVMPipeline();
- * CVMResult result = pipeline.identify(config);
+ * AllClusterData allData = CVMPipeline.identify(config);
  * }</pre>
  *
  * @author  CVM Project
- * @version 1.0
+ * @version 2.0
  * @see     CVMPipeline
- * @see     CVMResult
+ * @see     org.ce.workbench.backend.data.AllClusterData
  */
 public class CVMConfiguration {
 
