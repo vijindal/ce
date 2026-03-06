@@ -98,34 +98,11 @@ Panel Border Radius:   0px (maintains sharp professional look)
 
 ### MVVM Pattern
 
-#### Model (org.ce.workbench.model)
-Domain objects with no UI dependencies:
-```java
-public class SystemInfo {
-    private String elements;
-    private String structurePhase;
-    private String model;
-    private boolean hasCEC;
-    private boolean hasClusterData;
-    // Getters/setters only
-}
-```
+#### Model (`org.ce.domain.system`)
+Domain objects with no UI dependencies (for example `SystemIdentity`, `SystemStatus`).
 
-#### ViewModel (org.ce.workbench.viewmodel)
-Observable properties and commands:
-```java
-public class SystemViewModel {
-    private final ObjectProperty<SystemInfo> currentSystem = new SimpleObjectProperty<>();
-    private final StringProperty elements = new SimpleStringProperty();
-    private final BooleanProperty isIdentifying = new SimpleBooleanProperty(false);
-    
-    // Commands
-    public void identifyClusters() { ... }
-    
-    // Computed properties
-    public ReadOnlyBooleanProperty canCalculateProperty() { ... }
-}
-```
+#### ViewModel (`org.ce.presentation.gui.model`)
+UI state and user input mapping remain in the presentation layer.
 
 #### View (FXML + Controller)
 Minimal logic, binds to ViewModel:
@@ -146,31 +123,13 @@ public class SystemController {
 ### Package Structure
 
 ```
-org.ce.workbench/
-├── model/                    # Domain models
-│   ├── SystemInfo.java
-│   ├── CalculationConfig.java
-│   └── ClusterData.java
-├── viewmodel/               # ViewModels (business logic)
-│   ├── MainViewModel.java
-│   ├── SystemViewModel.java
-│   └── CalculationViewModel.java
-├── view/                    # FXML files
-│   ├── MainWindow.fxml
-│   ├── SystemPanel.fxml
-│   └── CalculationPanel.fxml
-├── controller/              # FXML Controllers (thin)
-│   ├── MainController.java
-│   └── SystemController.java
-├── component/               # Reusable components
-│   ├── StatusCard.java
-│   ├── ValidationTextField.java
-│   └── ProgressCard.java
-├── service/                 # Backend services
-│   ├── SystemRegistry.java
-│   └── BackgroundJobManager.java
-└── util/                    # Utilities
-    └── ValidationUtils.java
+org.ce.presentation.gui/      # JavaFX entry point, views, components, UI models
+org.ce.presentation.cli/      # CLI front-end
+org.ce.application.service/   # Presentation-facing orchestration service
+org.ce.application.job/       # Job abstractions and orchestration jobs
+org.ce.infrastructure.job/    # Scheduling/execution manager
+org.ce.infrastructure.registry/ # Registry and result repositories
+org.ce.domain.system/         # System identity/status domain models
 ```
 
 ---

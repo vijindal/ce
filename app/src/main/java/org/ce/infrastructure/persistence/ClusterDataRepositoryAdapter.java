@@ -1,8 +1,10 @@
 package org.ce.infrastructure.persistence;
 
 import org.ce.domain.port.ClusterDataRepository;
-import org.ce.workbench.backend.data.AllClusterData;
-import org.ce.workbench.util.cache.AllClusterDataCache;
+import org.ce.infrastructure.persistence.migration.ClusterCacheSchemaMigrator;
+import org.ce.domain.model.data.AllClusterData;
+import org.ce.infrastructure.cache.AllClusterDataCache;
+import org.json.JSONObject;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,7 +25,9 @@ import java.util.Optional;
  *
  * @since 2.0
  */
-public class ClusterDataRepositoryAdapter implements ClusterDataRepository {
+public class ClusterDataRepositoryAdapter implements ClusterDataRepository<AllClusterData> {
+
+    private static final String CACHE_FILE = "all_cluster_data.json";
 
     /**
      * Creates a new adapter instance.
@@ -34,7 +38,19 @@ public class ClusterDataRepositoryAdapter implements ClusterDataRepository {
 
     @Override
     public Optional<AllClusterData> load(String clusterKey) throws Exception {
-        return AllClusterDataCache.load(clusterKey);
+        Path file = AllClusterDataCache.resolveDir(clusterKey).resolve(CACHE_FILE);
+        if (Files.exists(file)) {
+            JSONObject root = new JSONObject(Files.readString(file));
+            boolean migrated = ClusterCacheSchemaMigrator.migrateRootInMemory(root);
+            validateJsonContract(root, clusterKey);
+            if (migrated) {
+                Files.writeString(file, root.toString(2));
+            }
+        }
+
+        Optional<AllClusterData> loaded = AllClusterDataCache.load(clusterKey);
+        loaded.ifPresent(data -> validateLoadedContract(data, clusterKey));
+        return loaded;
     }
 
     @Override
@@ -67,4 +83,39 @@ public class ClusterDataRepositoryAdapter implements ClusterDataRepository {
         
         return !Files.exists(dir);
     }
+
+    private static void validateJsonContract(JSONObject root, String clusterKey) {
+        int schemaVersion = root.optInt("schemaVersion", 0);
+        if (schemaVersion < ClusterCacheSchemaMigrator.CURRENT_SCHEMA_VERSION) {
+            throw new IllegalStateException("Cache schema version too old for key '" + clusterKey
+                    + "': " + schemaVersion);
+        }
+
+        if (!root.has("stage3")) {
+            throw new IllegalStateException("Missing stage3 in cache for key '" + clusterKey + "'");
+        }
+
+        JSONObject stage3 = root.getJSONObject("stage3");
+        require(stage3, "cmat", clusterKey);
+        require(stage3, "lcv", clusterKey);
+        require(stage3, "wcv", clusterKey);
+        require(stage3, "cfBasisIndices", clusterKey);
+    }
+
+    private static void require(JSONObject obj, String field, String clusterKey) {
+        if (!obj.has(field)) {
+            throw new IllegalStateException("Missing stage3." + field + " for cache key '" + clusterKey + "'");
+        }
+    }
+
+    private static void validateLoadedContract(AllClusterData data, String clusterKey) {
+        if (data.getStage3() == null
+                || data.getStage3().getCmat() == null
+                || data.getStage3().getLcv() == null
+                || data.getStage3().getWcv() == null
+                || data.getStage3().getCfBasisIndices() == null) {
+            throw new IllegalStateException("Invalid stage3 contract in loaded cache for key '" + clusterKey + "'");
+        }
+    }
 }
+

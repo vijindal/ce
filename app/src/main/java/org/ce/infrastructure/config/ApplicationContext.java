@@ -1,15 +1,19 @@
 package org.ce.infrastructure.config;
 
-import org.ce.application.calculation.CVMCalculationUseCase;
-import org.ce.application.calculation.MCSCalculationUseCase;
+import org.ce.application.cvm.CVMCalculationUseCase;
+import org.ce.application.mcs.MCSCalculationUseCase;
 import org.ce.application.port.CalculationProgressPort;
 import org.ce.domain.port.ClusterDataRepository;
 import org.ce.domain.port.ECIRepository;
 import org.ce.domain.port.SystemRepository;
+import org.ce.infrastructure.cvm.CVMEngineAdapter;
+import org.ce.infrastructure.mcs.MCSRunnerAdapter;
 import org.ce.infrastructure.persistence.ClusterDataRepositoryAdapter;
 import org.ce.infrastructure.persistence.ECIRepositoryAdapter;
 import org.ce.infrastructure.persistence.SystemRepositoryAdapter;
-import org.ce.workbench.backend.registry.SystemRegistry;
+import org.ce.domain.model.data.AllClusterData;
+import org.ce.infrastructure.registry.SystemRegistry;
+import org.ce.domain.system.SystemIdentity;
 
 /**
  * Application context for dependency injection and service wiring.
@@ -21,13 +25,13 @@ import org.ce.workbench.backend.registry.SystemRegistry;
  * <h2>Architecture</h2>
  * <pre>
  *                    ApplicationContext
- *                           │
- *        ┌──────────────────┼──────────────────┐
- *        ▼                  ▼                  ▼
+ *                           â”‚
+ *        â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+ *        â–¼                  â–¼                  â–¼
  *   Domain Ports      Use Cases      Infrastructure
  *   (interfaces)     (application)     (adapters)
- *        │                                   │
- *        └──────────── implements ───────────┘
+ *        â”‚                                   â”‚
+ *        â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ implements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
  * </pre>
  *
  * <h2>Usage</h2>
@@ -56,9 +60,9 @@ public final class ApplicationContext {
     // Repository adapters (created on demand, cached)
     // -------------------------------------------------------------------------
 
-    private ClusterDataRepository clusterDataRepository;
+    private ClusterDataRepository<AllClusterData> clusterDataRepository;
     private ECIRepository eciRepository;
-    private SystemRepository systemRepository;
+    private SystemRepository<SystemIdentity> systemRepository;
 
     // -------------------------------------------------------------------------
     // Construction
@@ -94,7 +98,7 @@ public final class ApplicationContext {
      *
      * <p>Note: Uses static {@link AllClusterDataCache} internally.</p>
      */
-    public ClusterDataRepository clusterDataRepository() {
+    public ClusterDataRepository<AllClusterData> clusterDataRepository() {
         if (clusterDataRepository == null) {
             clusterDataRepository = new ClusterDataRepositoryAdapter();
         }
@@ -104,7 +108,7 @@ public final class ApplicationContext {
     /**
      * Returns the ECI repository (lazy initialization).
      *
-     * <p>Note: Uses static {@link org.ce.workbench.util.eci.ECILoader} internally.</p>
+     * <p>Note: Uses static {@link org.ce.infrastructure.eci.ECILoader} internally.</p>
      */
     public ECIRepository eciRepository() {
         if (eciRepository == null) {
@@ -116,7 +120,7 @@ public final class ApplicationContext {
     /**
      * Returns the system repository (lazy initialization).
      */
-    public SystemRepository systemRepository() {
+    public SystemRepository<SystemIdentity> systemRepository() {
         if (systemRepository == null) {
             systemRepository = new SystemRepositoryAdapter(systemRegistry);
         }
@@ -134,7 +138,7 @@ public final class ApplicationContext {
      * @return configured use case
      */
     public CVMCalculationUseCase cvmCalculationUseCase(CalculationProgressPort progressPort) {
-        return new CVMCalculationUseCase(progressPort);
+        return new CVMCalculationUseCase(progressPort, new CVMEngineAdapter());
     }
 
     /**
@@ -144,7 +148,7 @@ public final class ApplicationContext {
      * @return configured use case
      */
     public MCSCalculationUseCase mcsCalculationUseCase(CalculationProgressPort progressPort) {
-        return new MCSCalculationUseCase(progressPort);
+        return new MCSCalculationUseCase(progressPort, new MCSRunnerAdapter());
     }
 
     // -------------------------------------------------------------------------
@@ -161,3 +165,4 @@ public final class ApplicationContext {
         return systemRegistry;
     }
 }
+

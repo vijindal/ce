@@ -4,6 +4,10 @@ build/
 app/build/
 app/bin/
 
+# Runtime artifacts (auto-generated)
+data/cluster_cache/
+*.log
+
 # IDEs
 .vscode/
 .idea/

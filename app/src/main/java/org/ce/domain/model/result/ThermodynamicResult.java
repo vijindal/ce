@@ -30,7 +30,7 @@ public sealed interface ThermodynamicResult extends CalculationResult
      * Returns the equilibrium/average correlation functions.
      *
      * <p>For CVM, these are the equilibrium CF values; for MCS, these are
-     * the ensemble averages ⟨u_t⟩.</p>
+     * the ensemble averages âŸ¨u_tâŸ©.</p>
      */
     double[] correlationFunctions();
 
@@ -41,3 +41,4 @@ public sealed interface ThermodynamicResult extends CalculationResult
         return correlationFunctions().length;
     }
 }
+

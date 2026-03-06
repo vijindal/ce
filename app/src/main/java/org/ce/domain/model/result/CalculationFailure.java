@@ -77,7 +77,7 @@ public record CalculationFailure(
     public String summary() {
         StringBuilder sb = new StringBuilder();
         sb.append("CALCULATION FAILED\n");
-        sb.append("═══════════════════════════════════════════\n");
+        sb.append("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
         sb.append("  Error: ").append(errorMessage).append("\n");
         if (errorCode != null) {
             sb.append("  Code:  ").append(errorCode).append("\n");
@@ -85,7 +85,8 @@ public record CalculationFailure(
         if (cause != null) {
             sb.append("  Cause: ").append(cause.getClass().getName()).append("\n");
         }
-        sb.append("═══════════════════════════════════════════");
+        sb.append("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
         return sb.toString();
     }
 }
+

@@ -7,10 +7,10 @@
  * <h2>Hierarchy</h2>
  * <pre>
  * CalculationResult (sealed interface)
- * ├── ThermodynamicResult (interface) - common thermodynamic quantities
- * │   ├── CVMResult (record) - CVM-specific results
- * │   └── MCSResult (record) - MCS-specific results
- * └── CalculationFailure (record) - failed calculations
+ * â”œâ”€â”€ ThermodynamicResult (interface) - common thermodynamic quantities
+ * â”‚   â”œâ”€â”€ CVMResult (record) - CVM-specific results
+ * â”‚   â””â”€â”€ MCSResult (record) - MCS-specific results
+ * â””â”€â”€ CalculationFailure (record) - failed calculations
  * </pre>
  *
  * <h2>Usage with Pattern Matching</h2>
@@ -26,3 +26,4 @@
  * @since 2.0
  */
 package org.ce.domain.model.result;
+

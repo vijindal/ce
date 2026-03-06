@@ -25,10 +25,10 @@ public interface MCSProgressPort extends CalculationProgressPort {
      * Snapshot of MCS state at a given step.
      *
      * @param step           current MC sweep number
-     * @param totalEnergy    cumulative energy (E_initial + Σ(ΔE))
+     * @param totalEnergy    cumulative energy (E_initial + Î£(Î”E))
      * @param deltaEnergy    energy change for this step
-     * @param sigmaDeltaE    σ(ΔE) over rolling window (stability metric)
-     * @param meanDeltaE     mean(ΔE) over rolling window (drift check)
+     * @param sigmaDeltaE    Ïƒ(Î”E) over rolling window (stability metric)
+     * @param meanDeltaE     mean(Î”E) over rolling window (drift check)
      * @param phase          EQUILIBRATION or AVERAGING
      * @param acceptanceRate fraction of accepted moves [0,1]
      * @param elapsedMs      wall-clock milliseconds since start
@@ -85,3 +85,4 @@ public interface MCSProgressPort extends CalculationProgressPort {
         }
     };
 }
+

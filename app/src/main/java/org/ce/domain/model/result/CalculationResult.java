@@ -18,7 +18,7 @@ import java.time.Instant;
  * CalculationResult result = service.calculateCVM(request);
  * String summary = switch (result) {
  *     case CVMResult cvm -> "G = " + cvm.gibbsEnergy();
- *     case MCSResult mcs -> "⟨E⟩ = " + mcs.energyPerSite();
+ *     case MCSResult mcs -> "âŸ¨EâŸ© = " + mcs.energyPerSite();
  *     case CalculationFailure f -> "FAILED: " + f.errorMessage();
  * };
  * }</pre>
@@ -52,3 +52,4 @@ public sealed interface CalculationResult
         return this instanceof CalculationFailure;
     }
 }
+

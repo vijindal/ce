@@ -4,8 +4,8 @@ package org.ce.domain.engine.common;
  * Minimal linear algebra utilities for thermodynamic solvers.
  *
  * <p>Provides Gaussian elimination with partial pivoting for solving
- * {@code A · x = b}. This avoids a dependency on external linear algebra
- * libraries for the small (ncf × ncf, typically 4×4) systems encountered
+ * {@code A Â· x = b}. This avoids a dependency on external linear algebra
+ * libraries for the small (ncf Ã— ncf, typically 4Ã—4) systems encountered
  * in CVM calculations.</p>
  *
  * <p>Thread Safety: All methods are stateless and thread-safe.</p>
@@ -17,12 +17,12 @@ public final class LinearAlgebra {
     private LinearAlgebra() { /* utility class */ }
 
     /**
-     * Solves the linear system {@code A · x = b} using Gaussian elimination
+     * Solves the linear system {@code A Â· x = b} using Gaussian elimination
      * with partial pivoting.
      *
      * <p>The input arrays are <em>not</em> modified (copies are made internally).</p>
      *
-     * @param A  coefficient matrix (n × n)
+     * @param A  coefficient matrix (n Ã— n)
      * @param b  right-hand side vector (length n)
      * @return   solution vector x (length n)
      * @throws IllegalArgumentException if A is singular or dimensions mismatch
@@ -93,7 +93,7 @@ public final class LinearAlgebra {
      * Computes the L2 norm (Euclidean length) of a vector.
      *
      * @param v the vector
-     * @return ‖v‖₂ = √(Σ v[i]²)
+     * @return â€–vâ€–â‚‚ = âˆš(Î£ v[i]Â²)
      */
     public static double norm(double[] v) {
         double sum = 0.0;
@@ -107,7 +107,7 @@ public final class LinearAlgebra {
      * Computes the maximum absolute element of a vector (infinity norm).
      *
      * @param v the vector
-     * @return ‖v‖∞ = max|v[i]|
+     * @return â€–vâ€–âˆž = max|v[i]|
      */
     public static double normInf(double[] v) {
         double max = 0.0;
@@ -123,7 +123,7 @@ public final class LinearAlgebra {
      *
      * @param a first vector
      * @param b second vector
-     * @return a · b = Σ a[i]·b[i]
+     * @return a Â· b = Î£ a[i]Â·b[i]
      * @throws IllegalArgumentException if vectors have different lengths
      */
     public static double dot(double[] a, double[] b) {
@@ -137,3 +137,4 @@ public final class LinearAlgebra {
         return sum;
     }
 }
+

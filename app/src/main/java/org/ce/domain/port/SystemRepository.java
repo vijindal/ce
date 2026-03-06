@@ -1,7 +1,5 @@
 package org.ce.domain.port;
 
-import org.ce.workbench.model.SystemIdentity;
-
 import java.util.Collection;
 import java.util.Optional;
 
@@ -22,7 +20,7 @@ import java.util.Optional;
  *
  * @since 2.0
  */
-public interface SystemRepository {
+public interface SystemRepository<TSystem> {
 
     /**
      * Registers a new system in the repository.
@@ -30,7 +28,7 @@ public interface SystemRepository {
      * @param system the system to register (must not be null)
      * @throws IllegalArgumentException if system with same ID already exists
      */
-    void register(SystemIdentity system);
+    void register(TSystem system);
 
     /**
      * Retrieves a system by its unique identifier.
@@ -38,14 +36,14 @@ public interface SystemRepository {
      * @param systemId the system identifier
      * @return the system if found, empty otherwise
      */
-    Optional<SystemIdentity> findById(String systemId);
+    Optional<TSystem> findById(String systemId);
 
     /**
      * Retrieves all registered systems.
      *
      * @return unmodifiable collection of all systems
      */
-    Collection<SystemIdentity> findAll();
+    Collection<TSystem> findAll();
 
     /**
      * Removes a system and its associated data.
@@ -95,3 +93,4 @@ public interface SystemRepository {
      */
     void flush() throws Exception;
 }
+

@@ -1,7 +1,7 @@
 package org.ce.infrastructure.persistence;
 
 import org.ce.domain.port.ECIRepository;
-import org.ce.workbench.util.eci.ECILoader;
+import org.ce.infrastructure.eci.ECILoader;
 
 /**
  * Adapter implementing {@link ECIRepository} by delegating to
@@ -82,3 +82,4 @@ public class ECIRepositoryAdapter implements ECIRepository {
         };
     }
 }
+

@@ -1,7 +1,5 @@
 package org.ce.domain.port;
 
-import org.ce.workbench.backend.data.AllClusterData;
-
 import java.util.Optional;
 
 /**
@@ -17,15 +15,14 @@ import java.util.Optional;
  *
  * <h2>Usage</h2>
  * <pre>{@code
- * ClusterDataRepository repo = ...; // injected
+ * ClusterDataRepository<MyClusterData> repo = ...; // injected
  * String clusterKey = "BCC_A2_T_bin";
- * Optional<AllClusterData> data = repo.load(clusterKey);
+ * Optional<MyClusterData> data = repo.load(clusterKey);
  * }</pre>
  *
- * @see AllClusterData
  * @since 2.0
  */
-public interface ClusterDataRepository {
+public interface ClusterDataRepository<TClusterData> {
 
     /**
      * Loads cluster topology data for the given key.
@@ -35,7 +32,7 @@ public interface ClusterDataRepository {
      * @return the cluster data if found, empty otherwise
      * @throws Exception if an I/O or parsing error occurs
      */
-    Optional<AllClusterData> load(String clusterKey) throws Exception;
+    Optional<TClusterData> load(String clusterKey) throws Exception;
 
     /**
      * Saves cluster topology data under the given key.
@@ -45,7 +42,7 @@ public interface ClusterDataRepository {
      * @return true if save succeeded
      * @throws Exception if an I/O error occurs
      */
-    boolean save(AllClusterData data, String clusterKey) throws Exception;
+    boolean save(TClusterData data, String clusterKey) throws Exception;
 
     /**
      * Checks if data exists for the given key without loading it.
@@ -64,3 +61,4 @@ public interface ClusterDataRepository {
      */
     boolean delete(String clusterKey) throws Exception;
 }
+

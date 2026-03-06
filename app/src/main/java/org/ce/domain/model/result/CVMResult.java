@@ -14,9 +14,9 @@ import java.util.Objects;
  * @param equilibriumCFs  equilibrium correlation function values
  * @param gibbsEnergy     Gibbs energy of mixing (J/mol)
  * @param enthalpy        enthalpy of mixing (J/mol)
- * @param entropy         entropy of mixing (J/(mol·K))
+ * @param entropy         entropy of mixing (J/(molÂ·K))
  * @param iterations      number of Newton-Raphson iterations
- * @param gradientNorm    ‖∇G‖ at convergence
+ * @param gradientNorm    â€–âˆ‡Gâ€– at convergence
  * @param converged       whether solver converged within tolerance
  * @param timestamp       when this result was computed
  *
@@ -69,17 +69,18 @@ public record CVMResult(
     public String summary() {
         return String.format("""
                 CVM Result [%s]
-                ═══════════════════════════════════════════
+                â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
                   Temperature:   %.1f K
                   Composition:   %.4f
                   Converged:     %s (%d iterations)
                   Gibbs Energy:  %.6e J/mol
                   Enthalpy:      %.6e J/mol
-                  Entropy:       %.6e J/(mol·K)
-                  ‖∇G‖:          %.6e
-                ═══════════════════════════════════════════""",
+                  Entropy:       %.6e J/(molÂ·K)
+                  â€–âˆ‡Gâ€–:          %.6e
+                â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•""",
                 converged ? "CONVERGED" : "NOT CONVERGED",
                 temperature, composition, converged, iterations,
                 gibbsEnergy, enthalpy, entropy, gradientNorm);
     }
 }
+

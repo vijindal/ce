@@ -109,6 +109,82 @@ app/src/main/resources/
 ### ✅ Completed (Mar 6, 2026)
 **Phase 6: CVM Phase Model - Model-Centric Architecture**
 
+**Documentation cleanup (Mar 6, 2026):** ✅
+- Removed redundant root planning doc (`DATA_FLOW_AND_REORGANIZATION_PLAN.md`)
+- Consolidated architecture governance into `docs/ARCHITECTURE_CONTRACT.md`
+- Kept operational/project tracking in `PROJECT_STATUS.md` and usage guidance in `README.md`
+
+**PR-2: Domain Port Decoupling (Mar 6, 2026):** ✅
+- Refactored domain ports to generic contracts so domain no longer imports legacy `org.ce.workbench.*` models
+- Updated infrastructure adapters and DI wiring with concrete generic types (`AllClusterData`, `SystemIdentity`)
+- Tightened architecture guardrail: removed temporary domain allowlist entries in `ArchitectureBoundaryTest`
+
+**PR-3: Application Boundary Hardening + Context Migration (Mar 6, 2026):** ✅
+- Migrated calculation context classes from legacy `workbench.util.context` to `infrastructure.context`
+- Updated all context consumers (application use cases, services, CVM engine/model/examples, CLI, GUI, and jobs)
+- Removed remaining `org.ce.workbench.*` imports from `org.ce.application.*`
+- Tightened architecture guardrail: removed temporary application allowlist entries in `ArchitectureBoundaryTest`
+
+**Runtime compatibility fix (Mar 6, 2026):** ✅
+- Fixed legacy cache-load failure: `JSONObject["cfBasisIndices"] not found` for older Stage-3 payloads
+- Added backward-compatible Stage-3 deserialization in `AllClusterDataCache` with binary legacy inference
+- Added on-load schema upgrade path that writes `schemaVersion=2` and persists inferred `cfBasisIndices`
+- Added regression tests in `AllClusterDataCacheCompatibilityTest`
+
+**PR-4: Cache Migration Architecture Extraction (Mar 6, 2026):** ✅
+- Introduced explicit cache migration package: `org.ce.infrastructure.persistence.migration`
+- Added dedicated migrator components:
+   - `ClusterCacheSchemaMigrator` (versioned in-memory/bulk migration orchestration)
+   - `LegacyStage3CfBasisIndicesInferer` (legacy Stage-3 binary basis inference)
+   - `ClusterCachePreflight` (one-time startup migration sweep + logging)
+   - `CacheMigrationReport` (scan/migrate/failure summary contract)
+- Refactored `AllClusterDataCache` to delegate schema upgrades to migrator before strict deserialization
+- Wired preflight migration in `CalculationService` constructor to proactively upgrade stale cache files
+- Added focused migration tests in `ClusterCacheSchemaMigratorTest` and aligned compatibility coverage in `AllClusterDataCacheCompatibilityTest`
+
+**PR-5: CVM Engine Decoupling (Mar 6, 2026):** ✅
+- Refactored `CVMEngine` and `CVMPhaseModel` to remove direct `org.ce.workbench.*` dependencies
+- Introduced domain CVM input contract: `org.ce.domain.model.cvm.CVMModelInput`
+- Updated `CVMCalculationUseCase` and `CalculationService` to map legacy context/cache data into domain CVM input before invoking CVM core
+- Updated CVM job wiring (`CVMPhaseModelJob`, `CalculationSetupPanel`) so background job system identity no longer comes from CVM model internals
+- Tightened architecture guardrail by removing temporary CVM allowlist entries in `ArchitectureBoundaryTest`
+
+**PR-6: MCS Engine Decoupling (Mar 6, 2026):** ✅
+- Refactored `MCSRunner` and `MCEngine` to remove `org.ce.workbench.util.*` coupling from core MCS logic
+- Moved `MCSUpdate` to application event model: `org.ce.application.event.MCSUpdate`
+- Updated use-case/presentation/workbench listeners to consume the application event model
+- Moved rolling-window helper used by MCS core into `org.ce.mcs.RollingWindow`
+- Tightened architecture guardrail by removing temporary MCS allowlist entries in `ArchitectureBoundaryTest`
+
+**PR-7: Cache Contract Hardening (Mar 6, 2026):** ✅
+- Added adapter-layer migration + schema validation in `ClusterDataRepositoryAdapter.load(...)`
+- Enforced cache `schemaVersion` and Stage-3 required fields (`cmat/lcv/wcv/cfBasisIndices`) before returning loaded data
+- Kept persisted `all_cluster_data.json` schema stamping via `schemaVersion`
+- Enforced Stage-3 required-field contract in `CVMModelInput` before CVM model construction
+- Added fail-fast service path for invalid CVM stage-data contract in `CalculationService`
+
+**PR-8: Collapse Duplicate Result Abstractions (Mar 6, 2026):** ✅
+- Renamed `org.ce.application.dto.CalculationResult<T>` → `PreparationResult<T>`
+- Eliminated name collision with domain calculation result: `org.ce.domain.model.result.CalculationResult` (sealed interface)
+- Updated all references across `CalculationService`, `CalculationSetupPanel`, and `CEWorkbenchCLI`
+- Clarified semantic distinction: `PreparationResult` = preparation/validation outcome, `CalculationResult` = domain calculation outcome
+
+**PR-9: Presentation Layer Simplification (Mar 6, 2026):** ✅
+- Documented `CalculationService` as presentation-layer convenience façade (not core orchestration)
+- Clarified architectural position: coordinates infrastructure adapters (cache, registry, ECI) for GUI/CLI convenience
+- Marked thin wrapper methods for future removal (direct use-case invocation preferred)
+- Service remains for now to avoid duplicating preparation logic across presentation layers
+- Future direction documented: move preparation logic to infrastructure factories, eliminate service layer
+
+**PR-10: Repository Hygiene and Final Cleanup (Mar 6, 2026):** ✅
+- Updated `.gitignore` to exclude runtime artifacts: `data/cluster_cache/` and `*.log`
+- Verified no sample fixtures need relocation (CVMPhaseModelExamples appropriately located in main as API documentation)
+- Confirmed architecture migration complete (PR-1 through PR-9) with all adapter bridge classes still required
+- Identified future cleanup candidates:
+  - `MCSExecutor` (@Deprecated, forRemoval = true) - still used by `MCSCalculationJob`, requires job refactor first
+  - Direct use-case invocation in GUI (replace CalculationService façade) - deferred to future PR
+- Repository now clean of obsolete files and properly ignores auto-generated artifacts
+
 **CVM Expression Audit Fix (Mar 6, 2026):** ✅
 - **Root cause fixed:** N-R solver's internal `G/Gu/Guu` expressions could diverge from `CVMFreeEnergy` implementation
 - **Fix:** `NewtonRaphsonSolverSimple` now computes `G`, `dG/du`, `d²G/du²` via `CVMFreeEnergy.evaluate(...)`
@@ -195,8 +271,8 @@ for (double x = 0; x <= 1.0; x += 0.1) {
    - Verification: 1000-sweep run now **85.5 seconds** (was 6+ hours on slowdown path)
    - Performance gain: **250x faster** for long runs, **linear timing** throughout
    - Files modified:
-     - [ResultsPanel.java](app/src/main/java/org/ce/workbench/gui/view/ResultsPanel.java) — Sampling logic
-     - [EnergyConvergenceChart.java](app/src/main/java/org/ce/workbench/gui/component/EnergyConvergenceChart.java) — Aggressive pruning
+- [ResultsPanel.java](app/src/main/java/org/ce/presentation/gui/view/ResultsPanel.java) — Sampling logic
+    - [EnergyConvergenceChart.java](app/src/main/java/org/ce/presentation/gui/component/EnergyConvergenceChart.java) — Aggressive pruning
 
 ### ✅ Completed (Feb 28 - Part 1)
 3. **MCS Energy Tracking Optimization** - CRITICAL PERFORMANCE FIX
@@ -312,6 +388,7 @@ for (double x = 0; x <= 1.0; x += 0.1) {
 7. **Documentation**
    - User guide for adding new systems
    - Developer guide for data structure
+   - Keep architecture/dependency policy in `docs/ARCHITECTURE_CONTRACT.md`
 
 ### Low Priority
 8. **Phase Diagram Plotting** (future)
@@ -353,34 +430,32 @@ for (double x = 0; x <= 1.0; x += 0.1) {
 ```
 ce/
 ├── app/src/main/java/org/ce/
-│   ├── workbench/
+│   ├── presentation/
 │   │   ├── gui/
-│   │   │   ├── CEWorkbenchApplication.java    # JavaFX entry point
+│   │   │   ├── CEWorkbenchApplication.java      # JavaFX entry point
+│   │   │   ├── component/
 │   │   │   ├── model/
-│   │   │   │   └── SystemInfo.java             # System metadata
 │   │   │   └── view/
-│   │   │       ├── SystemRegistryPanel.java    # Left panel (system management)
-│   │   │       └── CalculationSetupPanel.java  # Right panel (calculations)
-│   │   ├── backend/
-│   │   │   ├── SystemRegistry.java             # Central system registry
-│   │   │   ├── BackgroundJobManager.java       # Job execution
-│   │   │   ├── data/
-│   │   │   │   └── SystemDataLoader.java       # Load CECs + model data
-│   │   │   └── jobs/
-│   │   │       ├── ClusterIdentificationJob.java
-│   │   │       └── CFIdentificationJob.java
-│   │   └── cli/
-│   │       └── CEWorkbenchCLI.java             # Command-line interface
-│   ├── cvm/                                     # CVM Solver (Phase 5)
-│   │   ├── CVMFreeEnergy.java                  # Free-energy evaluation + gradient/Hessian
-│   │   ├── NewtonRaphsonSolver.java            # NR solver with diagnostics
-│   │   ├── ClusterVariableEvaluator.java       # CV computation with CF handling
-│   │   ├── CVMSolverResult.java                # Result wrapper
-│   │   └── ...
-│   └── core/                                    # Core algorithms
-│       ├── CVMConfiguration.java
-│       ├── CVMPipeline.java
-│       └── ...
+│   │   ├── cli/
+│   │   │   └── CEWorkbenchCLI.java              # Command-line interface
+│   │   └── adapter/
+│   ├── application/
+│   │   ├── service/                             # Orchestration service for UI flows
+│   │   ├── job/                                 # Background job contracts and orchestration jobs
+│   │   └── dto/
+│   ├── infrastructure/
+│   │   ├── job/                                 # Background scheduler/manager adapter
+│   │   ├── registry/                            # System/result repositories
+│   │   ├── data/                                # Metadata/records/loaders
+│   │   ├── cache/
+│   │   ├── eci/
+│   │   ├── key/
+│   │   └── pipeline/
+│   └── domain/
+│       ├── cvm/
+│       ├── mcs/
+│       ├── identification/
+│       └── system/
 ├── app/src/test/java/org/ce/cvm/
 │   ├── CVMSolverTest.java                       # Binary tests (13/13 PASS)
 │   └── CVMTernaryTest.java                      # Ternary tests (8/11 PASS)

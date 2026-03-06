@@ -19,11 +19,12 @@
  * <h2>Dependency Rule</h2>
  * <p>Dependencies flow inward only. This package should not import from:</p>
  * <ul>
- *   <li>{@code org.ce.workbench.*}</li>
  *   <li>{@code org.ce.infrastructure.*}</li>
  *   <li>{@code org.ce.application.*}</li>
+ *   <li>{@code org.ce.presentation.*}</li>
  * </ul>
  *
  * @since 2.0
  */
 package org.ce.domain;
+

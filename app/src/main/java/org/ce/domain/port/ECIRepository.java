@@ -87,3 +87,4 @@ public interface ECIRepository {
     @Deprecated
     LoadResult loadLegacy(String elements, int requiredLength);
 }
+

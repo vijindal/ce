@@ -33,7 +33,7 @@ java {
 
 application {
     // GUI Application - uses JavaFX
-    mainClass = 'org.ce.workbench.gui.CEWorkbenchApplication'
+    mainClass = 'org.ce.presentation.gui.CEWorkbenchApplication'
 }
 
 tasks.named('test') {

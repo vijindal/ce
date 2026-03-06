@@ -11,13 +11,13 @@ import java.util.Objects;
  *
  * @param temperature          simulation temperature in Kelvin
  * @param compositionArray     composition for each component (x[c] = N_c/N)
- * @param avgCFs               ensemble average correlation functions ⟨u_t⟩
+ * @param avgCFs               ensemble average correlation functions âŸ¨u_tâŸ©
  * @param energyPerSite        average energy per site (eV or J depending on ECI units)
  * @param heatCapacityPerSite  heat capacity per site from fluctuation formula
  * @param acceptRate           fraction of accepted Monte Carlo moves
  * @param nEquilSweeps         number of equilibration sweeps
  * @param nAvgSweeps           number of averaging sweeps
- * @param supercellSize        supercell dimension L (N = 2·L³ for BCC)
+ * @param supercellSize        supercell dimension L (N = 2Â·LÂ³ for BCC)
  * @param nSites               total number of lattice sites
  * @param timestamp            when this result was computed
  *
@@ -81,16 +81,16 @@ public record MCSResult(
     public String summary() {
         return String.format("""
                 MCS Result
-                ═══════════════════════════════════════════
+                â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
                   Temperature:   %.1f K
                   Composition:   %.4f (x_B)
-                  Supercell:     %d × %d × %d (%d sites)
+                  Supercell:     %d Ã— %d Ã— %d (%d sites)
                   Equilibration: %d sweeps
                   Averaging:     %d sweeps
                   Accept Rate:   %.2f%%
-                  ⟨E⟩/site:      %.6e
+                  âŸ¨EâŸ©/site:      %.6e
                   Cv/site:       %.6e
-                ═══════════════════════════════════════════""",
+                â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•""",
                 temperature, composition(),
                 supercellSize, supercellSize, supercellSize, nSites,
                 nEquilSweeps, nAvgSweeps,
@@ -98,3 +98,4 @@ public record MCSResult(
                 energyPerSite, heatCapacityPerSite);
     }
 }
+

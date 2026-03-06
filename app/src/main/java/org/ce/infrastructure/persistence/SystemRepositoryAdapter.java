@@ -1,8 +1,8 @@
 package org.ce.infrastructure.persistence;
 
 import org.ce.domain.port.SystemRepository;
-import org.ce.workbench.backend.registry.SystemRegistry;
-import org.ce.workbench.model.SystemIdentity;
+import org.ce.infrastructure.registry.SystemRegistry;
+import org.ce.domain.system.SystemIdentity;
 
 import java.util.Collection;
 import java.util.Optional;
@@ -24,7 +24,7 @@ import java.util.Optional;
  *
  * @since 2.0
  */
-public class SystemRepositoryAdapter implements SystemRepository {
+public class SystemRepositoryAdapter implements SystemRepository<SystemIdentity> {
 
     private final SystemRegistry delegate;
 
@@ -99,3 +99,4 @@ public class SystemRepositoryAdapter implements SystemRepository {
         return delegate;
     }
 }
+

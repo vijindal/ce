@@ -155,6 +155,19 @@ ce/
 - **`app/src/`**: All application code and static configuration files
 - **`data/cluster_cache/`**: Runtime-generated cluster identification results
 
+## Documentation
+
+Project documentation has been consolidated to reduce overlap and stale design notes.
+
+- `PROJECT_STATUS.md`: Current implementation status, known issues, and next steps
+- `docs/ARCHITECTURE_CONTRACT.md`: Enforceable layer/dependency rules for migration
+- `docs/DELTA_E_OPTIMIZATION.md`: MCS delta-energy optimization details
+- `docs/GUI_DESIGN_GUIDE.md`: GUI design and behavior reference
+- `docs/MCS_MONITORING_DESIGN.md`: Monitoring/telemetry design for MCS
+- `docs/extracted-mathematica-functions.md`: Algorithm reference from source derivations
+
+Redundant planning markdown at repository root has been removed; architecture and migration policy now live under `docs/` and `PROJECT_STATUS.md`.
+
 ---
 
 ## Package Structure
@@ -164,28 +177,29 @@ transformation stage and produces a well-defined output consumed by the next.
 
 ```
 org.ce
-├── input                         Stage 0 — Read files → domain objects
-├── identification
-│   ├── geometry                  Foundational types — Cluster, Site, Vector3D, Sublattice
-│   ├── symmetry                  SpaceGroup, SymmetryOperation, OrbitUtils
-│   ├── result                    Stage output types — ClusCoordListResult, ClassifiedClusterResult, etc.
-│   ├── subcluster                Sub-cluster enumeration and classification
-│   ├── engine                    Generators — ClusCoordListGenerator, CFGroupGenerator
-│   ├── cluster                   Stage 1 — Cluster identification (component-independent)
-│   └── cf                        Stage 2 — CF identification (component-dependent)
-├── cvm                           Stage 3-5 — CVM free-energy path
-├── mcs                           MCS path — supercell, Metropolis engine
-├── core                          Pipeline orchestration (CVMPipeline, CVMConfiguration)
-└── workbench
-    ├── gui/                      JavaFX GUI (panels, components, models)
-    ├── cli/                      Command-line interface
-    ├── backend/                  Backend services (jobs, registry, data loading)
-    └── util/                     Utilities
-        ├── cache/                Cluster data serialization & persistence
-        ├── context/              Calculation context holders
-        ├── eci/                  ECI loading from database
-        ├── key/                  Key-building utilities
-        └── mcs/                  MCS execution, monitoring, mapping
+├── domain                        Core business logic and immutable models
+│   ├── identification            Stage 1/2 identification data + algorithms
+│   ├── cvm                       CVM model/engine logic
+│   ├── mcs                       MCS model/engine logic
+│   └── system                    System identity/status value types
+├── application                   Use-case orchestration and app-level jobs
+│   ├── cvm                       CVM use cases
+│   ├── mcs                       MCS use cases
+│   ├── job                       Background job contracts/orchestration jobs
+│   └── service                   Presentation-facing orchestration services
+├── infrastructure                Technical adapters and I/O concerns
+│   ├── cache                     Cluster cache serialization/persistence
+│   ├── context                   Calculation contexts
+│   ├── data                      Persisted metadata and transfer records
+│   ├── eci                       ECI/CEC loading adapters
+│   ├── job                       Scheduling/execution manager adapters
+│   ├── key                       Key-building utilities
+│   ├── persistence               Repository adapters and migrations
+│   └── pipeline                  CVMPipeline and configuration
+└── presentation                  GUI/CLI user interfaces and adapters
+  ├── gui                       JavaFX screens/components/models
+  ├── cli                       Command-line interface
+  └── adapter                   Listener/progress adapters
 ```
 
 ### Dependency rule
@@ -194,21 +208,13 @@ Dependencies flow **strictly downward**. No package imports anything from a
 package that appears later in the flow:
 
 ```
-org.ce.workbench (gui/cli/backend/util)
+org.ce.presentation
   ↓
-org.ce.core
+org.ce.application
   ↓
-org.ce.cvm  ←(parallel)→  org.ce.mcs
-  ↓                              ↓
-org.ce.identification.cf
-  ↓
-org.ce.identification.cluster
-  ↓
-org.ce.identification.engine
-  ↓
-org.ce.identification.subcluster / result / symmetry / geometry
-  ↓
-org.ce.input
+org.ce.domain
+
+org.ce.infrastructure -> implements ports used by org.ce.application/org.ce.domain
 ```
 
 ---
