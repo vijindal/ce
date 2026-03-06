@@ -1,5 +1,6 @@
 package org.ce.workbench.cli;
 
+import org.ce.cvm.CVMPhaseModel;
 import org.ce.workbench.backend.dto.CVMCalculationRequest;
 import org.ce.workbench.backend.dto.CalculationResult;
 import org.ce.workbench.backend.dto.MCSCalculationRequest;
@@ -13,7 +14,6 @@ import org.ce.workbench.backend.service.CalculationService;
 import org.ce.workbench.gui.model.CalculationConfig;
 import org.ce.workbench.model.SystemIdentity;
 import org.ce.workbench.model.SystemStatus;
-import org.ce.workbench.util.context.CVMCalculationContext;
 import org.ce.workbench.util.context.MCSCalculationContext;
 
 import java.nio.file.Paths;
@@ -391,18 +391,33 @@ public class CEWorkbenchCLI {
         }
         
         System.out.println("\n" + "=".repeat(60));
-        System.out.println("Starting CVM Calculation");
+        System.out.println("Starting CVM Phase Model Calculation");
         System.out.println("=".repeat(60));
         
-        // Prepare and execute
-        CalculationResult<CVMCalculationContext> result = calcService.prepareCVM(request);
+        // Prepare and execute via CVMPhaseModel only
+        CalculationResult<CVMPhaseModel> result = calcService.prepareCVMModel(request);
         
         if (result.isFailure()) {
             System.out.println("\n✗ Preparation failed: " + result.getErrorMessage().orElse("Unknown error"));
             return;
         }
-        
-        calcService.executeCVM(result.getContextOrThrow());
+
+        try {
+            CVMPhaseModel model = result.getContextOrThrow();
+            CVMPhaseModel.EquilibriumState state = model.getEquilibriumState();
+
+            System.out.println("\n" + "-".repeat(60));
+            System.out.println("CVM Phase Model Result");
+            System.out.println("-".repeat(60));
+            System.out.printf("Gibbs Energy (G): %.8e%n", state.G);
+            System.out.printf("Enthalpy (H):     %.8e%n", state.H);
+            System.out.printf("Entropy (S):      %.8e%n", state.S);
+            System.out.printf("Iterations:       %d%n", state.iterations);
+            System.out.printf("Convergence:      %.6e%n", state.convergenceMeasure);
+            System.out.printf("Time:             %d ms%n", state.getComputationTimeMs());
+        } catch (Exception ex) {
+            System.out.println("\n✗ CVM Phase Model query failed: " + ex.getMessage());
+        }
     }
     
     private void showStats() {

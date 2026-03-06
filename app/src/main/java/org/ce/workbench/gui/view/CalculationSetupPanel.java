@@ -6,21 +6,23 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import org.ce.cvm.CVMPhaseModel;
 import org.ce.workbench.backend.dto.CVMCalculationRequest;
 import org.ce.workbench.backend.dto.CalculationResult;
 import org.ce.workbench.backend.dto.MCSCalculationRequest;
 import org.ce.workbench.backend.registry.SystemRegistry;
 import org.ce.workbench.backend.job.BackgroundJobManager;
-import org.ce.workbench.backend.job.CVMCalculationJob;
+import org.ce.workbench.backend.job.CVMPhaseModelJob;
 import org.ce.workbench.backend.job.MCSCalculationJob;
 import org.ce.workbench.backend.service.CalculationService;
 import org.ce.workbench.model.SystemIdentity;
-import org.ce.workbench.util.context.CVMCalculationContext;
 import org.ce.workbench.util.context.MCSCalculationContext;
 
 /**
  * Calculation setup panel with system selection and MCS/CVM inputs.
  * Shows either MCS or CVM parameters based on calculation type selection.
+ * 
+ * <p>CVM calculations are executed through the model-centric CVMPhaseModel path.</p>
  */
 public class CalculationSetupPanel extends VBox {
 
@@ -45,9 +47,8 @@ public class CalculationSetupPanel extends VBox {
     private final TextField mcsAveragingField;
     
     // CVM parameters
-    private final TextField cvmMaxClusterField;
     private final TextField cvmToleranceField;
-
+    
     public CalculationSetupPanel(SystemRegistry registry, BackgroundJobManager jobManager, ResultsPanel resultsPanel) {
         this.registry = registry;
         this.jobManager = jobManager;
@@ -81,7 +82,7 @@ public class CalculationSetupPanel extends VBox {
         calcTypeLabel.setMinWidth(70);
 
         // Initialize common parameters
-        temperatureField = new TextField("800");
+        temperatureField = new TextField("7.0");
         compositionField = new TextField("0.5");
         
         // Initialize MCS parameters
@@ -90,9 +91,8 @@ public class CalculationSetupPanel extends VBox {
         mcsAveragingField = new TextField("10000");
         
         // Initialize CVM parameters
-        cvmMaxClusterField = new TextField("4");
         cvmToleranceField = new TextField("1e-6");
-
+        
         // Build common parameters section
         VBox commonSection = buildCommonParametersSection();
 
@@ -175,11 +175,9 @@ public class CalculationSetupPanel extends VBox {
         grid.setVgap(6);
         grid.setPadding(new Insets(0));
         
-        cvmMaxClusterField.setPrefHeight(22);
         cvmToleranceField.setPrefHeight(22);
         
-        addCompactRow(grid, 0, "Max Cluster", cvmMaxClusterField);
-        addCompactRow(grid, 1, "Tolerance", cvmToleranceField);
+        addCompactRow(grid, 0, "Tolerance", cvmToleranceField);
         
         section.getChildren().addAll(label, grid);
         return section;
@@ -202,12 +200,11 @@ public class CalculationSetupPanel extends VBox {
         
         // Reset button handler
         resetButton.setOnAction(e -> {
-            temperatureField.setText("800");
+            temperatureField.setText("7.0");
             compositionField.setText("0.5");
             mcsSupercellSizeField.setText("4");
             mcsEquilibrationField.setText("5000");
             mcsAveragingField.setText("10000");
-            cvmMaxClusterField.setText("4");
             cvmToleranceField.setText("1e-6");
         });
         
@@ -322,18 +319,30 @@ public class CalculationSetupPanel extends VBox {
         ResultsPanelProgressListener listener = new ResultsPanelProgressListener(resultsPanel);
         CalculationService service = new CalculationService(registry, listener);
         
-        // Prepare context (loads data from cache/database)
-        CalculationResult<CVMCalculationContext> result = service.prepareCVM(request);
+        runCVMPhaseModelCalculation(request, service, listener);
+    }
+    
+    /**
+     * Runs CVM using the new model-centric approach (Phase Model).
+     */
+    private void runCVMPhaseModelCalculation(
+            CVMCalculationRequest request,
+            CalculationService service,
+            ResultsPanelProgressListener listener) {
+        
+        // Prepare CVMPhaseModel
+        CalculationResult<CVMPhaseModel> result = service.prepareCVMModel(request);
         
         if (result.isFailure()) {
-            showError("CVM Preparation Failed", result.getErrorMessage().orElse("Unknown error"));
+            showError("CVM Phase Model Preparation Failed", 
+                result.getErrorMessage().orElse("Unknown error"));
             return;
         }
         
-        CVMCalculationContext context = result.getContextOrThrow();
+        CVMPhaseModel model = result.getContextOrThrow();
         
-        // Submit CVM job to BackgroundJobManager for managed execution
-        CVMCalculationJob job = new CVMCalculationJob(context, listener);
+        // Submit CVMPhaseModelJob to BackgroundJobManager for managed execution
+        CVMPhaseModelJob job = new CVMPhaseModelJob(model, listener);
         jobManager.submitJob(job);
     }
     

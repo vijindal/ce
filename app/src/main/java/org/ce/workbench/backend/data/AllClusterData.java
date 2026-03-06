@@ -211,6 +211,33 @@ public class AllClusterData {
     }
 
     // =========================================================================
+    // Random-state CF generation
+    // =========================================================================
+
+    /**
+     * Evaluates random correlation function (CF) values at the disordered state.
+     *
+     * <p>Convenience method that delegates to {@link CMatrixResult#evaluateRandomCFs(double[], int)},
+     * using the numComponents from this AllClusterData instance.</p>
+     *
+     * <p>This method consolidates random CF generation into the CVM model itself.</p>
+     *
+     * @param moleFractions mole fractions (length = numComponents, Σ = 1)
+     * @return non-point CF values at random state (length = ncf)
+     * @throws IllegalStateException if Stage 3 (C-matrix) is not complete
+     * @throws IllegalArgumentException if moleFractions length != numComponents
+     *
+     * @see CMatrixResult#evaluateRandomCFs(double[], int)
+     */
+    public double[] getRandomCFs(double[] moleFractions) {
+        if (!isStage3Complete()) {
+            throw new IllegalStateException(
+                "Cannot generate random CFs: Stage 3 (C-matrix) not complete");
+        }
+        return stage3.evaluateRandomCFs(moleFractions, numComponents);
+    }
+
+    // =========================================================================
     // Diagnostics
     // =========================================================================
 

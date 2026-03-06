@@ -63,8 +63,8 @@ public class CVMCalculationContext extends AbstractCalculationContext {
 
     @Override
     protected int getClusterTypeCount() {
-        return (allClusterData != null && allClusterData.getStage1() != null)
-                ? allClusterData.getStage1().getTc()
+        return (allClusterData != null && allClusterData.getStage2() != null)
+            ? allClusterData.getStage2().getNcf()
                 : 0;
     }
 

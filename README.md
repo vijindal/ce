@@ -6,10 +6,38 @@ Method (CVM)** pipeline for alloy thermodynamics, with a Monte Carlo Simulation
 
 **GUI Application:** CE Thermodynamics Workbench - Interactive system management and calculation setup. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for full details.
 
-## 🔧 Latest Updates (Mar 1, 2026)
+## 🔧 Latest Updates (Mar 6, 2026)
 
-### Phase 5: Multi-Component CVM Solver Generalization (K > 2)
-**Status: Binary (K=2) Complete ✅ | Ternary (K≥3) In Progress**
+### Phase 6: CVM Phase Model - Model-Centric Thermodynamic API ✅
+A new `CVMPhaseModel` class provides a clean, user-friendly API for thermodynamic queries:
+
+**Features:**
+- **Create once, query indefinitely:** Single model manages all parameter changes
+- **Automatic re-minimization:** Changing T, x, or CECs triggers re-optimization only when needed
+- **Smart caching:** Results cached; multiple queries don't re-compute
+- **K-agnostic:** Works for binary (K=2), ternary (K≥3), any number of components
+- **Thread-safe:** Built-in synchronization for concurrent access
+- **Expression consistency fix (Mar 6, 2026):** Newton-Raphson now evaluates `G`, `dG/du`, and `d²G/du²` through `CVMFreeEnergy` (single source of truth) and includes full per-iteration trace (`CF` + `dG/du`) in GUI logs
+
+**Usage:**
+```java
+CVMPhaseModel model = CVMPhaseModel.create(context, eci, 1000.0, 0.5);
+
+// Temperature scan (efficient: one model, 100 parameter changes)
+for (double T = 300; T <= 1500; T += 100) {
+    model.setTemperature(T);
+    System.out.println(model.getEquilibriumG());  // Auto-minimizes
+}
+
+// Get full state (G, H, S, CFs, CVs, SROs, stability, convergence)
+CVMPhaseModel.EquilibriumState state = model.getEquilibriumState();
+```
+
+See [Phase 6 details](#current-architecture) below.
+
+---
+
+### Phase 5: Multi-Component CVM Solver Generalization (K≥3) ⏳
 
 - **Binary CVM Solver:** All 13 tests **PASSING** — Newton-Raphson converges in <10 iterations
   - Point correlation function (CF) ordering corrected using `cfBasisIndices`
@@ -55,8 +83,41 @@ Launch the CE Thermodynamics Workbench with:
 - Real-time job monitoring
 
 ### Programmatic API
+
+#### CVM Phase Model (Recommended - Mar 2026)
 ```java
-// Build a configuration
+// Create a thermodynamic model for a system (single API path)
+CVMPhaseModel model = service.prepareCVMModel(request).getContextOrThrow();
+
+// Query equilibrium properties (auto-minimizes on first call)
+double G = model.getEquilibriumG();  // Gibbs energy (J/mol)
+double S = model.getEquilibriumS();  // Entropy (J/(mol·K))
+
+// Change temperature → auto-minimizes at new T
+model.setTemperature(1100.0);
+double newG = model.getEquilibriumG();  // Different from before
+
+// Scan composition (efficient: reuses model)
+for (double x = 0; x <= 1.0; x += 0.1) {
+    model.setComposition(x);
+    System.out.println("x=" + x + " : stable=" + model.isStable());
+}
+
+// Get full equilibrium state
+CVMPhaseModel.EquilibriumState state = model.getEquilibriumState();
+// Contains: T, x, G, H, S, CFs, gradients, iteration count, timing
+```
+
+**Key Features:**
+- **Lazy re-minimization:** Only re-computes when parameters change AND queried
+- **Smart caching:** Multiple queries use cached results (no redundant solver calls)
+- **Parameter mutations:** Change T, x, CECs at any time
+- **K-agnostic:** Works for binary, ternary, quaternary systems
+- **Thread-safe:** Built-in synchronization
+
+#### Manual CVM Pipeline (Advanced - Legacy)
+```java
+// Cluster identification
 CVMConfiguration config = CVMConfiguration.builder()
     .disorderedClusterFile("cluster/A2-T.txt")
     .orderedClusterFile("cluster/A2-T.txt")
@@ -65,7 +126,7 @@ CVMConfiguration config = CVMConfiguration.builder()
     .numComponents(2)
     .build();
 
-// Run the three-stage identification pipeline (Stages 1-3 in one call)
+// Run three-stage identification pipeline
 AllClusterData allData = CVMPipeline.identify(config);
 
 // Access results

@@ -1,11 +1,13 @@
 # CE Workbench - Project Status
 
-**Last Updated:** March 1, 2026  
-**Version:** 0.3.3  
+**Last Updated:** March 6, 2026  
+**Version:** 0.3.5  
 **Compilation:** ✅ Successful  
 **GUI Status:** ✅ Fully Functional  
 **Binary CVM Solver:** ✅ Phase 5 Complete (K=2) — 13/13 Tests Pass  
-**Ternary CVM Solver:** ⏳ Phase 5 In Progress (K≥3) — 8/11 Tests Pass
+**Ternary CVM Solver:** ⏳ Phase 5 In Progress (K≥3) — 8/11 Tests Pass  
+**CVM Phase Model (Thermodynamic API):** ✅ Phase 6 Complete — Model-centric architecture  
+**CVM Expression Audit (G, Gu, Guu):** ✅ Fixed — unified evaluation path + iteration diagnostics
 
 ---
 
@@ -101,6 +103,85 @@ app/src/main/resources/
 - Option 1: CV regularization (add small offset to CV to keep > threshold)
 - Option 2: Revised entropy formulation for K≥3
 - Option 3: Alternative solver approach (gradient descent, trust region, etc.)
+
+---
+
+### ✅ Completed (Mar 6, 2026)
+**Phase 6: CVM Phase Model - Model-Centric Architecture**
+
+**CVM Expression Audit Fix (Mar 6, 2026):** ✅
+- **Root cause fixed:** N-R solver's internal `G/Gu/Guu` expressions could diverge from `CVMFreeEnergy` implementation
+- **Fix:** `NewtonRaphsonSolverSimple` now computes `G`, `dG/du`, `d²G/du²` via `CVMFreeEnergy.evaluate(...)`
+- **Fix:** Removed incorrect `CVMFreeEnergy.evaluate(uFull, ...)` call in `CVMPhaseModel`; now uses non-point CF vector `u`
+- **Convergence safety:** step-size convergence now requires gradient criterion; stalled small-step with large gradient is marked non-converged
+- **Diagnostics:** per-iteration Newton trace now captured and reported in GUI (`CF[i]` and `dG/du[i]` each iteration)
+- **API policy:** CVM execution is now phase-model only (`prepareCVMModel` path)
+
+**New CVMPhaseModel Class:** Complete thermodynamic model API ✅
+- Location: `org.ce.cvm.CVMPhaseModel` (700+ lines)
+- **Core concept:** CVM model = central entity encapsulating all data + automatic re-minimization
+- **Immutable data:** AllClusterData (Stages 1-3) fixed at creation
+- **Mutable data:** System parameters (ECI) and macro parameters (T, x) can change anytime
+- **Cached state:** Equilibrium results invalidated when parameters change, re-minimized on next query
+
+**Factory Method:**
+```java
+CVMPhaseModel model = CVMPhaseModel.create(context, eci, temperature, composition);
+```
+
+**Parameter Setters (Trigger Re-minimization):**
+- `setTemperature(T)` - Change temperature
+- `setComposition(x)` - Change composition (binary shorthand)
+- `setMoleFractions(x[])` - Change composition (K-component)
+- `setECI(eci[])` - Change system parameters (CECs)
+- `setTolerance(tol)` - Change convergence criterion
+
+**Query Methods (Auto-minimize if Needed):**
+- `getEquilibriumG/H/S()` - Gibbs, enthalpy, entropy
+- `getEquilibriumCFs()` - Correlation functions
+- `getEquilibriumCVs()` - Cluster variables
+- `getSROs()` - Short-range order parameters
+- `isStable()` - Stability check
+- `getGradient()`, `getGradientNorm()` - Convergence diagnostics
+- `getEquilibriumState()` - Bundle all properties
+
+**Performance Features:**
+- **Lazy re-minimization:** Only re-computes when parameters change AND queried
+- **Smart caching:** Multiple queries after one parameter change use cached results
+- **Thread-safe:** `synchronized ensureMinimized()` for concurrent access
+- **K-agnostic:** Works for binary (K=2), ternary (K≥3), any K
+
+**Usage Patterns:**
+1. **Single point:** Create model → query properties
+2. **Parameter scan:** Change T (or x) in loop → queries auto-minimize as needed
+3. **Phase diagrams:** 100 points = 1 model + 100 parameter changes (efficient)
+4. **Multi-component:** Use `setMoleFractions()` for K≥3 systems
+
+**Build Status:** ✅ Clean compilation, all tests passing
+
+**Example Code:**
+```java
+// Create model
+CVMPhaseModel model = CVMPhaseModel.create(context, eci, 1000.0, 0.5);
+
+// Temperature scan
+for (double T = 300; T <= 1500; T += 100) {
+    model.setTemperature(T);
+    System.out.println("T=" + T + "K: G=" + model.getEquilibriumG());
+}
+
+// Composition scan at fixed T
+model.setTemperature(800.0);
+for (double x = 0; x <= 1.0; x += 0.1) {
+    model.setComposition(x);
+    System.out.println("x=" + x + ": stable=" + model.isStable());
+}
+```
+
+**Architecture Transformation:**
+- OLD: User calls CVMEngine.solve() → returns CVMSolverResult
+- NEW: User creates CVMPhaseModel → calls query methods on model
+- **Mental model shift:** "Manage thermodynamic state" (not just "run solver once")
 
 ### Previous Session (Feb 28, 2026)
 

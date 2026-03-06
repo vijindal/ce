@@ -11,11 +11,14 @@ import javafx.stage.Stage;
 import org.ce.workbench.backend.job.BackgroundJobManager;
 import org.ce.workbench.backend.registry.ResultRepository;
 import org.ce.workbench.backend.registry.SystemRegistry;
+import org.ce.workbench.gui.component.CVMModelInspectorDialog;
 import org.ce.workbench.gui.view.CalculationSetupPanel;
 import org.ce.workbench.gui.view.SystemRegistryPanel;
 import org.ce.workbench.gui.view.ResultsPanel;
+import org.ce.workbench.model.SystemIdentity;
 
 import java.nio.file.Paths;
+import java.util.Optional;
 
 /**
  * Main JavaFX application for the CE Thermodynamics Workbench GUI.
@@ -67,6 +70,48 @@ public class CEWorkbenchApplication extends Application {
         
         // Initialize job manager with 2 concurrent jobs
         jobManager = new BackgroundJobManager(2);
+        
+        // Register test systems that have cached data
+        registerCachedTestSystems();
+    }
+    
+    /**
+     * Registers test systems that have pre-computed cluster data in the cache.
+     * This ensures the CVM Model Inspector and other tools can access these systems.
+     */
+    private void registerCachedTestSystems() {
+        try {
+            // Check if A-B test system exists in cache
+            String clusterKey = "BCC_A2_T_bin";
+            Optional<org.ce.workbench.backend.data.AllClusterData> cachedData = 
+                org.ce.workbench.util.cache.AllClusterDataCache.load(clusterKey);
+            
+            if (cachedData.isPresent() && cachedData.get().isComplete()) {
+                String systemId = "A-B_BCC_A2_T";
+                // Only register if not already present
+                if (systemRegistry.getSystem(systemId) == null) {
+                    SystemIdentity testSystem = SystemIdentity.builder()
+                        .id(systemId)
+                        .name("A-B BCC A2 (T)")
+                        .structure("BCC")
+                        .phase("A2")
+                        .model("T")
+                        .components(new String[]{"A", "B"})
+                        .clusterFilePath("cluster/A2-T.txt")
+                        .symmetryGroupName("A2-SG")
+                        .build();
+                    
+                    systemRegistry.registerSystem(testSystem);
+                    systemRegistry.markClustersComputed(systemId, true);
+                    systemRegistry.markCfsComputed(systemId, true);
+                    systemRegistry.markCecAvailable(systemId, true);
+                    
+                    System.out.println("[CEWorkbench] Auto-registered test system: " + systemId);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[CEWorkbench] Warning: Failed to register test systems: " + e.getMessage());
+        }
     }
     
     private void buildUI(Stage stage) {
@@ -127,9 +172,12 @@ public class CEWorkbenchApplication extends Application {
         
         // Tools menu
         Menu toolsMenu = new Menu("Tools");
+        MenuItem inspectCVMModelItem = new MenuItem("Inspect CVM Model...");
+        inspectCVMModelItem.setOnAction(e -> showCVMModelInspector());
         MenuItem clearCacheItem = new MenuItem("Clear Cache");
         MenuItem batchProcessItem = new MenuItem("Batch Processing");
-        toolsMenu.getItems().addAll(clearCacheItem, new SeparatorMenuItem(), batchProcessItem);
+        toolsMenu.getItems().addAll(inspectCVMModelItem, new SeparatorMenuItem(), 
+                                   clearCacheItem, new SeparatorMenuItem(), batchProcessItem);
         
         // Help menu
         Menu helpMenu = new Menu("Help");
@@ -181,6 +229,11 @@ public class CEWorkbenchApplication extends Application {
             systemRegistry.shutdown();
         }
         super.stop();
+    }
+    
+    private void showCVMModelInspector() {
+        CVMModelInspectorDialog dialog = new CVMModelInspectorDialog(systemRegistry);
+        dialog.showAndWait();
     }
     
     public static void main(String[] args) {

@@ -26,7 +26,7 @@ public class CalculationProgressListenerAdapter implements CalculationProgressPo
      * @throws NullPointerException if listener is null
      */
     public CalculationProgressListenerAdapter(CalculationProgressListener listener) {
-        this.listener = listener != null ? listener : CalculationProgressListener.NO_OP;
+        this.listener = listener != null ? listener : NO_OP_LISTENER;
     }
 
     @Override
@@ -56,11 +56,6 @@ public class CalculationProgressListenerAdapter implements CalculationProgressPo
         listener.setProgress(0.0);
     }
 
-    /**
-     * A no-op instance for testing or when progress is not needed.
-     */
-    public static final CalculationProgressListenerAdapter NO_OP = new CalculationProgressListenerAdapter(NO_OP_LISTENER);
-
     private static final CalculationProgressListener NO_OP_LISTENER = new CalculationProgressListener() {
         @Override
         public void logMessage(String message) {
@@ -72,4 +67,9 @@ public class CalculationProgressListenerAdapter implements CalculationProgressPo
             // Intentionally empty
         }
     };
+
+    /**
+     * A no-op instance for testing or when progress is not needed.
+     */
+    public static final CalculationProgressListenerAdapter NO_OP = new CalculationProgressListenerAdapter(NO_OP_LISTENER);
 }

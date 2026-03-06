@@ -1,5 +1,6 @@
 package org.ce.cvm;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -56,12 +57,18 @@ public final class NewtonRaphsonSolverSimple {
         public final double[] eci;        // effective cluster interactions
         public final double temperature;
         public final double xB;           // composition (mole fraction of B)
+        public final double[] moleFractions;
+        public final int numElements;
+        public final int[][] lcf;
+        public final int[][] cfBasisIndices;
 
         public CVMData(
                 int tcdis, int tcf, int ncf, int[] lc,
                 double[] kb, List<Double> msdis, double[][] m,
                 int[][] lcv, List<List<int[]>> wcv, List<List<double[][]>> cmat,
-                int[][] cfBasisIndices, double[] eci, double temperature, double xB) {
+                int[][] cfBasisIndices, int[][] lcf,
+                double[] eci, double temperature, double xB,
+                double[] moleFractions, int numElements) {
             this.tcdis = tcdis;
             this.tcf = tcf;
             this.ncf = ncf;
@@ -75,6 +82,10 @@ public final class NewtonRaphsonSolverSimple {
             this.eci = eci;
             this.temperature = temperature;
             this.xB = xB;
+            this.moleFractions = moleFractions.clone();
+            this.numElements = numElements;
+            this.lcf = lcf;
+            this.cfBasisIndices = cfBasisIndices;
 
             // Extract CF ranks from cfBasisIndices
             this.cfRank = new int[tcf][];
@@ -121,7 +132,8 @@ public final class NewtonRaphsonSolverSimple {
         double xB = moleFractions.length > 1 ? moleFractions[1] : moleFractions[0];
 
         CVMData data = new CVMData(tcdis, tcf, ncf, lc, kb, mhdis, mh,
-                lcv, wcv, cmat, cfBasisIndices, eci, temperature, xB);
+                lcv, wcv, cmat, cfBasisIndices, lcf,
+                eci, temperature, xB, moleFractions, numElements);
 
         return minimize(data, maxIter, tolerance);
     }
@@ -183,10 +195,11 @@ public final class NewtonRaphsonSolverSimple {
         double G = 0, H = 0, S = 0;
         double gradNorm = Double.MAX_VALUE;
         int iter = 0;
+        List<CVMSolverResult.IterationSnapshot> trace = new ArrayList<>();
 
         for (iter = 1; iter <= maxIter; iter++) {
             // Evaluate function and derivatives
-            double[] vals = usrfun(data, u, cv, Gu, Guu);
+            double[] vals = usrfun(data, u, Gu, Guu);
             G = vals[0];
             H = vals[1];
             S = vals[2];
@@ -198,6 +211,16 @@ public final class NewtonRaphsonSolverSimple {
             }
             gradNorm = Math.sqrt(gradNorm);
 
+                trace.add(new CVMSolverResult.IterationSnapshot(
+                    iter,
+                    G,
+                    H,
+                    S,
+                    gradNorm,
+                    u.clone(),
+                    Gu.clone()
+                ));
+
             if (iter == 1 || iter % 20 == 0 || gradNorm < 1e-6) {
                 System.out.printf("[NR] Iter %3d: G=%.8e H=%.8e S=%.8e ||Gu||=%.8e%n",
                         iter, G, H, S, gradNorm);
@@ -205,7 +228,7 @@ public final class NewtonRaphsonSolverSimple {
 
             if (gradNorm < tolerance) {
                 System.out.println("  ✓ CONVERGED (gradient norm < tolerance)");
-                return new CVMSolverResult(u, G, H, S, iter, gradNorm, true);
+                return new CVMSolverResult(u, G, H, S, iter, gradNorm, true, trace);
             }
 
             // Solve Guu · du = -Gu using Gaussian elimination
@@ -216,7 +239,7 @@ public final class NewtonRaphsonSolverSimple {
                 du = LinearAlgebraUtils.solve(Guu, negGu);
             } catch (IllegalArgumentException e) {
                 System.out.println("  ✗ SINGULAR HESSIAN: " + e.getMessage());
-                return new CVMSolverResult(u, G, H, S, iter, gradNorm, false);
+                return new CVMSolverResult(u, G, H, S, iter, gradNorm, false, trace);
             }
 
             // Step limiting to keep CVs positive
@@ -238,15 +261,27 @@ public final class NewtonRaphsonSolverSimple {
             stepNorm = Math.sqrt(stepNorm) * stpmax;
 
             if (stepNorm < TOLX) {
-                System.out.println("  ✓ CONVERGED (step size < TOLX)");
-                // Recalculate final values
-                vals = usrfun(data, u, cv, Gu, Guu);
-                return new CVMSolverResult(u, vals[0], vals[1], vals[2], iter, gradNorm, true);
+                // Recalculate final values and check true stationarity
+                vals = usrfun(data, u, Gu, Guu);
+                double finalGradNorm = 0.0;
+                for (int i = 0; i < ncf; i++) {
+                    finalGradNorm += Gu[i] * Gu[i];
+                }
+                finalGradNorm = Math.sqrt(finalGradNorm);
+
+                if (finalGradNorm < tolerance) {
+                    System.out.println("  ✓ CONVERGED (step size < TOLX and gradient < tolerance)");
+                    return new CVMSolverResult(u, vals[0], vals[1], vals[2], iter, finalGradNorm, true, trace);
+                }
+
+                System.out.printf("  ✗ STALLED (step size < TOLX but ||Gu||=%.8e > tolerance=%.8e)%n",
+                        finalGradNorm, tolerance);
+                return new CVMSolverResult(u, vals[0], vals[1], vals[2], iter, finalGradNorm, false, trace);
             }
         }
 
         System.out.printf("[NR] NO CONVERGENCE after %d iterations (||Gu||=%.8e)%n", maxIter, gradNorm);
-        return new CVMSolverResult(u, G, H, S, maxIter, gradNorm, false);
+        return new CVMSolverResult(u, G, H, S, maxIter, gradNorm, false, trace);
     }
 
     // =========================================================================
@@ -258,44 +293,34 @@ public final class NewtonRaphsonSolverSimple {
      *
      * @return [G, H, S]
      */
-    private static double[] usrfun(CVMData data, double[] u, double[][][] cv,
+    private static double[] usrfun(CVMData data, double[] u,
                                     double[] Gu, double[][] Guu) {
-        int ncf = data.ncf;
+        CVMFreeEnergy.EvalResult eval = CVMFreeEnergy.evaluate(
+                u,
+                data.moleFractions,
+                data.numElements,
+                data.temperature,
+                data.eci,
+                data.msdis,
+                data.kb,
+                data.m,
+                data.lc,
+                data.cmat,
+                data.lcv,
+                data.wcv,
+                data.tcdis,
+                data.tcf,
+                data.ncf,
+                data.lcf,
+                data.cfBasisIndices
+        );
 
-        // Initialize arrays
-        for (int i = 0; i < ncf; i++) {
-            Gu[i] = 0.0;
-            for (int j = 0; j < ncf; j++) {
-                Guu[i][j] = 0.0;
-            }
+        System.arraycopy(eval.Gcu, 0, Gu, 0, data.ncf);
+        for (int i = 0; i < data.ncf; i++) {
+            System.arraycopy(eval.Gcuu[i], 0, Guu[i], 0, data.ncf);
         }
 
-        // Enthalpy: H = Σ msdis[t] · eci[icf] · u[icf]
-        // Hcu[icf] = msdis[t] · eci[icf]
-        double H = calHu(data, u);
-        double[] Hcu = calHcu(data);
-
-        // Entropy derivatives
-        double[] Scu = calScu(data, cv);
-        double[][] Scuu = calScuu(data, cv);
-
-        // Gibbs: G = H - T·S
-        // Gu = Hcu - T·Scu
-        // Guu = -T·Scuu (since Hcuu = 0)
-        double T = data.temperature;
-        
-        // Calculate S from Scu (integrate)
-        double S = calSu(data, cv);
-        double G = H - T * S;
-
-        for (int i = 0; i < ncf; i++) {
-            Gu[i] = Hcu[i] - T * Scu[i];
-            for (int j = 0; j < ncf; j++) {
-                Guu[i][j] = -T * Scuu[i][j];
-            }
-        }
-
-        return new double[]{G, H, S};
+        return new double[]{eval.G, eval.H, eval.S};
     }
 
     // =========================================================================

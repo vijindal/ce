@@ -1,6 +1,7 @@
 package org.ce.presentation.adapter;
 
 import org.ce.application.port.MCSProgressPort;
+import org.ce.application.port.MCSProgressPort.SimulationPhase;
 import org.ce.workbench.backend.service.CalculationProgressListener;
 import org.ce.workbench.util.mcs.MCSUpdate;
 
@@ -39,12 +40,22 @@ public class MCSProgressListenerAdapter extends CalculationProgressListenerAdapt
     @Override
     public void onMCSUpdate(MCSSnapshot snapshot) {
         // Convert from new MCSSnapshot format to legacy MCSUpdate
-        // This maintains backward compatibility while adapting to new interface
+        // Map SimulationPhase → MCSUpdate.Phase
+        MCSUpdate.Phase phase = snapshot.phase() == SimulationPhase.AVERAGING
+                ? MCSUpdate.Phase.AVERAGING
+                : MCSUpdate.Phase.EQUILIBRATION;
+
+        long now = System.currentTimeMillis();
         MCSUpdate update = new MCSUpdate(
-            snapshot.step(),
-            snapshot.totalEnergy(),
-            snapshot.deltaEnergy(),
-            snapshot.acceptanceRate()
+                snapshot.step(),
+                snapshot.totalEnergy(),
+                snapshot.deltaEnergy(),
+                snapshot.sigmaDeltaE(),
+                snapshot.meanDeltaE(),
+                phase,
+                snapshot.acceptanceRate(),
+                now,
+                snapshot.elapsedMs()
         );
         listener.updateMCSData(update);
     }

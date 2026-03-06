@@ -74,7 +74,7 @@ public class SystemRegistryPanel extends VBox {
         
         // Elements field
         TextField elementsField = new TextField();
-        elementsField.setText("Ti-Nb");
+        elementsField.setText("A-B");
         Label elementsHelp = new Label("Format: Element1-Element2 (e.g., Ti-Nb, Fe-Ni-Cr)");
         elementsHelp.setStyle("-fx-font-size: 9; -fx-text-fill: #666;");
         
@@ -266,15 +266,15 @@ public class SystemRegistryPanel extends VBox {
             }
             
             // Clear form
-            elementsField.clear();
-            structurePhaseField.clear();
-            modelField.clear();
+            elementsField.setText("A-B");
+            structurePhaseField.setText("BCC_A2");
+            modelField.setText("T");
         });
         
         clearButton.setOnAction(e -> {
-            elementsField.clear();
-            structurePhaseField.clear();
-            modelField.clear();
+            elementsField.setText("A-B");
+            structurePhaseField.setText("BCC_A2");
+            modelField.setText("T");
         });
         
         // Create Cluster button handler - for testing cluster data creation

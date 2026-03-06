@@ -1,10 +1,9 @@
 package org.ce.workbench.backend.service;
 
-import org.ce.application.calculation.CVMCalculationUseCase;
 import org.ce.application.calculation.MCSCalculationUseCase;
 import org.ce.application.port.CalculationProgressPort;
+import org.ce.cvm.CVMPhaseModel;
 import org.ce.identification.result.ClusCoordListResult;
-import org.ce.presentation.adapter.CalculationProgressListenerAdapter;
 import org.ce.presentation.adapter.MCSProgressListenerAdapter;
 import org.ce.workbench.backend.data.AllClusterData;
 import org.ce.workbench.backend.dto.CVMCalculationRequest;
@@ -156,21 +155,26 @@ public class CalculationService {
     }
     
     /**
-     * Prepares a CVM calculation context from the request.
+     * Prepares a CVMPhaseModel for parameter-scan calculations.
      * 
-     * <p>This method performs all data loading and validation:
+     * <p>This method performs all data loading and validation, then creates
+     * a CVMPhaseModel ready for queries and parameter mutations:
      * <ol>
      *   <li>Looks up the system from registry</li>
      *   <li>Loads AllClusterData from cache</li>
      *   <li>Loads ECI/CEC from database</li>
-     *   <li>Assembles and validates the context</li>
+     *   <li>Creates and initializes CVMPhaseModel with first minimization</li>
      * </ol>
      * 
-     * @param request the CVM calculation request
-     * @return result containing the prepared context or error message
+     * <p>The returned model can then be used for efficient parameter scanning
+     * by calling setTemperature(), setComposition(), etc., which trigger
+     * automatic re-minimization only when needed.</p>
+     * 
+     * @param request the CVM calculation request (provides initial parameters)
+     * @return result containing the prepared CVMPhaseModel or error message
      */
-    public CalculationResult<CVMCalculationContext> prepareCVM(CVMCalculationRequest request) {
-        listener.logMessage("\n>>> CVM Calculation Requested");
+    public CalculationResult<CVMPhaseModel> prepareCVMModel(CVMCalculationRequest request) {
+        listener.logMessage("\n>>> CVM Phase Model Creation Requested");
         listener.logMessage("Request: " + request);
         
         // 1. Look up system
@@ -228,31 +232,53 @@ public class CalculationService {
         listener.logMessage("  Stage 3: C-matrix ready");
         
         // 4. Load ECI/CEC
-        int requiredECILength = allData.getStage1().getTc();
+        int requiredECILength = allData.getStage1().getDisClusterData().getTc();
         listener.logMessage("[CVM] Loading CEC  key=" + cecKey + "  required length=" + requiredECILength);
         
         Optional<double[]> eciOpt = loadECI(elementsStr, system, request.getTemperature(), requiredECILength);
         
         if (eciOpt.isEmpty()) {
-            return CalculationResult.failure("ECI loading cancelled or failed. Cannot run CVM.");
+            return CalculationResult.failure("ECI loading cancelled or failed. Cannot create CVM model.");
+        }
+
+        double[] cvmEci;
+        try {
+            cvmEci = mapCECToCvmECI(eciOpt.get(), allData, "CVM Phase Model");
+        } catch (IllegalArgumentException ex) {
+            return CalculationResult.failure("CVM Phase Model ECI mapping failed: " + ex.getMessage());
         }
         
-        // 5. Build CVM context
+        // 5. Create CVMCalculationContext (needed for CVMPhaseModel.create)
         CVMCalculationContext context = new CVMCalculationContext(
             system, request.getTemperature(), request.getComposition(), request.getTolerance());
         context.setAllClusterData(allData);
-        context.setECI(eciOpt.get());
-        listener.logMessage("✓ ECI set: " + eciOpt.get().length + " values");
+        context.setECI(cvmEci);
+        listener.logMessage("✓ CVM ECI set: " + cvmEci.length + " values (non-point CF basis)");
         
-        // 6. Validate context readiness
         if (!context.isReady()) {
             return CalculationResult.failure("CVM Context Not Ready: " + context.getReadinessError());
         }
         
-        listener.logMessage("✓ CVM context is ready");
-        listener.logMessage(context.getSummary());
-        
-        return CalculationResult.success(context);
+        // 6. Create CVMPhaseModel
+        try {
+            listener.logMessage("[CVM] Creating CVMPhaseModel...");
+            CVMPhaseModel model = CVMPhaseModel.create(
+                context, 
+                cvmEci,
+                request.getTemperature(),
+                request.getComposition());
+            
+            listener.logMessage("✓ CVMPhaseModel created successfully");
+            listener.logMessage("  First minimization completed");
+            listener.logMessage("  Model ready for parameter scanning");
+            listener.logMessage(context.getSummary());
+            
+            return CalculationResult.success(model);
+            
+        } catch (Exception ex) {
+            return CalculationResult.failure(
+                "Failed to create CVMPhaseModel: " + ex.getMessage());
+        }
     }
     
     /**
@@ -267,21 +293,6 @@ public class CalculationService {
         // Adapt legacy listener to new MCS progress port
         CalculationProgressPort progressPort = new MCSProgressListenerAdapter(listener);
         MCSCalculationUseCase useCase = new MCSCalculationUseCase(progressPort);
-        useCase.execute(context);
-    }
-    
-    /**
-     * Executes a CVM calculation with the prepared context.
-     * 
-     * <p>This method should be called on a background thread for GUI applications
-     * to avoid blocking the UI. Uses the new application layer use case internally.</p>
-     * 
-     * @param context the prepared CVM context
-     */
-    public void executeCVM(CVMCalculationContext context) {
-        // Adapt legacy listener to new progress port
-        CalculationProgressPort progressPort = new CalculationProgressListenerAdapter(listener);
-        CVMCalculationUseCase useCase = new CVMCalculationUseCase(progressPort);
         useCase.execute(context);
     }
     
@@ -316,5 +327,47 @@ public class CalculationService {
             system.getModel(),
             temperature,
             requiredLength);
+    }
+
+    /**
+     * Maps full CEC vectors from database ordering to CVM solver ECI ordering.
+     *
+     * <p>Database CEC vectors are stored by cluster type and commonly include
+     * both empty-cluster and point-cluster terms. CVM minimization uses only
+     * non-point CF terms (pairs and higher), length = ncf.</p>
+     *
+     * <p>Supported mappings:
+     * <ul>
+     *   <li>already ncf length: used directly</li>
+     *   <li>(ncf + 1): drops leading empty-cluster term</li>
+     *   <li>(ncf + 2): drops leading empty and point terms (pairs onward)</li>
+     * </ul></p>
+     */
+    private double[] mapCECToCvmECI(double[] cecRaw, AllClusterData allData, String modeName) {
+        int ncf = allData.getStage2().getNcf();
+
+        if (cecRaw.length == ncf) {
+            listener.logMessage("[" + modeName + "] CEC length matches CVM ncf=" + ncf + " (no mapping needed)");
+            return cecRaw.clone();
+        }
+
+        if (cecRaw.length == ncf + 1) {
+            listener.logMessage("[" + modeName + "] Mapping CEC (" + cecRaw.length + ") -> CVM ECI (" + ncf + ") by dropping empty-cluster term");
+            double[] mapped = new double[ncf];
+            System.arraycopy(cecRaw, 1, mapped, 0, ncf);
+            return mapped;
+        }
+
+        if (cecRaw.length == ncf + 2) {
+            listener.logMessage("[" + modeName + "] Mapping CEC (" + cecRaw.length + ") -> CVM ECI (" + ncf + ") by dropping empty and point terms (pairs+)");
+            double[] mapped = new double[ncf];
+            System.arraycopy(cecRaw, 2, mapped, 0, ncf);
+            return mapped;
+        }
+
+        throw new IllegalArgumentException(
+            "Unsupported CEC length " + cecRaw.length +
+            " for CVM ncf=" + ncf +
+            ". Expected one of {" + ncf + ", " + (ncf + 1) + ", " + (ncf + 2) + "}.");
     }
 }
