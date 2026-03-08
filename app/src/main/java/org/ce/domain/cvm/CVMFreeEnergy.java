@@ -157,12 +157,9 @@ public final class CVMFreeEnergy {
         double[] Scu = new double[ncf];
         double[][] Scuu = new double[ncf][ncf];
 
-        // Matching the Mathematica convention: R = 1 (normalised).
-        // The CVM formulas use R as a scale factor in the entropy.
-        // With R = 1, the user must provide T and ECI in consistent units.
-        // For physical units (ECI in J/mol, T in K), multiply S by R_GAS
-        // after the calculation.
-        double R = 1.0;
+        // Use the physical gas constant R_GAS = 8.3144598 J/(mol·K).
+        // ECI must be provided in J/mol and temperature in Kelvin.
+        double R = R_GAS;
 
         for (int t = 0; t < tcdis; t++) {
             double coeff_t = kb[t] * mhdis.get(t); // kb[t] Â· ms[t]
