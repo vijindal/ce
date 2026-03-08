@@ -64,8 +64,10 @@ public final class CVMEngine {
         int[][] lcv                = stage3.getLcv();
         List<List<int[]>> wcv      = stage3.getWcv();
 
-        // Convert binary composition to mole fractions: [composition, 1.0 - composition]
-        double[] moleFractions = {composition, 1.0 - composition};
+        // Convert binary composition (x_B = mole fraction of component B) to mole fractions.
+        // CVMPhaseModel convention: moleFractions = {1 - x_B, x_B}, so solver reads
+        // xB = moleFractions[1] = x_B correctly.
+        double[] moleFractions = {1.0 - composition, composition};
         int numElements      = input.getNumComponents();
         int[][] lcf          = stage2.getLcf();
         int[][] cfBasisIndices = stage3.getCfBasisIndices();

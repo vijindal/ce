@@ -227,29 +227,30 @@ public class CVMPhaseModel {
     }
 
     /**
-     * Sets composition (binary shorthand).
-     * Automatically converts to mole fractions for K-component system.
+     * Sets composition using the binary shorthand (only valid for K=2).
+     *
+     * <p>For K=2: builds {@code moleFractions = {1 − x_B, x_B}}.</p>
+     *
+     * <p>For K≥3 use {@link #setMoleFractions(double[])} instead. Calling this
+     * method on a multi-component model throws {@link IllegalArgumentException}
+     * because a single scalar cannot specify the full composition vector, and
+     * silently zeroing the extra components gives physically wrong results.</p>
      *
      * @param x_B mole fraction of component B in [0,1]
-     * @throws IllegalArgumentException if composition invalid
+     * @throws IllegalArgumentException if composition invalid or numComponents > 2
      */
     public void setComposition(double x_B) throws IllegalArgumentException {
         if (x_B < 0 || x_B > 1) {
             throw new IllegalArgumentException("Composition must be in [0,1]: " + x_B);
         }
-
-        if (numComponents == 2) {
-            this.moleFractions = new double[]{1.0 - x_B, x_B};
-        } else {
-            // For K > 2: binary input is first two components, rest assumed zero
-            this.moleFractions = new double[numComponents];
-            this.moleFractions[0] = 1.0 - x_B;
-            this.moleFractions[1] = x_B;
-            for (int i = 2; i < numComponents; i++) {
-                this.moleFractions[i] = 0.0;
-            }
+        if (numComponents != 2) {
+            throw new IllegalArgumentException(
+                "setComposition(double) is only valid for binary (K=2) systems. "
+                + "This model has K=" + numComponents + " components. "
+                + "Use setMoleFractions(double[]) to specify the full composition vector.");
         }
 
+        this.moleFractions = new double[]{1.0 - x_B, x_B};
         invalidateMinimization();
     }
 
@@ -562,18 +563,58 @@ public class CVMPhaseModel {
     }
 
     /**
-     * Checks if phase is thermodynamically stable.
-     * A phase is stable if Hessian is positive definite (all eigenvalues > 0).
+     * Checks if phase is thermodynamically stable (local minimum of G).
      *
-     * @return true if stable, false otherwise
+     * <p>A phase is stable if and only if the Hessian d²G/du² is positive
+     * definite — i.e., all eigenvalues are strictly positive. This is verified
+     * via Cholesky decomposition: the decomposition succeeds (all pivots > 0)
+     * if and only if the matrix is positive definite.</p>
+     *
+     * <p>The previous diagonal-only check ({@code H[i][i] > 0}) was insufficient:
+     * a matrix can have all positive diagonal entries yet still be indefinite
+     * (saddle point) when off-diagonal terms are large.</p>
+     *
+     * @return true if stable (Hessian is positive definite), false otherwise
      */
     public boolean isStable() throws Exception {
         ensureMinimized();
-        // Simple check: Hessian diagonal should be positive
-        // (Full check would require eigenvalue decomposition)
         double[][] H = equilibrium.Gcuu;
-        for (int i = 0; i < H.length; i++) {
-            if (H[i][i] < -1.0e-6) return false;
+        return isPositiveDefinite(H);
+    }
+
+    /**
+     * Tests positive definiteness via Cholesky decomposition.
+     *
+     * <p>Attempts the decomposition H = L · Lᵀ in-place. Succeeds iff every
+     * pivot is strictly positive ({@code > STAB_EPS}). No allocation of L is
+     * needed — only the diagonal pivots are required for the test.</p>
+     *
+     * @param H symmetric matrix to test
+     * @return true if H is positive definite
+     */
+    private static boolean isPositiveDefinite(double[][] H) {
+        final double STAB_EPS = 1.0e-10;
+        int n = H.length;
+        // Work on a copy to avoid mutating the Hessian
+        double[][] A = new double[n][n];
+        for (int i = 0; i < n; i++) {
+            A[i] = H[i].clone();
+        }
+        for (int j = 0; j < n; j++) {
+            // Subtract contributions from previous columns
+            for (int k = 0; k < j; k++) {
+                A[j][j] -= A[j][k] * A[j][k];
+            }
+            if (A[j][j] <= STAB_EPS) {
+                return false;  // Non-positive pivot → not positive definite
+            }
+            double diag = Math.sqrt(A[j][j]);
+            for (int i = j + 1; i < n; i++) {
+                for (int k = 0; k < j; k++) {
+                    A[i][j] -= A[i][k] * A[j][k];
+                }
+                A[i][j] /= diag;
+            }
         }
         return true;
     }

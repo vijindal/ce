@@ -1,14 +1,61 @@
 # CE Workbench - Project Status
 
 **Last Updated:** March 8, 2026
-**Version:** 0.3.6
-**Compilation:** ✅ Successful (8 tests pass)
+**Version:** 0.3.7
+**Compilation:** ✅ Successful (69 tests pass)
 **GUI Status:** ✅ Fully Functional
-**Binary CVM Solver:** ✅ Phase 5 Complete (K=2) — 13/13 Tests Pass
-**Ternary CVM Solver:** ⏳ Phase 5 In Progress (K≥3) — 8/11 Tests Pass
+**Binary CVM Solver:** ✅ Correct — 7 root-cause bugs fixed; 69 tests pass
+**Ternary CVM Solver:** ✅ Correct — RC-2, RC-3, RC-7 fixed; ternary pipeline verified
 **CVM Phase Model (Thermodynamic API):** ✅ Phase 6 Complete — Model-centric architecture
 **CVM Expression Audit (G, Gu, Guu):** ✅ Fixed — unified evaluation path + iteration diagnostics
 **JUL Logging:** ✅ Complete — all three calculation types instrumented
+
+---
+
+## CVM Bug Fixes (Mar 8, 2026)
+
+Data-flow tracing through the full CVM execution path (CalculationService → CVMPhaseModel → NewtonRaphsonSolverSimple → CVMFreeEnergy) identified 7 root causes producing wrong G/H/S values.
+
+### Root causes fixed
+
+| ID | File | Bug | Effect |
+|---|---|---|---|
+| RC-1 | `CVMFreeEnergy` | `R = 1.0` (dimensionless gas constant) | G/H/S off by factor of 8.314 |
+| RC-2 | `NewtonRaphsonSolverSimple.getURand` | Binary σ=(2·x_B−1) formula for K≥3 | Wrong initial guess; NR may diverge for ternary |
+| RC-3 | `NewtonRaphsonSolverSimple.updateCV` | Binary point-CF in step limiter for K≥3 | Negative CVs mid-iteration for K≥3 |
+| RC-4 | `CVMPhaseModel.isStable` | Diagonal-only Hessian check | Missed saddle points (indefinite H) |
+| RC-5 | `CalculationService.mapCECToCvmECI` | Stripped first 2 CEC values (tet, tri) instead of last 2 (point, empty) | Pair ECI [−390,−260] assigned to wrong cluster types |
+| RC-6 | `CVMEngine.solve` | `{composition, 1−composition}` inverted | Legacy path: solver received x_A as x_B |
+| RC-7 | `CVMPhaseModel.setComposition` | Silently zeroed components ≥2 for K>2 | Ternary models ran as binary without error |
+
+### RC-5 detail — critical for G/H/S correctness
+
+`cec.json` stores ECIs in descending body-count order: `[tet, tri, pair1, pair2, point, empty]`.
+`mapCECToCvmECI` was calling `System.arraycopy(cecRaw, 2, mapped, 0, ncf)` — stripping index 0–1
+(tet, tri) — instead of `System.arraycopy(cecRaw, 0, mapped, 0, ncf)` — keeping first ncf values.
+
+For Nb-Ti this assigned:
+- Wrong: `eci = [−390, −260, 0, 0]` → −390 J/mol applied to tetrahedron (mult=6) → H wrong
+- Correct: `eci = [0, 0, −390, −260]` → −390 J/mol applied to 1-nn pair (mult=4) → H correct
+
+### RC-4 detail — Cholesky stability check
+
+Replaced the diagonal `H[i][i] > 0` check in `isStable()` with a full Cholesky decomposition.
+A symmetric matrix can have all positive diagonal entries yet be indefinite (saddle point) when
+off-diagonal terms dominate. Cholesky succeeds iff the matrix is strictly positive definite.
+
+### Test suite added
+
+| Test class | Tests | Purpose |
+|---|---|---|
+| `CVMFreeEnergyTest` | 9 | R_GAS units, G=H−T·S, gradient, Hessian symmetry |
+| `CMatrixBuilderTest` | 7 | C-matrix dimensions, CV positivity and normalization |
+| `NewtonRaphsonTest` | 10 | Convergence, gradient norm, initial-guess |
+| `CVMBinaryIntegrationTest` | 14 | Binary: convergence at multiple (T, x), G=H−T·S, CV≥0, symmetry |
+| `CVMTernaryIntegrationTest` | 10 | Ternary: convergence, G=H−T·S, CV≥0, entropy physical units |
+| `CVMDataFlowVerificationTest` | 9 | Step-by-step ECI mapping and moleFractions verification |
+
+All 69 tests pass. `./gradlew build` succeeds.
 
 ---
 

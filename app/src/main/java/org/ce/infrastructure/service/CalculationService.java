@@ -394,16 +394,18 @@ public class CalculationService {
     /**
      * Maps full CEC vectors from database ordering to CVM solver ECI ordering.
      *
-     * <p>Database CEC vectors are stored by cluster type and commonly include
-     * both empty-cluster and point-cluster terms. CVM minimization uses only
-     * non-point CF terms (pairs and higher), length = ncf.</p>
+     * <p>CEC files store cluster ECIs in descending body-count order:
+     * {@code [tet, tri, pair1, pair2, ..., point, empty]}.
+     * The CVM solver requires only the {@code ncf} non-point cluster ECIs,
+     * i.e., the first {@code ncf} elements of the raw CEC array.</p>
      *
-     * <p>Supported mappings:
+     * <p>Supported sizes:
      * <ul>
-     *   <li>already ncf length: used directly</li>
-     *   <li>(ncf + 1): drops leading empty-cluster term</li>
-     *   <li>(ncf + 2): drops leading empty and point terms (pairs onward)</li>
-     * </ul></p>
+     *   <li>exactly ncf: used directly (already contains only non-point ECIs)</li>
+     *   <li>(ncf + 1): drops the trailing point-cluster term</li>
+     *   <li>(ncf + 2): drops the trailing point and empty-cluster terms</li>
+     * </ul>
+     * In all overshoot cases the first {@code ncf} values are taken.</p>
      */
     private double[] mapCECToCvmECI(double[] cecRaw, AllClusterData allData, String modeName) {
         int ncf = allData.getStage2().getNcf();
@@ -414,16 +416,16 @@ public class CalculationService {
         }
 
         if (cecRaw.length == ncf + 1) {
-            listener.logMessage("[" + modeName + "] Mapping CEC (" + cecRaw.length + ") -> CVM ECI (" + ncf + ") by dropping empty-cluster term");
+            listener.logMessage("[" + modeName + "] Mapping CEC (" + cecRaw.length + ") -> CVM ECI (" + ncf + ") by dropping trailing point-cluster term");
             double[] mapped = new double[ncf];
-            System.arraycopy(cecRaw, 1, mapped, 0, ncf);
+            System.arraycopy(cecRaw, 0, mapped, 0, ncf);
             return mapped;
         }
 
         if (cecRaw.length == ncf + 2) {
-            listener.logMessage("[" + modeName + "] Mapping CEC (" + cecRaw.length + ") -> CVM ECI (" + ncf + ") by dropping empty and point terms (pairs+)");
+            listener.logMessage("[" + modeName + "] Mapping CEC (" + cecRaw.length + ") -> CVM ECI (" + ncf + ") by dropping trailing point and empty-cluster terms");
             double[] mapped = new double[ncf];
-            System.arraycopy(cecRaw, 2, mapped, 0, ncf);
+            System.arraycopy(cecRaw, 0, mapped, 0, ncf);
             return mapped;
         }
 

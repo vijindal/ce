@@ -22,8 +22,8 @@ public final class NewtonRaphsonSolverSimple {
 
     private static final Logger LOG = Logger.getLogger(NewtonRaphsonSolverSimple.class.getName());
 
-    /** Gas constant R = 1 (normalized units). */
-    private static final double R = 1.0;
+    /** Gas constant R = R_GAS (physical units, J/(mol·K)). Used only by legacy dead-code methods. */
+    private static final double R = CVMFreeEnergy.R_GAS;
 
     /** Function tolerance for convergence. */
     private static final double TOLF = 1.0e-8;
@@ -480,15 +480,12 @@ public final class NewtonRaphsonSolverSimple {
     private static double[][][] updateCV(CVMData data, double[] u) {
         double[][][] cv = new double[data.tcdis][][];
 
-        // Build full CF vector (non-point + point CFs)
-        double[] uFull = new double[data.tcf];
-        System.arraycopy(u, 0, uFull, 0, data.ncf);
-        
-        // Point CFs from composition: for binary, pointCF = 2*xB - 1
-        double pointCF = 2.0 * data.xB - 1.0;
-        for (int i = data.ncf; i < data.tcf; i++) {
-            uFull[i] = pointCF;
-        }
+        // Build full CF vector (non-point + point CFs).
+        // Delegates to ClusterVariableEvaluator which correctly handles K≥3
+        // by deriving each point CF from the multi-component R-matrix basis.
+        // (The old binary-only formula pointCF = 2·xB − 1 was wrong for K≥3.)
+        double[] uFull = ClusterVariableEvaluator.buildFullCFVector(
+                u, data.moleFractions, data.numElements, data.cfBasisIndices, data.ncf, data.tcf);
 
         for (int itc = 0; itc < data.tcdis; itc++) {
             cv[itc] = new double[data.lc[itc]][];
@@ -514,17 +511,16 @@ public final class NewtonRaphsonSolverSimple {
     // =========================================================================
 
     /**
-     * u[icf] = (2*xB - 1)^rank  for random (disordered) state
+     * Returns random-state (disordered) CF values for all non-point CFs.
+     *
+     * <p>Delegates to {@link ClusterVariableEvaluator#computeRandomCFs} which
+     * correctly handles K≥3 systems using the multi-component R-matrix basis.
+     * (The old binary-only formula {@code u[icf] = (2·xB − 1)^rank} was wrong
+     * for K≥3 because it used only the mole fraction of component B.)</p>
      */
     private static double[] getURand(CVMData data) {
-        double[] u = new double[data.ncf];
-        double sigma = 2.0 * data.xB - 1.0; // point CF value
-
-        for (int icf = 0; icf < data.ncf; icf++) {
-            int rank = data.getRank(icf);
-            u[icf] = Math.pow(sigma, rank);
-        }
-        return u;
+        return ClusterVariableEvaluator.computeRandomCFs(
+                data.moleFractions, data.numElements, data.cfBasisIndices, data.ncf, data.tcf);
     }
 
     // =========================================================================

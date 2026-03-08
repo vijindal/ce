@@ -8,6 +8,43 @@ Method (CVM)** pipeline for alloy thermodynamics, with a Monte Carlo Simulation
 
 ## Latest Updates (Mar 8, 2026)
 
+### CVM Calculation Bug Fixes — 7 Root Causes Resolved
+
+Step-by-step data-flow verification of the CVM pipeline identified and fixed 7 root causes producing wrong G/H/S values for both binary and ternary systems.
+
+**Root causes fixed:**
+
+| ID | File | Bug | Effect |
+|---|---|---|---|
+| RC-1 | `CVMFreeEnergy` | Gas constant `R = 1.0` (dimensionless) | G/H/S off by factor of 8.314 |
+| RC-2 | `NewtonRaphsonSolverSimple` | Binary-only initial guess `σ = 2·x_B − 1` for K≥3 | Wrong starting point for ternary/quaternary |
+| RC-3 | `NewtonRaphsonSolverSimple` | Binary-only point-CF in step limiter for K≥3 | CVs go negative mid-iteration for K≥3 |
+| RC-4 | `CVMPhaseModel.isStable()` | Diagonal-only Hessian check | Missed indefinite (saddle-point) solutions |
+| RC-5 | `CalculationService.mapCECToCvmECI` | Stripped first 2 CEC elements instead of last 2 | Pair ECIs assigned to tet/triangle types (wrong multiplicities) |
+| RC-6 | `CVMEngine` | `moleFractions = {x_B, 1−x_B}` (inverted) | Legacy path used x_A as x_B |
+| RC-7 | `CVMPhaseModel.setComposition` | Silently zeroed components 2+ for K>2 | Ternary models behaved as binary without error |
+
+**RC-5 detail (critical):** `cec.json` stores ECIs as `[tet, tri, pair1, pair2, point, empty]`.
+`mapCECToCvmECI` was stripping indices 0–1 (tet/tri) instead of the last 2 (point/empty), so
+Nb-Ti pair ECIs `[−390, −260]` were assigned to the tetrahedron (mult=6) and triangle (mult=12)
+cluster types instead of the correct pair types (mult=4, 3).
+
+**RC-4 detail:** Replaced diagonal check `H[i][i] > 0` with Cholesky decomposition, which is the
+correct positive-definiteness test for the full symmetric Hessian.
+
+**New test suite — 69 tests, all passing:**
+
+| Test class | Tests | What it verifies |
+|---|---|---|
+| `CVMFreeEnergyTest` | 9 | RC-1; R_GAS units, G=H−T·S, gradient, Hessian symmetry |
+| `CMatrixBuilderTest` | 7 | C-matrix dimensions, CV positivity, normalization |
+| `NewtonRaphsonTest` | 10 | NR convergence, gradient norm, initial-guess correctness |
+| `CVMBinaryIntegrationTest` | 14 | Binary pipeline: convergence, G=H−T·S, CV≥0, symmetry, dG/dT |
+| `CVMTernaryIntegrationTest` | 10 | Ternary pipeline: convergence, G=H−T·S, CV≥0, entropy physical range |
+| `CVMDataFlowVerificationTest` | 9 | Step-by-step ECI mapping and moleFractions data-flow tracing |
+
+---
+
 ### JUL Logging — All Three Calculation Types
 
 Structured `java.util.logging` (JUL) is now in place for every calculation path:
