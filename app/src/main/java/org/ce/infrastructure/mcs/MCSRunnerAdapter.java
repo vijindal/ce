@@ -8,11 +8,15 @@ import org.ce.domain.mcs.MCResult;
 import org.ce.domain.mcs.MCSRunner;
 
 import java.util.function.BooleanSupplier;
+import java.util.logging.Logger;
+import org.ce.infrastructure.logging.LoggingConfig;
 
 /**
  * Infrastructure adapter bridging the application MCS port to MCSRunner.
  */
 public final class MCSRunnerAdapter implements MCSRunnerPort {
+
+    private static final Logger LOG = LoggingConfig.getLogger(MCSRunnerAdapter.class);
 
     /**
      * Gas constant R = 8.314 J/(molÂ·K) for correct Boltzmann statistics
@@ -26,6 +30,11 @@ public final class MCSRunnerAdapter implements MCSRunnerPort {
             MCSProgressPort progressPort,
             BooleanSupplier cancellationCheck) {
 
+        LOG.fine("MCSRunnerAdapter.run — ENTER: system=" + context.getSystem().getId()
+                + ", T=" + context.getTemperature() + " K, x=" + context.getComposition()
+                + ", L=" + context.getSupercellSize()
+                + ", nEquil=" + context.getEquilibrationSteps()
+                + ", nAvg=" + context.getAveragingSteps());
         MCSRunner.Builder builder = MCSRunner.builder()
                 .clusterData(context.getClusterData())
                 .eci(context.getECI())
@@ -58,7 +67,7 @@ public final class MCSRunnerAdapter implements MCSRunnerPort {
         }
 
         MCResult mcResult = builder.build().run();
-        return MCSResult.fromEngine(
+        MCSResult result = MCSResult.fromEngine(
                 mcResult.getTemperature(),
                 mcResult.getComposition(),
                 mcResult.getAvgCFs(),
@@ -69,6 +78,8 @@ public final class MCSRunnerAdapter implements MCSRunnerPort {
                 mcResult.getNAvgSweeps(),
                 mcResult.getSupercellSize(),
                 mcResult.getNSites());
+        LOG.fine("MCSRunnerAdapter.run — EXIT: MCSResult — acceptRate=" + String.format("%.3f", result.acceptRate()) + ", nSites=" + mcResult.getNSites());
+        return result;
     }
 }
 

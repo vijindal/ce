@@ -1,6 +1,6 @@
 package org.ce.infrastructure.persistence.migration;
 
-import org.ce.infrastructure.cache.ClusterDataSerializer;
+import org.ce.infrastructure.persistence.ClusterDataSerializer;
 import org.json.JSONObject;
 
 import java.nio.file.Files;

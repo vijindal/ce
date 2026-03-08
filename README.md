@@ -6,7 +6,66 @@ Method (CVM)** pipeline for alloy thermodynamics, with a Monte Carlo Simulation
 
 **GUI Application:** CE Thermodynamics Workbench - Interactive system management and calculation setup. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for full details.
 
-## 🔧 Latest Updates (Mar 6, 2026)
+## Latest Updates (Mar 8, 2026)
+
+### JUL Logging — All Three Calculation Types
+
+Structured `java.util.logging` (JUL) is now in place for every calculation path:
+
+| Calculation | Entry point | Files instrumented |
+|---|---|---|
+| (1) Cluster data generation | `CFIdentificationJob` | 6 |
+| (2) MCS simulation | `MCSCalculationJob` | 13 |
+| (3) CVM phase model | `CVMPhaseModelJob` | 6 |
+
+**Log levels used:**
+
+| Level | Purpose |
+|---|---|
+| `WARNING` | Exceptions, failed convergence, null input |
+| `INFO` | Job lifecycle (ENTER / EXIT COMPLETED / EXCEPTION) |
+| `FINE` | Method ENTER/EXIT with key parameters and results |
+| `FINEST` | Per-iteration detail (guarded; off by default) |
+
+**Key classes added / modified:**
+
+- `org.ce.infrastructure.logging.LoggingConfig` — Logger factory; infrastructure/application layers use this
+- `org.ce.presentation.gui.view.LogConsolePanel` — GUI log console (existing)
+- Domain classes use `Logger.getLogger(X.class.getName())` directly
+
+**Cluster data generation path (Calculation 1):**
+- `CFIdentificationJob.run` — INFO ENTER/EXIT with system, numComponents, clusterKey, tcdis, tcf, ncf, elapsed
+- `CVMPipeline.identify` — FINE ENTER/EXIT with numComponents, tcdis, tc, tcf, ncf, elapsed
+- `ClusterIdentifier.identify` — FINE ENTER/EXIT + per-stage boundary messages; `System.out` removed
+- `CFIdentifier.identify` — FINE ENTER/EXIT + per-stage boundary messages; `System.out` removed
+- `CMatrixBuilder.build` — FINE ENTER (tc/ncf/numElements) / EXIT (totalCVs)
+- `AllClusterDataCache.save/load` — FINE ENTER/EXIT/NOT FOUND; old `[>>]` format replaced
+
+**CVM path (Calculation 3):**
+- `CVMPhaseModelJob.run` — INFO ENTER/EXIT (COMPLETED/FAILED); `e.printStackTrace()` replaced with `LOG.warning`
+- `CVMPhaseModelExecutor.initializeModel` — FINE ENTER/EXIT; WARNING on failure
+- `CalculationSetupPanel.runCVMPhaseModelCalculation` — FINE ENTER/EXIT; WARNING on prepare failure
+- `CalculationService.prepareCVMModel` — EXIT enhanced with tcdis, tcf, ncf, ECI length
+- `CVMPhaseModel.logMinimizationSuccess/Failure` — `System.out/err` replaced with FINE/WARNING LOG
+- `CVMPhaseModel.ensureMinimized` — FINE log before `minimize()` call
+- `NewtonRaphsonSolverSimple.minimize` — FINE ENTER; FINEST per-iteration (guarded); FINE CONVERGED; WARNING SINGULAR / STALLED / NOT CONVERGED
+
+**Cluster data now version-controlled:**
+- Removed `data/cluster_cache/` from `.gitignore` so pre-computed cluster data is tracked in git
+
+### Package Consolidation (Mar 8, 2026)
+
+Reduced the project from 47 packages to 32 (32% reduction) by merging single/two-file packages into their logical neighbors. The 4-layer architecture (domain / application / infrastructure / presentation) is unchanged.
+
+Key merges:
+- `application.{cvm,mcs,pipeline,validation}` consolidated into `application.usecase`
+- `application.service` (listener interface) merged into `application.port`
+- `infrastructure.{cache,eci,key,job,adapter,config}` merged into their logical neighbors (`persistence`, `data`, `registry`, `service`, `context`)
+- `domain.identification.cf` merged into `domain.identification.cluster`
+- `domain.mcs.event` merged into `domain.mcs`
+- `domain.model.cvm` merged into `domain.cvm`
+
+---
 
 ### Phase 6: CVM Phase Model - Model-Centric Thermodynamic API ✅
 A new `CVMPhaseModel` class provides a clean, user-friendly API for thermodynamic queries:
@@ -44,22 +103,25 @@ See [Phase 6 details](#current-architecture) below.
   - Random-state CV verification implemented and passing
   - Entropy computation at random state validates to ln(K) formula
   - Hessian computation well-conditioned and stable
-  
+
 - **Multi-Component API Generalized:** Signature changed from binary-only to K-component
   - Old: `solve(double composition, ...)` → binary shorthands
   - New: `solve(double[] moleFractions, int K, ...)` → K-component flexible API
   - Backward-compatible binary wrapper maintains old API
-  
+
 - **Ternary System (K=3):** 8/11 tests passing, convergence issue identified
   - Root cause: Hessian ill-conditioning due to zero cluster variables (CVs) at random state
   - For equimolar ternary with basis {-1, 0, 1}, many CFs = 0 because σ¹ = 0
   - Zero CVs trigger smooth entropy extension (for CV < 1e-6) with invEff = 1/EPS = 1e6
   - This creates singular/ill-conditioned Hessian matrix
   - NR solver oscillates at ~1e-8 gradient norm instead of converging to 1e-10
-  
+
 - **Next Phase:** Fix Hessian computation for ternary — likely requires CV regularization or revised entropy formulation for K≥3
 
-### Previous Update (Feb 28, 2026)
+### Previous Update (Mar 6, 2026)
+
+### MCS Logging (Mar 6–7, 2026)
+Full JUL instrumentation for the MCS calculation path (13 files): job lifecycle, method ENTER/EXIT, per-step FINEST hooks, and result summaries. See PROJECT_STATUS.md for details.
 
 ### MCS Energy Tracking Optimization (Feb 28, 2026)
 **Performance improvement: O(1) per step instead of O(N²) recalculation** - Implemented true delta-energy (ΔE) accumulation where energy updates only on accepted MC moves. The `ExchangeStep.attempt()` and `FlipStep.attempt()` methods now return the energy change directly instead of a boolean, enabling per-step accumulation. Verified correct with periodic full-energy recalculation (✓ MATCH at multiple time points, zero numerical drift). Threading synchronization fixed for background MCS execution.
@@ -147,13 +209,13 @@ ce/
 │   └── test/java/        # Unit tests + examples + integration tests
 │
 ├── data/                 # Runtime data (project root)
-│   └── cluster_cache/    # Pre-computed cluster results (auto-generated JSON)
+│   └── cluster_cache/    # Pre-computed cluster results (version-controlled JSON)
 │
 └── docs/                 # Design documents
 ```
 
 - **`app/src/`**: All application code and static configuration files
-- **`data/cluster_cache/`**: Runtime-generated cluster identification results
+- **`data/cluster_cache/`**: Cluster identification results — version-controlled so pre-computed data ships with the repo
 
 ## Documentation
 
@@ -178,28 +240,42 @@ transformation stage and produces a well-defined output consumed by the next.
 ```
 org.ce
 ├── domain                        Core business logic and immutable models
-│   ├── identification            Stage 1/2 identification data + algorithms
-│   ├── cvm                       CVM model/engine logic
-│   ├── mcs                       MCS model/engine logic
-│   └── system                    System identity/status value types
+│   ├── cvm                       CVM engine, phase model, solvers, free energy (24 files)
+│   ├── identification            Cluster/CF identification pipeline
+│   │   ├── cluster               Stage 1 cluster + Stage 2 CF identification (6 files)
+│   │   ├── engine                Enumeration kernel (5 files)
+│   │   ├── geometry              Vector/site/cluster geometry (7 files)
+│   │   ├── result                Identification result types (5 files)
+│   │   ├── subcluster            Sub-cluster generation (5 files)
+│   │   └── symmetry              Symmetry operations (4 files)
+│   ├── mcs                       MCS engine, samplers, lattice, steps (18 files)
+│   ├── model                     Shared data/result models
+│   │   ├── data                  AllClusterData, EmbeddingData, etc. (6 files)
+│   │   └── result                CalculationResult types (6 files)
+│   ├── port                      Domain port interfaces (4 files)
+│   └── system                    System identity/status value types (2 files)
 ├── application                   Use-case orchestration and app-level jobs
-│   ├── cvm                       CVM use cases
-│   ├── mcs                       MCS use cases
-│   ├── job                       Background job contracts/orchestration jobs
-│   └── service                   Presentation-facing orchestration services
+│   ├── dto                       Data transfer objects (3 files)
+│   ├── job                       Background job contracts + orchestration jobs (6 files)
+│   ├── port                      Application port interfaces + listener (5 files)
+│   └── usecase                   CVM/MCS use cases, pipeline, validation (5 files)
 ├── infrastructure                Technical adapters and I/O concerns
-│   ├── cache                     Cluster cache serialization/persistence
-│   ├── context                   Calculation contexts
-│   ├── data                      Persisted metadata and transfer records
-│   ├── eci                       ECI/CEC loading adapters
-│   ├── job                       Scheduling/execution manager adapters
-│   ├── key                       Key-building utilities
-│   ├── persistence               Repository adapters and migrations
-│   └── pipeline                  CVMPipeline and configuration
-└── presentation                  GUI/CLI user interfaces and adapters
-  ├── gui                       JavaFX screens/components/models
-  ├── cli                       Command-line interface
-  └── adapter                   Listener/progress adapters
+│   ├── context                   Calculation contexts (5 files)
+│   ├── cvm                       CVM executor + examples (3 files)
+│   ├── data                      Metadata loaders + ECI loading (2 files)
+│   ├── input                     Cluster/symmetry file parsers (3 files)
+│   ├── logging                   JUL LoggingConfig factory + log routing (2 files)
+│   ├── mcs                       MCS executor + adapters (2 files)
+│   ├── persistence               Cache, serializer, repository adapters (6 files)
+│   │   └── migration             Schema migration infrastructure (5 files)
+│   ├── registry                  System/result repositories + key utils (3 files)
+│   └── service                   CalculationService + job manager + progress adapters (4 files)
+└── presentation                  GUI/CLI user interfaces
+    ├── cli                       Command-line interface (2 files)
+    └── gui                       JavaFX application (1 file)
+        ├── component             Dialogs, charts, inspectors (7 files)
+        ├── model                 MVC model layer (2 files)
+        └── view                  Panels and views (6 files)
 ```
 
 ### Dependency rule
@@ -242,7 +318,7 @@ org.ce.infrastructure -> implements ports used by org.ce.application/org.ce.doma
                             ▼
  ┌─────────────────────────────────────────────────────────────┐
  │  STAGE 2 — CF IDENTIFICATION                                 │
- │  org.ce.identification.cf                                    │
+ │  org.ce.identification.cluster                               │
  │                                                              │
  │  2a. HSP CFs  (n-component basis)                            │
  │  2b. Phase CFs  →  classify  →  groupCFData                  │
@@ -304,25 +380,17 @@ algorithms live here. No dependency on any other `org.ce.*` package.
 
 ---
 
-### `org.ce.identification.cluster` — Stage 1
-Component-independent cluster identification.
+### `org.ce.identification.cluster` — Stages 1 & 2
+Cluster identification (Stage 1, component-independent) and CF identification (Stage 2, component-dependent).
 
-| Class | Role | Mathematica |
-|---|---|---|
-| `ClusterIdentifier` | Stage 1 orchestrator | — |
-| `NijTableCalculator` | `nij[i][j]` = sub-cluster containment counts | `getNijTable` |
-| `KikuchiBakerCalculator` | KB entropy weights via inclusion-exclusion recurrence | `generateKikuchiBakerCoefficients` |
-| `ClusterIdentificationResult` | Immutable result: `tcdis, kbCoeff[], nijTable[][], lc[], mh[][]` | — |
-
----
-
-### `org.ce.identification.cf` — Stage 2
-Component-dependent CF identification.
-
-| Class | Role | Mathematica |
-|---|---|---|
-| `CFIdentifier` | Stage 2 orchestrator | — |
-| `CFIdentificationResult` | Immutable result: `lcf[][], tcf, nxcf, ncf, GroupedCFResult` | — |
+| Class | Stage | Role | Mathematica |
+|---|---|---|---|
+| `ClusterIdentifier` | 1 | Stage 1 orchestrator | — |
+| `NijTableCalculator` | 1 | `nij[i][j]` = sub-cluster containment counts | `getNijTable` |
+| `KikuchiBakerCalculator` | 1 | KB entropy weights via inclusion-exclusion recurrence | `generateKikuchiBakerCoefficients` |
+| `ClusterIdentificationResult` | 1 | Immutable result: `tcdis, kbCoeff[], nijTable[][], lc[], mh[][]` | — |
+| `CFIdentifier` | 2 | Stage 2 orchestrator | — |
+| `CFIdentificationResult` | 2 | Immutable result: `lcf[][], tcf, nxcf, ncf, GroupedCFResult` | — |
 
 ---
 
@@ -348,58 +416,54 @@ CVM free-energy engine.
 
 ---
 
-### `org.ce.mcs` *(partial)*
+### `org.ce.mcs`
 Monte Carlo engine path.
 
 | Class | Status | Role |
 |---|---|---|
-| `EmbeddingGenerator` | ✅ Done | All cluster instances in L×L×L supercell |
-| `EmbeddingData` | ✅ Done | Three views: flat, by-site, by type+site |
-| `Embedding` | ✅ Done | One cluster instance: int[] site indices |
-| `ClusterTemplate` | ✅ Done | Displacement vectors for supercell tiling |
-| `Vector3DKey` | ✅ Done | HashMap-compatible Vector3D wrapper |
-| `LatticeConfig` | 📋 Planned | Flat int[] spin array, length N = 2·L³ |
-| `LocalEnergyCalc` | 📋 Planned | ΔE for site i via EmbeddingData + ECIs |
-| `ExchangeStep` | 📋 Planned | Canonical Metropolis step (conserves composition) |
-| `FlipStep` | 📋 Planned | Grand-canonical step (single spin flip) |
-| `MCEngine` | 📋 Planned | Metropolis loop, equilibration + averaging phases |
-| `MCSampler` | 📋 Planned | Running averages: CFs, ⟨E⟩, ⟨E²⟩ |
-| `MCSRunner` | 📋 Planned | Top-level orchestrator → MCResult |
-| `MCResult` | 📋 Planned | `{ u[], energyPerSite, heatCapacity, acceptRate }` |
+| `EmbeddingGenerator` | Done | All cluster instances in L*L*L supercell |
+| `EmbeddingData` | Done | Three views: flat, by-site, by type+site |
+| `Embedding` | Done | One cluster instance: int[] site indices |
+| `ClusterTemplate` | Done | Displacement vectors for supercell tiling |
+| `Vector3DKey` | Done | HashMap-compatible Vector3D wrapper |
+| `LatticeConfig` | Done | Flat int[] spin array, length N = 2*L^3 |
+| `LocalEnergyCalc` | Done | delta-E for site i via EmbeddingData + ECIs |
+| `ExchangeStep` | Done | Canonical Metropolis step (conserves composition) |
+| `FlipStep` | Done | Grand-canonical step (single spin flip) |
+| `MCEngine` | Done | Metropolis loop, equilibration + averaging phases |
+| `MCSampler` | Done | Running averages: CFs, E, E^2 |
+| `MCSRunner` | Done | Top-level orchestrator -> MCResult |
+| `MCResult` | Done | energyPerSite, heatCapacity, acceptRate |
+| `MCSUpdate` | Done | Application event model for MCS progress |
 
 ---
 
-### `org.ce.app`
-Entry points, pipeline API, and examples.
+### `org.ce.application.usecase`
+Use-case orchestrators, pipeline API, and configuration.
 
 | Class | Role |
 |---|---|
 | `CVMPipeline` | Single-call orchestrator: `CVMPipeline.identify(config)` returns `AllClusterData` |
 | `CVMConfiguration` | Builder for all pipeline inputs |
-| `AllClusterData` | Unified wrapper for Stages 1-3 results (clusters, CFs, C-matrix) |
-| `CVMPipelineRunner` | Integration test with Nij, KB, and lcf validation |
-| `Main` | Demo: A2 binary identification pipeline |
-| `examples/SimpleDemo` | Minimal A2 binary example |
-| `examples/OrderedPhaseExample` | B2 ordered-phase example |
-| `examples/CompareBinaryTernary` | Binary vs ternary CF count comparison |
+| `CVMCalculationUseCase` | CVM calculation orchestration |
+| `MCSCalculationUseCase` | MCS calculation orchestration |
+| `ClusterDataValidator` | Validates cluster data completeness |
 
 ---
 
 ## Implementation Status
 
-| Package | Done | Planned | Total |
-|---|---|---|---|
-| `org.ce.input` | 3 | 0 | 3 |
-| `org.ce.identification.engine` | 19 | 0 | 19 |
-| `org.ce.identification.cluster` | 4 | 0 | 4 |
-| `org.ce.identification.cf` | 2 | 0 | 2 |
-| `org.ce.cvm` | 0 | 14 | 14 |
-| `org.ce.mcs` | 5 | 8 | 13 |
-| `org.ce.app` | 8 | 3 | 11 |
-| **Total** | **41** | **25** | **66** |
+| Layer | Packages | Files |
+|---|---|---|
+| `domain` | 12 | 81 |
+| `application` | 4 | 19 |
+| `infrastructure` | 10 | 36 |
+| `presentation` | 4 | 18 |
+| **Total** | **30** | **165** |
 
-The shared identification pipeline (Stages 1 + 2) is fully implemented.
-The CVM free-energy path (Stages 3–5) and remaining MCS classes are next.
+The shared identification pipeline (Stages 1 + 2) and the complete MCS engine are fully implemented.
+The CVM free-energy path (Stages 3-5) is partially complete via `CVMPhaseModel`.
+Package consolidation reduced 47 packages to 32 (Mar 8, 2026).
 
 ---
 

@@ -1,12 +1,12 @@
 package org.ce.presentation.gui.view;
 
 import org.ce.domain.cvm.CMatrixResult;
-import org.ce.domain.identification.cf.CFIdentificationResult;
+import org.ce.domain.identification.cluster.CFIdentificationResult;
 import org.ce.domain.identification.cluster.ClusterIdentificationResult;
 import org.ce.domain.identification.result.GroupedCFResult;
 import org.ce.domain.model.data.AllClusterData;
 import org.ce.application.job.CFIdentificationJob;
-import org.ce.infrastructure.cache.AllClusterDataCache;
+import org.ce.infrastructure.persistence.AllClusterDataCache;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;

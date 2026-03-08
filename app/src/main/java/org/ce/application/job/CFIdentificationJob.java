@@ -1,15 +1,19 @@
 package org.ce.application.job;
 
-import org.ce.application.pipeline.CVMConfiguration;
-import org.ce.application.pipeline.CVMPipeline;
+import org.ce.application.usecase.CVMConfiguration;
+import org.ce.application.usecase.CVMPipeline;
 import org.ce.domain.cvm.CMatrixResult;
 import org.ce.domain.model.data.AllClusterData;
 import org.ce.infrastructure.registry.SystemRegistry;
 import org.ce.domain.system.SystemIdentity;
-import org.ce.infrastructure.cache.AllClusterDataCache;
+import org.ce.infrastructure.persistence.AllClusterDataCache;
 import org.ce.domain.identification.geometry.Vector3D;
 
+import org.ce.infrastructure.logging.LoggingConfig;
+
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Background job for the complete CVM identification pipeline.
@@ -27,7 +31,9 @@ import java.util.UUID;
  * <p>All stages are bundled in the returned {@link AllClusterData}, ready for CVM calculations.</p>
  */
 public class CFIdentificationJob extends AbstractBackgroundJob {
-    
+
+    private static final Logger LOG = LoggingConfig.getLogger(CFIdentificationJob.class);
+
     private AllClusterData allData;
     private final String clusterKey;
     private final String disorderedClusterFile;
@@ -70,6 +76,9 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
     
     @Override
     public void run() {
+        long jStart = System.currentTimeMillis();
+        LOG.info("CFIdentificationJob.run — ENTER: job=" + getId() + ", system=" + system.getId()
+                + ", numComponents=" + numComponents + ", clusterKey=" + clusterKey);
         if (shouldStop()) return;
         
         try {
@@ -129,11 +138,10 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
                     // Save AllClusterData - the single source of truth for both CVM and MCS.
                     // MCS extracts ClusCoordListResult via stage1.getDisClusterData().
                     AllClusterDataCache.save(allData, clusterKey);
-                    System.out.println("[CFIdentificationJob] AllClusterData saved to key: " + clusterKey);
+                    LOG.info("AllClusterData saved to key: " + clusterKey);
                     persistSuccess = true;
                 } catch (Exception saveEx) {
-                    System.err.println("[CFIdentificationJob] WARNING: cache save failed: " + saveEx.getMessage());
-                    saveEx.printStackTrace();
+                    LOG.log(Level.WARNING, "Cache save failed for key: " + clusterKey, saveEx);
                     // Data is still in memory, but cfsComputed won't be set
                 }
             } else {
@@ -147,12 +155,17 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
             }
             setProgress(100);
             setStatusMessage("All identification stages completed");
-            
+            LOG.info("CFIdentificationJob.run — EXIT: COMPLETED — job=" + getId()
+                    + ", tcdis=" + allData.getStage1().getTcdis()
+                    + ", tcf=" + allData.getStage2().getTcf()
+                    + ", ncf=" + allData.getStage2().getNcf()
+                    + ", elapsed=" + (System.currentTimeMillis() - jStart) + " ms");
             markCompleted();
             
         } catch (Exception e) {
+            LOG.log(Level.WARNING, "CFIdentificationJob.run — EXCEPTION in identification pipeline: "
+                    + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
             markFailed("Identification pipeline failed: " + e.getMessage());
-            e.printStackTrace();
         } finally {
             running = false;
         }

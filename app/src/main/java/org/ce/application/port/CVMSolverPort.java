@@ -1,6 +1,6 @@
 package org.ce.application.port;
 
-import org.ce.domain.model.cvm.CVMModelInput;
+import org.ce.domain.cvm.CVMModelInput;
 import org.ce.domain.model.result.CVMResult;
 
 /**

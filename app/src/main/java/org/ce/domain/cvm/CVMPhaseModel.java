@@ -1,12 +1,13 @@
 package org.ce.domain.cvm;
 
-import org.ce.domain.identification.cf.CFIdentificationResult;
+import org.ce.domain.identification.cluster.CFIdentificationResult;
 import org.ce.domain.identification.cluster.ClusterIdentificationResult;
-import org.ce.domain.model.cvm.CVMModelInput;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Central thermodynamic model for CVM free-energy calculations.
@@ -19,9 +20,9 @@ import java.util.List;
  *
  * <p><b>Data Ownership:</b>
  * <ul>
- *   <li><b>Immutable:</b> Cluster data (Stages 1-3) from AllClusterData â€” fixed at creation</li>
- *   <li><b>Mutable:</b> System parameters (ECI) and macro parameters (T, x) â€” can change anytime</li>
- *   <li><b>Cached:</b> Equilibrium results â€” invalidated when parameters change</li>
+ *   <li><b>Immutable:</b> Cluster data (Stages 1-3) from AllClusterData â€" fixed at creation</li>
+ *   <li><b>Mutable:</b> System parameters (ECI) and macro parameters (T, x) â€" can change anytime</li>
+ *   <li><b>Cached:</b> Equilibrium results â€" invalidated when parameters change</li>
  * </ul>
  *
  * <p><b>Typical Usage:</b>
@@ -49,8 +50,10 @@ import java.util.List;
  */
 public class CVMPhaseModel {
 
+    private static final Logger LOG = Logger.getLogger(CVMPhaseModel.class.getName());
+
     // =========================================================================
-    // IMMUTABLE: Cluster Data (from AllClusterData) â€” never changes
+    // IMMUTABLE: Cluster Data (from AllClusterData) — never changes
     // =========================================================================
 
     private final int tcdis;              // Number of cluster types
@@ -70,21 +73,21 @@ public class CVMPhaseModel {
     private final int numComponents;
 
     // =========================================================================
-    // MUTABLE: System Parameters â€” can be changed at any time
+    // MUTABLE: System Parameters â€" can be changed at any time
     // =========================================================================
 
     private double[] eci;            // Effective Cluster Interactions (CECs)
     private double tolerance;        // Convergence criterion
 
     // =========================================================================
-    // MUTABLE: Macro Parameters â€” can be changed at any time
+    // MUTABLE: Macro Parameters â€" can be changed at any time
     // =========================================================================
 
     private double temperature;      // Kelvin
     private double[] moleFractions;  // Composition (length numComponents)
 
     // =========================================================================
-    // CACHED: Equilibrium results â€” updated when parameters change
+    // CACHED: Equilibrium results â€" updated when parameters change
     // =========================================================================
 
     private boolean isMinimized = false;
@@ -145,7 +148,7 @@ public class CVMPhaseModel {
     }
 
     // =========================================================================
-    // CONSTRUCTOR (Private â€” only called by factory)
+    // CONSTRUCTOR (Private â€" only called by factory)
     // =========================================================================
 
     /**
@@ -193,7 +196,7 @@ public class CVMPhaseModel {
 
     /**
      * Sets cluster interaction energies (CECs).
-     * Invalidates cached results â€” next query will re-minimize.
+     * Invalidates cached results â€" next query will re-minimize.
      *
      * @param newECI effective cluster interactions (must have length ncf)
      * @throws IllegalArgumentException if length mismatch
@@ -210,7 +213,7 @@ public class CVMPhaseModel {
 
     /**
      * Sets temperature.
-     * Invalidates cached results â€” next query will re-minimize.
+     * Invalidates cached results â€" next query will re-minimize.
      *
      * @param T_K temperature in Kelvin (must be positive)
      * @throws IllegalArgumentException if temperature invalid
@@ -310,7 +313,7 @@ public class CVMPhaseModel {
     /**
      * Ensures model is minimized.
      * If parameters changed since last minimization, re-minimizes.
-     * Safe to call multiple times â€” only computes if needed.
+     * Safe to call multiple times â€" only computes if needed.
      *
      * @throws Exception if minimization fails
      * @throws IllegalStateException if required parameters not set
@@ -330,6 +333,8 @@ public class CVMPhaseModel {
         }
 
         // Perform minimization
+        LOG.fine("CVMPhaseModel.ensureMinimized — starting minimization: T=" + temperature
+                + " K, x=" + Arrays.toString(moleFractions));
         minimize();
 
         if (!isMinimized) {
@@ -410,7 +415,7 @@ public class CVMPhaseModel {
         } catch (Exception e) {
             this.isMinimized = false;
             this.lastConvergenceStatus = "Exception: " + e.getMessage();
-            System.err.println("[CVMPhaseModel.minimize] Error: " + e);
+            LOG.log(Level.WARNING, "CVMPhaseModel.minimize — EXCEPTION: " + e.getMessage(), e);
         }
     }
 
@@ -426,21 +431,18 @@ public class CVMPhaseModel {
     }
 
     private void logMinimizationSuccess() {
-        System.out.println("[CVMPhaseModel] Minimization successful");
-        System.out.println("  T: " + temperature + " K");
-        System.out.println("  x: " + Arrays.toString(moleFractions));
-        System.out.println("  Iterations: " + lastIterations);
-        System.out.println("  ||âˆ‡G||: " + String.format("%8e", lastGradientNorm));
-        System.out.println("  Time: " + (lastMinimizationTimeNanos / 1_000_000) + " ms");
-        if (equilibrium != null) {
-            System.out.println("  G_eq: " + String.format("%12.6e", equilibrium.G) + " J/mol");
-        }
+        LOG.fine("CVMPhaseModel.minimize — SUCCESS: T=" + temperature + " K"
+                + ", x=" + Arrays.toString(moleFractions)
+                + ", iterations=" + lastIterations
+                + ", ||dG||=" + String.format("%.4e", lastGradientNorm)
+                + ", G=" + String.format("%.6e", equilibrium != null ? equilibrium.G : Double.NaN) + " J/mol"
+                + ", elapsed=" + (lastMinimizationTimeNanos / 1_000_000) + " ms");
     }
 
     private void logMinimizationFailure() {
-        System.err.println("[CVMPhaseModel] Minimization FAILED");
-        System.err.println("  Status: " + lastConvergenceStatus);
-        System.err.println("  Iterations: " + lastIterations);
+        LOG.warning("CVMPhaseModel.minimize — FAILED: T=" + temperature + " K"
+                + ", status=" + lastConvergenceStatus
+                + ", iterations=" + lastIterations);
     }
 
     // =========================================================================

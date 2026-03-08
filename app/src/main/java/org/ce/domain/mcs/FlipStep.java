@@ -4,6 +4,7 @@ import org.ce.domain.identification.geometry.Cluster;
 
 import java.util.List;
 import java.util.Random;
+import java.util.logging.Logger;
 
 /**
  * One grand-canonical Monte Carlo step: changes a randomly chosen site's
@@ -32,6 +33,8 @@ import java.util.Random;
  * @see     LocalEnergyCalc
  */
 public class FlipStep {
+
+    private static final Logger LOG = Logger.getLogger(FlipStep.class.getName());
 
     /** (Phase) gas constant used in acceptance exponent (eV/K). */
     // Passed into constructors as `R` to match original code's `R_local`.
@@ -89,6 +92,8 @@ public class FlipStep {
         this.beta    = 1.0 / (R * T);
         this.deltaMu = deltaMu.clone();
         this.rng     = rng;
+        LOG.finest("FlipStep created: T=" + T + " beta=" + String.format("%.4e", this.beta)
+                + " numComp=" + numComp);
     }
 
     /**

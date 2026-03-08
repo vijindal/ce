@@ -1,15 +1,20 @@
 package org.ce.application.job;
 
 import org.ce.domain.system.SystemIdentity;
+import org.ce.infrastructure.logging.LoggingConfig;
+
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.logging.Logger;
 
 /**
  * Base abstract class for background jobs.
  * Provides common functionality like progress tracking, listener management, etc.
  */
 public abstract class AbstractBackgroundJob implements BackgroundJob {
-    
+
+    private static final Logger LOG = LoggingConfig.getLogger(AbstractBackgroundJob.class);
+
     protected final String id;
     protected final String name;
     protected final SystemIdentity system;
@@ -63,23 +68,26 @@ public abstract class AbstractBackgroundJob implements BackgroundJob {
     public void pause() {
         if (running && !paused) {
             paused = true;
+            LOG.fine("AbstractBackgroundJob.pause — job=" + id + " PAUSED");
             listeners.forEach(l -> l.onJobPaused(id));
         }
     }
-    
+
     @Override
     public void resume() {
         if (running && paused) {
             paused = false;
+            LOG.fine("AbstractBackgroundJob.resume — job=" + id + " RESUMED");
             listeners.forEach(l -> l.onJobResumed(id));
         }
     }
-    
+
     @Override
     public void cancel() {
         if (running || !completed) {
             cancelled = true;
             running = false;
+            LOG.info("AbstractBackgroundJob.cancel — job=" + id + " CANCELLED");
             listeners.forEach(l -> l.onJobCancelled(id));
         }
     }
@@ -109,13 +117,15 @@ public abstract class AbstractBackgroundJob implements BackgroundJob {
         running = false;
         completed = true;
         progress = 100;
+        LOG.info("AbstractBackgroundJob.markCompleted — job=" + id + " COMPLETED");
         listeners.forEach(l -> l.onJobCompleted(id));
     }
-    
+
     protected void markFailed(String error) {
         running = false;
         failed = true;
         errorMessage = error;
+        LOG.warning("AbstractBackgroundJob.markFailed — job=" + id + " FAILED: " + error);
         listeners.forEach(l -> l.onJobFailed(id, error));
     }
     

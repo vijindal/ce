@@ -7,6 +7,8 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
+import org.ce.infrastructure.logging.LoggingConfig;
 
 /**
  * Central registry for managing systems and their computation status.
@@ -27,7 +29,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * </ul>
  */
 public class SystemRegistry {
-    
+
+    private static final Logger LOG = LoggingConfig.getLogger(SystemRegistry.class);
+
     private final Path registryRoot;
     private final Map<String, SystemIdentity> identities;
     private final Map<String, SystemStatus> statuses;
@@ -224,7 +228,7 @@ public class SystemRegistry {
             // TODO: Implement deserialization from file
             // For now, systems are built at runtime
         } catch (Exception e) {
-            System.err.println("Failed to load systems: " + e.getMessage());
+            LOG.warning("Failed to load systems: " + e.getMessage());
         }
     }
     
@@ -233,7 +237,7 @@ public class SystemRegistry {
             Path systemsFile = registryRoot.resolve(SYSTEMS_FILE);
             // TODO: Implement serialization to file
         } catch (Exception e) {
-            System.err.println("Failed to save systems: " + e.getMessage());
+            LOG.warning("Failed to save systems: " + e.getMessage());
         }
     }
     
@@ -245,7 +249,7 @@ public class SystemRegistry {
                 try {
                     Files.delete(p);
                 } catch (IOException e) {
-                    System.err.println("Failed to delete: " + p);
+                    LOG.warning("Failed to delete: " + p);
                 }
             });
     }

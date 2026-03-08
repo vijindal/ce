@@ -3,12 +3,13 @@ package org.ce.infrastructure.persistence;
 import org.ce.domain.port.ClusterDataRepository;
 import org.ce.infrastructure.persistence.migration.ClusterCacheSchemaMigrator;
 import org.ce.domain.model.data.AllClusterData;
-import org.ce.infrastructure.cache.AllClusterDataCache;
 import org.json.JSONObject;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.logging.Logger;
+import org.ce.infrastructure.logging.LoggingConfig;
 
 /**
  * Adapter implementing {@link ClusterDataRepository} by delegating to
@@ -26,6 +27,8 @@ import java.util.Optional;
  * @since 2.0
  */
 public class ClusterDataRepositoryAdapter implements ClusterDataRepository<AllClusterData> {
+
+    private static final Logger LOG = LoggingConfig.getLogger(ClusterDataRepositoryAdapter.class);
 
     private static final String CACHE_FILE = "all_cluster_data.json";
 
@@ -77,7 +80,7 @@ public class ClusterDataRepositoryAdapter implements ClusterDataRepository<AllCl
                  try {
                      Files.delete(path);
                  } catch (java.io.IOException e) {
-                     System.err.println("Failed to delete: " + path);
+                     LOG.warning("Failed to delete: " + path);
                  }
              });
         

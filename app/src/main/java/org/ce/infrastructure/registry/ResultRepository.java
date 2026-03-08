@@ -10,6 +10,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.logging.Logger;
+import org.ce.infrastructure.logging.LoggingConfig;
 
 /**
  * Repository for storing and querying calculation results.
@@ -28,6 +30,8 @@ import java.util.stream.Collectors;
  * @see CalculationRecord
  */
 public class ResultRepository {
+
+    private static final Logger LOG = LoggingConfig.getLogger(ResultRepository.class);
 
     private final Path resultsRoot;
     private final Map<String, CalculationRecord> results;
@@ -258,7 +262,7 @@ public class ResultRepository {
                 .filter(p -> p.toString().endsWith(".json"))
                 .forEach(this::loadResultFile);
         } catch (IOException e) {
-            System.err.println("[ResultRepository] Failed to scan results: " + e.getMessage());
+            LOG.warning("Failed to scan results: " + e.getMessage());
         }
     }
 
@@ -268,7 +272,7 @@ public class ResultRepository {
             // TODO: Implement JSON deserialization for CalculationRecord
             // For now, result files are placeholders
         } catch (Exception e) {
-            System.err.println("[ResultRepository] Failed to load: " + file + " - " + e.getMessage());
+            LOG.warning("Failed to load: " + file + " - " + e.getMessage());
         }
     }
 
@@ -281,7 +285,7 @@ public class ResultRepository {
             String json = serializeRecord(record);
             Files.writeString(resultFile, json);
         } catch (IOException e) {
-            System.err.println("[ResultRepository] Failed to persist " + record.id() + ": " + e.getMessage());
+            LOG.warning("Failed to persist " + record.id() + ": " + e.getMessage());
         }
     }
 
@@ -290,7 +294,7 @@ public class ResultRepository {
             Path resultFile = resultsRoot.resolve(record.systemId()).resolve(record.id() + ".json");
             Files.deleteIfExists(resultFile);
         } catch (IOException e) {
-            System.err.println("[ResultRepository] Failed to delete " + record.id() + ": " + e.getMessage());
+            LOG.warning("Failed to delete " + record.id() + ": " + e.getMessage());
         }
     }
 
@@ -322,7 +326,7 @@ public class ResultRepository {
                 try {
                     Files.delete(p);
                 } catch (IOException e) {
-                    System.err.println("[ResultRepository] Failed to delete: " + p);
+                    LOG.warning("Failed to delete: " + p);
                 }
             });
     }
@@ -334,7 +338,7 @@ public class ResultRepository {
                 try {
                     Files.delete(p);
                 } catch (IOException e) {
-                    System.err.println("[ResultRepository] Failed to delete: " + p);
+                    LOG.warning("Failed to delete: " + p);
                 }
             });
     }

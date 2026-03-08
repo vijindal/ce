@@ -8,30 +8,40 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
-import org.ce.infrastructure.job.BackgroundJobManager;
+import org.ce.infrastructure.service.BackgroundJobManager;
 import org.ce.infrastructure.registry.ResultRepository;
 import org.ce.infrastructure.registry.SystemRegistry;
 import org.ce.presentation.gui.component.CVMModelInspectorDialog;
 import org.ce.presentation.gui.view.CalculationSetupPanel;
+import org.ce.presentation.gui.view.LogConsolePanel;
 import org.ce.presentation.gui.view.SystemRegistryPanel;
 import org.ce.presentation.gui.view.ResultsPanel;
 import org.ce.domain.system.SystemIdentity;
 
 import java.nio.file.Paths;
 import java.util.Optional;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import org.ce.infrastructure.logging.LoggingConfig;
 
 /**
  * Main JavaFX application for the CE Thermodynamics Workbench GUI.
  * Entry point and orchestrator for all UI components.
  */
 public class CEWorkbenchApplication extends Application {
-    
+
+    private static final Logger LOG = LoggingConfig.getLogger(CEWorkbenchApplication.class);
+
     private SystemRegistry systemRegistry;
     private ResultRepository resultRepository;
     private BackgroundJobManager jobManager;
     private SystemRegistryPanel registryPanel;
     private ResultsPanel resultsPanel;
-    
+    private LogConsolePanel logConsolePanel;
+
+    /** Retained across the static/instance boundary so LogConsolePanel can use it. */
+    private static Level initialLogLevel = Level.INFO;
+
     private Stage primaryStage;
     
     @Override
@@ -84,7 +94,7 @@ public class CEWorkbenchApplication extends Application {
             // Check if A-B test system exists in cache
             String clusterKey = "BCC_A2_T_bin";
             Optional<org.ce.domain.model.data.AllClusterData> cachedData = 
-                org.ce.infrastructure.cache.AllClusterDataCache.load(clusterKey);
+                org.ce.infrastructure.persistence.AllClusterDataCache.load(clusterKey);
             
             if (cachedData.isPresent() && cachedData.get().isComplete()) {
                 String systemId = "A-B_BCC_A2_T";
@@ -106,11 +116,11 @@ public class CEWorkbenchApplication extends Application {
                     systemRegistry.markCfsComputed(systemId, true);
                     systemRegistry.markCecAvailable(systemId, true);
                     
-                    System.out.println("[CEWorkbench] Auto-registered test system: " + systemId);
+                    LOG.info("Auto-registered test system: " + systemId);
                 }
             }
         } catch (Exception e) {
-            System.err.println("[CEWorkbench] Warning: Failed to register test systems: " + e.getMessage());
+            LOG.warning("Failed to register test systems: " + e.getMessage());
         }
     }
     
@@ -192,11 +202,15 @@ public class CEWorkbenchApplication extends Application {
     private TabPane createRightPanel() {
         TabPane tabPane = new TabPane();
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
-        
-        // Single Result tab with the shared results panel
+
+        // Result tab
         Tab resultTab = new Tab("Result", resultsPanel);
-        
-        tabPane.getTabs().addAll(resultTab);
+
+        // Log tab — captures JUL output from the org.ce hierarchy
+        logConsolePanel = new LogConsolePanel(initialLogLevel);
+        Tab logTab = new Tab("Log", logConsolePanel);
+
+        tabPane.getTabs().addAll(resultTab, logTab);
         return tabPane;
     }
     
@@ -222,6 +236,9 @@ public class CEWorkbenchApplication extends Application {
     
     @Override
     public void stop() throws Exception {
+        if (logConsolePanel != null) {
+            logConsolePanel.shutdown();
+        }
         if (jobManager != null) {
             jobManager.shutdown();
         }
@@ -237,6 +254,17 @@ public class CEWorkbenchApplication extends Application {
     }
     
     public static void main(String[] args) {
+        // Parse --log-level flag before launching JavaFX
+        Level logLevel = Level.INFO;
+        for (String arg : args) {
+            if (arg.startsWith("--log-level=")) {
+                try {
+                    logLevel = Level.parse(arg.substring("--log-level=".length()).toUpperCase());
+                } catch (IllegalArgumentException ignored) {}
+            }
+        }
+        LoggingConfig.configure(logLevel);
+        initialLogLevel = logLevel;
         launch(args);
     }
 }

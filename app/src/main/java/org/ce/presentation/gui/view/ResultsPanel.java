@@ -9,7 +9,7 @@ import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
-import org.ce.domain.mcs.event.MCSUpdate;
+import org.ce.domain.mcs.MCSUpdate;
 
 /**
  * Results panel with vertical split: graphical output (top) and text output (bottom).

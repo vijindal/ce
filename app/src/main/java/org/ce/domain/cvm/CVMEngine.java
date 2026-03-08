@@ -1,8 +1,7 @@
 package org.ce.domain.cvm;
 
-import org.ce.domain.identification.cf.CFIdentificationResult;
+import org.ce.domain.identification.cluster.CFIdentificationResult;
 import org.ce.domain.identification.cluster.ClusterIdentificationResult;
-import org.ce.domain.model.cvm.CVMModelInput;
 
 import java.util.List;
 

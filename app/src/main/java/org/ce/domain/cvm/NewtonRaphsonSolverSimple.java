@@ -2,6 +2,8 @@ package org.ce.domain.cvm;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Newton-Raphson solver for CVM free-energy minimization.
@@ -17,6 +19,8 @@ import java.util.List;
  * </ul>
  */
 public final class NewtonRaphsonSolverSimple {
+
+    private static final Logger LOG = Logger.getLogger(NewtonRaphsonSolverSimple.class.getName());
 
     /** Gas constant R = 1 (normalized units). */
     private static final double R = 1.0;
@@ -181,13 +185,9 @@ public final class NewtonRaphsonSolverSimple {
         // Compute initial CVs
         double[][][] cv = updateCV(data, u);
 
-        System.out.println("\n[NR-Simple] Starting Newton-Raphson minimization");
-        System.out.println("  ncf=" + ncf + " tcf=" + data.tcf + " T=" + data.temperature);
-        System.out.println("  xB=" + data.xB + " tolerance=" + tolerance);
-        System.out.println("  Initial CFs (random state):");
-        for (int i = 0; i < Math.min(5, ncf); i++) {
-            System.out.printf("    u[%d] = %.10e%n", i, u[i]);
-        }
+        LOG.fine("NewtonRaphsonSolverSimple.minimize — ENTER: ncf=" + ncf
+                + ", tcf=" + data.tcf + ", T=" + data.temperature
+                + ", xB=" + data.xB + ", tolerance=" + tolerance);
 
         double[] Gu = new double[ncf];
         double[][] Guu = new double[ncf][ncf];
@@ -221,13 +221,14 @@ public final class NewtonRaphsonSolverSimple {
                     Gu.clone()
                 ));
 
-            if (iter == 1 || iter % 20 == 0 || gradNorm < 1e-6) {
-                System.out.printf("[NR] Iter %3d: G=%.8e H=%.8e S=%.8e ||Gu||=%.8e%n",
-                        iter, G, H, S, gradNorm);
+            if (LOG.isLoggable(Level.FINEST) && (iter == 1 || iter % 20 == 0 || gradNorm < 1e-6)) {
+                LOG.finest(String.format("NewtonRaphsonSolverSimple — iter %3d: G=%.8e H=%.8e S=%.8e ||Gu||=%.8e",
+                        iter, G, H, S, gradNorm));
             }
 
             if (gradNorm < tolerance) {
-                System.out.println("  âœ“ CONVERGED (gradient norm < tolerance)");
+                LOG.fine(String.format("NewtonRaphsonSolverSimple — CONVERGED (gradient norm < tolerance): iter=%d, ||Gu||=%.4e",
+                        iter, gradNorm));
                 return new CVMSolverResult(u, G, H, S, iter, gradNorm, true, trace);
             }
 
@@ -238,7 +239,7 @@ public final class NewtonRaphsonSolverSimple {
                 for (int i = 0; i < ncf; i++) negGu[i] = -Gu[i];
                 du = LinearAlgebraUtils.solve(Guu, negGu);
             } catch (IllegalArgumentException e) {
-                System.out.println("  âœ— SINGULAR HESSIAN: " + e.getMessage());
+                LOG.warning("NewtonRaphsonSolverSimple — SINGULAR HESSIAN at iter=" + iter + ": " + e.getMessage());
                 return new CVMSolverResult(u, G, H, S, iter, gradNorm, false, trace);
             }
 
@@ -270,17 +271,19 @@ public final class NewtonRaphsonSolverSimple {
                 finalGradNorm = Math.sqrt(finalGradNorm);
 
                 if (finalGradNorm < tolerance) {
-                    System.out.println("  âœ“ CONVERGED (step size < TOLX and gradient < tolerance)");
+                    LOG.fine(String.format("NewtonRaphsonSolverSimple — CONVERGED (step < TOLX and gradient < tolerance): iter=%d, ||Gu||=%.4e",
+                            iter, finalGradNorm));
                     return new CVMSolverResult(u, vals[0], vals[1], vals[2], iter, finalGradNorm, true, trace);
                 }
 
-                System.out.printf("  âœ— STALLED (step size < TOLX but ||Gu||=%.8e > tolerance=%.8e)%n",
-                        finalGradNorm, tolerance);
+                LOG.warning(String.format("NewtonRaphsonSolverSimple — STALLED (step < TOLX but ||Gu||=%.4e > tolerance=%.4e): iter=%d",
+                        finalGradNorm, tolerance, iter));
                 return new CVMSolverResult(u, vals[0], vals[1], vals[2], iter, finalGradNorm, false, trace);
             }
         }
 
-        System.out.printf("[NR] NO CONVERGENCE after %d iterations (||Gu||=%.8e)%n", maxIter, gradNorm);
+        LOG.warning(String.format("NewtonRaphsonSolverSimple — NOT CONVERGED after %d iterations (||Gu||=%.4e)",
+                maxIter, gradNorm));
         return new CVMSolverResult(u, G, H, S, maxIter, gradNorm, false, trace);
     }
 
@@ -531,10 +534,10 @@ public final class NewtonRaphsonSolverSimple {
     /**
      * Find maximum step size that keeps all CVs positive.
      *
-     * <p>For each CV: cv_new = cv_old + stpmax Ã— Î”cv
-     * where Î”cv = Î£_icf cmat[v][icf] Ã— du[icf]</p>
+     * <p>For each CV: cv_new = cv_old + stpmax Ã— Î"cv
+     * where Î"cv = Î£_icf cmat[v][icf] Ã— du[icf]</p>
      *
-     * <p>If Î”cv < 0, max step = -cv_old / Î”cv (but slightly smaller)</p>
+     * <p>If Î"cv < 0, max step = -cv_old / Î"cv (but slightly smaller)</p>
      */
     private static double stpmx(CVMData data, double[] u, double[] du, double[][][] cv) {
         double stpmax = 1.0;
