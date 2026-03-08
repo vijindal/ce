@@ -2,9 +2,11 @@ package org.ce.infrastructure.cvm;
 
 import org.ce.domain.cvm.CVMSolverResult;
 import org.ce.domain.cvm.CVMPhaseModel;
-import org.ce.application.service.CalculationProgressListener;
+import org.ce.application.port.CalculationProgressListener;
+import org.ce.infrastructure.logging.LoggingConfig;
 
 import java.util.List;
+import java.util.logging.Logger;
 
 /**
  * Executor for CVM Phase Model calculations.
@@ -16,7 +18,9 @@ import java.util.List;
  * with different parameters.</p>
  */
 public class CVMPhaseModelExecutor {
-    
+
+    private static final Logger LOG = LoggingConfig.getLogger(CVMPhaseModelExecutor.class);
+
     /**
      * Executes initial thermodynamic evaluation of the CVM phase model.
      * 
@@ -28,9 +32,11 @@ public class CVMPhaseModelExecutor {
      */
     public static boolean initializeModel(CVMPhaseModel model, CalculationProgressListener listener) {
         if (model == null) {
-            listener.logMessage("âœ— CVMPhaseModelExecutor: Model is null");
+            listener.logMessage("\u2717 CVMPhaseModelExecutor: Model is null");
             return false;
         }
+
+        LOG.fine("CVMPhaseModelExecutor.initializeModel — ENTER: T=" + model.getTemperature() + " K");
         
         listener.logMessage("\n" + "=".repeat(60));
         listener.logMessage("CVM Phase Model - Initialization Complete");
@@ -78,14 +84,19 @@ public class CVMPhaseModelExecutor {
                 }
             }
             
-            listener.logMessage("\nâœ“ CVM Phase Model ready for parameter scanning");
+            listener.logMessage("\n\u2714 CVM Phase Model ready for parameter scanning");
             listener.setProgress(1.0);
             listener.logMessage("=".repeat(60));
-            
+            LOG.fine("CVMPhaseModelExecutor.initializeModel — EXIT: T=" + model.getTemperature()
+                    + " K, G=" + String.format("%.8e", state.G)
+                    + ", iterations=" + state.iterations
+                    + ", convergence=" + String.format("%.2e", state.convergenceMeasure));
             return true;
             
         } catch (Exception ex) {
-            listener.logMessage("\nâœ— CVM Phase Model Initialization Failed");
+            LOG.warning("CVMPhaseModelExecutor.initializeModel — FAILED: "
+                    + ex.getClass().getSimpleName() + ": " + ex.getMessage());
+            listener.logMessage("\n\u2717 CVM Phase Model Initialization Failed");
             listener.logMessage("Error: " + ex.getClass().getSimpleName());
             listener.logMessage("Message: " + ex.getMessage());
             listener.logMessage("=".repeat(60));

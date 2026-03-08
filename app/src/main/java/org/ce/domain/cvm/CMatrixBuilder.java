@@ -1,7 +1,7 @@
 package org.ce.domain.cvm;
 
 import org.ce.domain.identification.cluster.ClusterIdentificationResult;
-import org.ce.domain.identification.cf.CFIdentificationResult;
+import org.ce.domain.identification.cluster.CFIdentificationResult;
 import org.ce.domain.identification.geometry.Cluster;
 import org.ce.domain.identification.geometry.Sublattice;
 import org.ce.domain.identification.geometry.Site;
@@ -11,11 +11,14 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * Builds the C-matrix that relates CVs to CFs.
  */
 public final class CMatrixBuilder {
+
+    private static final Logger LOG = Logger.getLogger(CMatrixBuilder.class.getName());
 
     private CMatrixBuilder() {}
 
@@ -31,6 +34,10 @@ public final class CMatrixBuilder {
         if (maxClusters == null) {
             throw new IllegalArgumentException("maxClusters must not be null");
         }
+
+        LOG.fine("CMatrixBuilder.build — ENTER: tc=" + clusterResult.getTc()
+                + ", ncf=" + cfResult.getNcf() + ", tcf=" + cfResult.getTcf()
+                + ", numElements=" + numElements);
 
         List<Vector3D> siteList = SiteListBuilder.buildSiteList(maxClusters);
         PRules pRules = PRulesBuilder.build(siteList.size(), numElements);
@@ -97,6 +104,11 @@ public final class CMatrixBuilder {
             cmat.add(cmatType);
             wcv.add(wcvType);
         }
+
+        // Count total CVs for logging
+        int totalCVs = 0;
+        for (int[] row : lcv) for (int v : row) totalCVs += v;
+        LOG.fine("CMatrixBuilder.build — EXIT: totalCVs=" + totalCVs + ", lcv.length=" + lcv.length);
 
         return new CMatrixResult(cmat, lcv, wcv, cfBasisIndices);
     }

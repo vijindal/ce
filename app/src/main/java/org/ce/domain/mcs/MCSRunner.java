@@ -3,13 +3,13 @@ package org.ce.domain.mcs;
 import org.ce.domain.identification.geometry.Cluster;
 import org.ce.domain.identification.result.ClusCoordListResult;
 import org.ce.domain.identification.geometry.Vector3D;
-import org.ce.domain.mcs.event.MCSUpdate;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.logging.Logger;
 
 /**
  * Top-level orchestrator for the MCS engine path.
@@ -67,6 +67,8 @@ import java.util.function.Consumer;
  */
 public class MCSRunner {
 
+    private static final Logger LOG = Logger.getLogger(MCSRunner.class.getName());
+
     private final ClusCoordListResult clusterData;
     private final double[]            eci;
     private final int                 numComp;
@@ -119,24 +121,20 @@ public class MCSRunner {
                 ? customPositions
                 : buildBCCPositions(L);
         int N = positions.size();
-        System.out.printf("[MCSRunner] Structure: L=%d  N=%d  numComp=%d  T=%.1f K%n",
-                          L, N, numComp, T);
+        LOG.fine(String.format("MCSRunner.run — ENTER: L=%d, N=%d, numComp=%d, T=%.1f K, nEquil=%d, nAvg=%d, seed=%d", L, N, numComp, T, nEquil, nAvg, seed));
 
         // 2. Embeddings
-        System.out.println("[MCSRunner] Generating embeddings ...");
         EmbeddingData emb = EmbeddingGenerator.generateEmbeddings(
                 positions, clusterData, L);
-        System.out.printf("[MCSRunner] Embeddings: %d total  (%d cluster types)%n",
-                          emb.totalEmbeddingCount(), clusterData.getTc());
 
         // 3. Configuration
         LatticeConfig config = new LatticeConfig(N, numComp);
         config.randomise(xFrac, rng);
-        System.out.print("[MCSRunner] Composition: ");
         double[] x = config.composition();
+        StringBuilder compSb = new StringBuilder("Composition: ");
         for (int c = 0; c < numComp; c++)
-            System.out.printf("x[%d]=%.4f  ", c, x[c]);
-        System.out.println();
+            compSb.append(String.format("x[%d]=%.4f  ", c, x[c]));
+        LOG.fine(compSb.toString());
 
         // 4. Orbit sizes and orbit list for sampler
         int tc = clusterData.getTc();
@@ -158,8 +156,7 @@ public class MCSRunner {
             engine.setCancellationCheck(cancellationCheck);
         }
         MCResult result = engine.run(config, sampler);
-
-        System.out.println("[MCSRunner] Done.");
+        LOG.fine(String.format("MCSRunner.run — EXIT: acceptRate=%.3f, <E>/site=%.6f eV", result.getAcceptRate(), result.getEnergyPerSite()));
         return result;
     }
 
@@ -183,6 +180,7 @@ public class MCSRunner {
                     pos.add(new Vector3D(ix,       iy,       iz      ));
                     pos.add(new Vector3D(ix + 0.5, iy + 0.5, iz + 0.5));
                 }
+        LOG.fine("MCSRunner.buildBCCPositions — L=" + L + " → N=" + pos.size() + " BCC sites built");
         return pos;
     }
 

@@ -11,12 +11,15 @@ import org.ce.application.dto.CVMCalculationRequest;
 import org.ce.application.dto.PreparationResult;
 import org.ce.application.dto.MCSCalculationRequest;
 import org.ce.infrastructure.registry.SystemRegistry;
-import org.ce.infrastructure.job.BackgroundJobManager;
+import org.ce.infrastructure.service.BackgroundJobManager;
 import org.ce.application.job.CVMPhaseModelJob;
 import org.ce.application.job.MCSCalculationJob;
 import org.ce.infrastructure.service.CalculationService;
 import org.ce.infrastructure.context.MCSCalculationContext;
 import org.ce.domain.system.SystemIdentity;
+import org.ce.infrastructure.logging.LoggingConfig;
+
+import java.util.logging.Logger;
 
 /**
  * Calculation setup panel with system selection and MCS/CVM inputs.
@@ -25,6 +28,8 @@ import org.ce.domain.system.SystemIdentity;
  * <p>CVM calculations are executed through the model-centric CVMPhaseModel path.</p>
  */
 public class CalculationSetupPanel extends VBox {
+
+    private static final Logger LOG = LoggingConfig.getLogger(CalculationSetupPanel.class);
 
     private final SystemRegistry registry;
     private final ResultsPanel resultsPanel;
@@ -242,24 +247,32 @@ public class CalculationSetupPanel extends VBox {
             showError("Invalid Parameter", ex.getMessage());
             return;
         }
-        
+
+        LOG.fine("CalculationSetupPanel.runMCSCalculation — ENTER: system=" + selectedSystem.getId()
+                + ", T=" + request.getTemperature() + " K, x=" + request.getComposition()
+                + ", L=" + request.getSupercellSize()
+                + ", nEquil=" + request.getEquilibrationSteps()
+                + ", nAvg=" + request.getAveragingSteps());
+
         // Create service with GUI listener
         ResultsPanelProgressListener listener = new ResultsPanelProgressListener(resultsPanel);
         CalculationService service = new CalculationService(registry, listener);
-        
+
         // Prepare context (loads data from cache/database)
         PreparationResult<MCSCalculationContext> result = service.prepareMCS(request);
-        
+
         if (result.isFailure()) {
+            LOG.warning("CalculationSetupPanel.runMCSCalculation — FAILED: " + result.getErrorMessage().orElse("Unknown error"));
             showError("MCS Preparation Failed", result.getErrorMessage().orElse("Unknown error"));
             return;
         }
-        
+
         MCSCalculationContext context = result.getContextOrThrow();
-        
+
         // Submit MCS job to BackgroundJobManager for managed execution
         MCSCalculationJob job = new MCSCalculationJob(context, listener);
         jobManager.submitJob(job);
+        LOG.fine("CalculationSetupPanel.runMCSCalculation — EXIT: job submitted successfully, id=" + job.getId());
     }
 
     /**
@@ -330,21 +343,27 @@ public class CalculationSetupPanel extends VBox {
             SystemIdentity selectedSystem,
             CalculationService service,
             ResultsPanelProgressListener listener) {
-        
+
+        LOG.fine("CalculationSetupPanel.runCVMPhaseModelCalculation — ENTER: system=" + selectedSystem.getId()
+                + ", T=" + request.getTemperature() + " K, x=" + request.getComposition());
+
         // Prepare CVMPhaseModel
         PreparationResult<CVMPhaseModel> result = service.prepareCVMModel(request);
-        
+
         if (result.isFailure()) {
-            showError("CVM Phase Model Preparation Failed", 
+            LOG.warning("CalculationSetupPanel.runCVMPhaseModelCalculation — FAILED to prepare: "
+                    + result.getErrorMessage().orElse("Unknown error"));
+            showError("CVM Phase Model Preparation Failed",
                 result.getErrorMessage().orElse("Unknown error"));
             return;
         }
-        
+
         CVMPhaseModel model = result.getContextOrThrow();
-        
+
         // Submit CVMPhaseModelJob to BackgroundJobManager for managed execution
         CVMPhaseModelJob job = new CVMPhaseModelJob(model, selectedSystem, listener);
         jobManager.submitJob(job);
+        LOG.fine("CalculationSetupPanel.runCVMPhaseModelCalculation — EXIT: job submitted, id=" + job.getId());
     }
     
     private void showError(String title, String message) {

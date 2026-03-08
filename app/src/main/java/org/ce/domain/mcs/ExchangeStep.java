@@ -5,6 +5,7 @@ import org.ce.domain.identification.geometry.Cluster;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.logging.Logger;
 
 /**
  * One canonical Monte Carlo step: selects two sites of different occupation,
@@ -27,6 +28,8 @@ import java.util.Random;
  * @see     LocalEnergyCalc
  */
 public class ExchangeStep {
+
+    private static final Logger LOG = Logger.getLogger(ExchangeStep.class.getName());
 
     /** (Phase) gas constant used in acceptance exponent (eV/K). */
     // Note: original code used a per-phase `R` value. We pass R in constructors.
@@ -76,6 +79,8 @@ public class ExchangeStep {
         this.R       = R;
         this.beta    = 1.0 / (R * T);
         this.rng     = rng;
+        LOG.fine("ExchangeStep — CREATED: T=" + T + " K, β=" + String.format("%.4e", this.beta)
+                + " K/eV, numComp=" + numComp);
     }
 
     // -------------------------------------------------------------------------

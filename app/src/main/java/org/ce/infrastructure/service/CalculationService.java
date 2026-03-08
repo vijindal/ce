@@ -1,27 +1,29 @@
 package org.ce.infrastructure.service;
 
-import org.ce.application.mcs.MCSCalculationUseCase;
+import org.ce.application.usecase.MCSCalculationUseCase;
 import org.ce.application.port.CalculationProgressPort;
-import org.ce.application.service.CalculationProgressListener;
+import org.ce.application.port.CalculationProgressListener;
 import org.ce.domain.cvm.CVMPhaseModel;
-import org.ce.domain.model.cvm.CVMModelInput;
+import org.ce.domain.cvm.CVMModelInput;
 import org.ce.infrastructure.context.CVMCalculationContext;
 import org.ce.infrastructure.context.MCSCalculationContext;
 import org.ce.infrastructure.mcs.MCSRunnerAdapter;
 import org.ce.infrastructure.persistence.migration.ClusterCachePreflight;
 import org.ce.domain.identification.result.ClusCoordListResult;
-import org.ce.infrastructure.adapter.MCSProgressListenerAdapter;
 import org.ce.domain.model.data.AllClusterData;
 import org.ce.application.dto.CVMCalculationRequest;
 import org.ce.application.dto.PreparationResult;
 import org.ce.application.dto.MCSCalculationRequest;
 import org.ce.infrastructure.registry.SystemRegistry;
 import org.ce.domain.system.SystemIdentity;
-import org.ce.infrastructure.cache.AllClusterDataCache;
-import org.ce.infrastructure.eci.ECILoader;
-import org.ce.infrastructure.key.KeyUtils;
+import org.ce.infrastructure.persistence.AllClusterDataCache;
+import org.ce.infrastructure.data.ECILoader;
+import org.ce.infrastructure.registry.KeyUtils;
+
+import org.ce.infrastructure.logging.LoggingConfig;
 
 import java.util.Optional;
+import java.util.logging.Logger;
 
 /**
  * Presentation-layer service for MCS and CVM calculation preparation.
@@ -56,7 +58,9 @@ import java.util.Optional;
  * @since 2.0 (refactored from direct workbench coupling)
  */
 public class CalculationService {
-    
+
+    private static final Logger LOG = LoggingConfig.getLogger(CalculationService.class);
+
     private final SystemRegistry registry;
     private final CalculationProgressListener listener;
     
@@ -87,12 +91,18 @@ public class CalculationService {
      * @return result containing the prepared context or error message
      */
     public PreparationResult<MCSCalculationContext> prepareMCS(MCSCalculationRequest request) {
+        LOG.info("CalculationService.prepareMCS — ENTER: system=" + request.getSystemId()
+                + ", T=" + request.getTemperature() + " K, x=" + request.getComposition()
+                + ", L=" + request.getSupercellSize()
+                + ", nEquil=" + request.getEquilibrationSteps()
+                + ", nAvg=" + request.getAveragingSteps());
         listener.logMessage("\n>>> MCS Calculation Requested");
         listener.logMessage("Request: " + request);
-        
+
         // 1. Look up system
         SystemIdentity system = registry.getSystem(request.getSystemId());
         if (system == null) {
+            LOG.warning("CalculationService.prepareMCS — FAILED: system not found: " + request.getSystemId());
             return PreparationResult.failure("System not found: " + request.getSystemId());
         }
         
@@ -133,6 +143,7 @@ public class CalculationService {
             // Load from AllClusterDataCache and extract the MCS-relevant subset
             Optional<AllClusterData> cached = AllClusterDataCache.load(clusterKey);
             if (cached.isEmpty()) {
+                LOG.warning("CalculationService.prepareMCS — FAILED: no cluster cache for key=" + clusterKey);
                 return PreparationResult.failure(
                     "No valid cluster data found for '" + clusterKey + "'.\n\n" +
                     "The identification pipeline has not been run for this " +
@@ -152,7 +163,7 @@ public class CalculationService {
         }
         
         context.setClusterData(clusterData);
-        listener.logMessage("âœ“ Cluster data loaded: tc=" + clusterData.getTc() +
+        listener.logMessage("✔ Cluster data loaded: tc=" + clusterData.getTc() +
             "  orbitList=" + clusterData.getOrbitList().size());
         
         // 5. Load ECI/CEC
@@ -162,17 +173,20 @@ public class CalculationService {
         Optional<double[]> eciOpt = loadECI(elementsStr, system, request.getTemperature(), requiredECILength);
         
         if (eciOpt.isEmpty()) {
+            LOG.warning("CalculationService.prepareMCS — FAILED: ECI load failed/cancelled for system=" + request.getSystemId());
             return PreparationResult.failure("ECI loading cancelled or failed. Cannot run MCS.");
         }
-        
+
         context.setECI(eciOpt.get());
-        listener.logMessage("âœ“ ECI set: " + eciOpt.get().length + " values");
-        
+        listener.logMessage("✔ ECI set: " + eciOpt.get().length + " values");
+
         // 6. Validate context readiness
         if (!context.isReady()) {
+            LOG.warning("CalculationService.prepareMCS — FAILED: ECI/Cluster mismatch — " + context.getReadinessError());
             return PreparationResult.failure("ECI/Cluster Mismatch: " + context.getReadinessError());
         }
-        
+        LOG.info("CalculationService.prepareMCS — EXIT: context ready — tc=" + clusterData.getTc()
+                + " cluster types, ECI length=" + eciOpt.get().length);
         return PreparationResult.success(context);
     }
     
@@ -196,6 +210,9 @@ public class CalculationService {
      * @return result containing the prepared CVMPhaseModel or error message
      */
     public PreparationResult<CVMPhaseModel> prepareCVMModel(CVMCalculationRequest request) {
+        LOG.info("CalculationService.prepareCVMModel — ENTER: system=" + request.getSystemId()
+                + ", T=" + request.getTemperature() + " K, x=" + request.getComposition()
+                + ", tolerance=" + request.getTolerance());
         listener.logMessage("\n>>> CVM Phase Model Creation Requested");
         listener.logMessage("Request: " + request);
         
@@ -248,7 +265,7 @@ public class CalculationService {
                 allData.getCompletionStatus());
         }
         
-        listener.logMessage("âœ“ AllClusterData loaded: " + allData);
+        listener.logMessage("✔ AllClusterData loaded: " + allData);
         listener.logMessage("  Stage 1: tcdis=" + allData.getTcdis());
         listener.logMessage("  Stage 2: tcf=" + allData.getTcf());
         listener.logMessage("  Stage 3: C-matrix ready");
@@ -270,7 +287,7 @@ public class CalculationService {
             return PreparationResult.failure("CVM Phase Model ECI mapping failed: " + ex.getMessage());
         }
         
-        listener.logMessage("âœ“ CVM ECI set: " + cvmEci.length + " values (non-point CF basis)");
+        listener.logMessage("✔ CVM ECI set: " + cvmEci.length + " values (non-point CF basis)");
 
         CVMModelInput cvmInput;
         try {
@@ -294,15 +311,22 @@ public class CalculationService {
                 request.getTemperature(),
                 request.getComposition());
             
-            listener.logMessage("âœ“ CVMPhaseModel created successfully");
+            listener.logMessage("✔ CVMPhaseModel created successfully");
             listener.logMessage("  First minimization completed");
             listener.logMessage("  Model ready for parameter scanning");
             listener.logMessage("  Input: system=" + cvmInput.getSystemName() +
                 " components=" + cvmInput.getNumComponents());
             
+            LOG.info("CalculationService.prepareCVMModel — EXIT: CVMPhaseModel ready, system=" + system.getId()
+                    + ", tcdis=" + allData.getTcdis()
+                    + ", tcf=" + allData.getTcf()
+                    + ", ncf=" + allData.getStage2().getNcf()
+                    + ", ECI length=" + cvmEci.length);
             return PreparationResult.success(model);
-            
+
         } catch (Exception ex) {
+            LOG.log(java.util.logging.Level.WARNING,
+                    "CalculationService.prepareCVMModel — EXCEPTION creating CVMPhaseModel", ex);
             return PreparationResult.failure(
                 "Failed to create CVMPhaseModel: " + ex.getMessage());
         }
@@ -330,8 +354,12 @@ public class CalculationService {
     /**
      * Helper method to load ECI from database with fallback to interactive input.
      */
-    private Optional<double[]> loadECI(String elementsStr, SystemIdentity system, 
+    private Optional<double[]> loadECI(String elementsStr, SystemIdentity system,
                                         double temperature, int requiredLength) {
+        LOG.fine("CalculationService.loadECI — ENTER: elements=" + elementsStr
+                + ", structure=" + system.getStructure() + ", phase=" + system.getPhase()
+                + ", model=" + system.getModel()
+                + ", T=" + temperature + ", required length=" + requiredLength);
         ECILoader.DBLoadResult dbResult = ECILoader.loadECIFromDatabase(
             elementsStr,
             system.getStructure(),
@@ -341,7 +369,9 @@ public class CalculationService {
             requiredLength);
         
         if (dbResult.status == ECILoader.DBLoadResult.Status.OK) {
-            listener.logMessage("âœ“ CEC loaded from database: " + dbResult.message);
+            LOG.fine("CalculationService.loadECI — EXIT: loaded " + dbResult.eci.length
+                    + " ECI values from database (T-dependent=" + dbResult.temperatureEvaluated + ")");
+            listener.logMessage("✔ CEC loaded from database: " + dbResult.message);
             if (dbResult.temperatureEvaluated) {
                 listener.logMessage("  (T-dependent terms evaluated at T=" + temperature + "K)");
             }
@@ -351,6 +381,7 @@ public class CalculationService {
         listener.logMessage("âš  CEC database load failed: " + dbResult.message);
         
         // Fallback to interactive input (for GUI only)
+        LOG.fine("CalculationService.loadECI — EXIT: database miss, falling back to interactive input");
         return ECILoader.loadOrInputECI(
             elementsStr,
             system.getStructure(),

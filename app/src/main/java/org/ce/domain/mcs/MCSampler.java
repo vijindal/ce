@@ -3,6 +3,7 @@ package org.ce.domain.mcs;
 import org.ce.domain.identification.geometry.Cluster;
 
 import java.util.List;
+import java.util.logging.Logger;
 
 /**
  * Accumulates running averages of thermodynamic observables during the
@@ -32,6 +33,8 @@ import java.util.List;
  * @see     MCEngine
  */
 public class MCSampler {
+
+    private static final Logger LOG = Logger.getLogger(MCSampler.class.getName());
 
     /** Boltzmann constant in eV/K. */
     public static final double K_B = 8.617333262e-5;
@@ -70,6 +73,7 @@ public class MCSampler {
         this.sumCF      = new double[tc];
         if (R <= 0) throw new IllegalArgumentException("R must be > 0");
         this.R = R;
+        LOG.fine("MCSampler — CREATED: N=" + N + " sites, tc=" + tc + " cluster types, R=" + R);
     }
 
     // -------------------------------------------------------------------------
@@ -154,14 +158,14 @@ public class MCSampler {
     // -------------------------------------------------------------------------
 
     public void printDebug(double T) {
-        System.out.println("[MCSampler]");
-        System.out.printf("  samples    : %d%n", nSamples);
-        System.out.printf("  âŸ¨EâŸ©/site   : %+.6f%n", meanEnergyPerSite());
-        System.out.printf("  Cv/site    : %+.4e  (T=%.1f K)%n", heatCapacityPerSite(T), T);
+        LOG.fine("[MCSampler]");
+        LOG.fine(String.format("  samples    : %d", nSamples));
+        LOG.fine(String.format("  <E>/site   : %+.6f", meanEnergyPerSite()));
+        LOG.fine(String.format("  Cv/site    : %+.4e  (T=%.1f K)", heatCapacityPerSite(T), T));
         double[] cfs = meanCFs();
-        System.out.println("  âŸ¨u_tâŸ©:");
+        LOG.fine("  <u_t>:");
         for (int t = 0; t < tc; t++)
-            System.out.printf("    t=%d  orb=%-3d  u=%+.6f%n", t, orbitSizes[t], cfs[t]);
+            LOG.fine(String.format("    t=%d  orb=%-3d  u=%+.6f", t, orbitSizes[t], cfs[t]));
     }
 }
 

@@ -1,17 +1,21 @@
 package org.ce.application.job;
 
-import org.ce.application.mcs.MCSCalculationUseCase;
+import org.ce.application.usecase.MCSCalculationUseCase;
 import org.ce.application.port.MCSRunnerPort;
 import org.ce.domain.model.result.CalculationFailure;
 import org.ce.domain.model.result.CalculationResult;
 import org.ce.domain.model.result.MCSResult;
-import org.ce.application.service.CalculationProgressListener;
-import org.ce.infrastructure.adapter.MCSProgressListenerAdapter;
+import org.ce.application.port.CalculationProgressListener;
+import org.ce.infrastructure.service.MCSProgressListenerAdapter;
 import org.ce.infrastructure.context.MCSCalculationContext;
 import org.ce.infrastructure.mcs.MCSRunnerAdapter;
 
+import org.ce.infrastructure.logging.LoggingConfig;
+
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Background job for Monte Carlo Simulation (MCS) calculations.
@@ -33,6 +37,8 @@ import java.util.concurrent.CancellationException;
  * calculation state.</p>
  */
 public class MCSCalculationJob extends AbstractBackgroundJob {
+
+    private static final Logger LOG = LoggingConfig.getLogger(MCSCalculationJob.class);
 
     private final MCSCalculationContext context;
     private final CalculationProgressListener externalListener;
@@ -59,6 +65,8 @@ public class MCSCalculationJob extends AbstractBackgroundJob {
 
     @Override
     public void run() {
+        LOG.info("MCSCalculationJob.run — ENTER: job=" + getId() + ", system=" + context.getSystem().getId()
+                + ", T=" + context.getTemperature() + " K, x=" + context.getComposition());
         if (shouldStop()) return;
 
         try {
@@ -81,21 +89,26 @@ public class MCSCalculationJob extends AbstractBackgroundJob {
             if (result instanceof MCSResult) {
                 setProgress(100);
                 setStatusMessage("MCS calculation completed");
+                LOG.info("MCSCalculationJob.run — EXIT: COMPLETED — T=" + context.getTemperature()
+                        + " K, x=" + context.getComposition());
                 markCompleted();
             } else if (result instanceof CalculationFailure failure) {
+                LOG.warning("MCSCalculationJob.run — EXIT: FAILED — " + failure.errorMessage());
                 markFailed(failure.errorMessage());
             } else {
+                LOG.warning("MCSCalculationJob.run — EXIT: FAILED — unexpected result type");
                 markFailed("MCS calculation returned unexpected result type");
             }
 
         } catch (CancellationException ex) {
             // Job was cancelled - this is expected behavior
+            LOG.info("MCSCalculationJob.run — EXIT: CANCELLED — " + ex.getMessage());
             setStatusMessage("Calculation cancelled");
             // Don't call markFailed - let the cancel() method handle the state
-            
+
         } catch (Exception e) {
+            LOG.log(Level.WARNING, "MCSCalculationJob.run — EXIT: EXCEPTION — " + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
             markFailed("MCS calculation failed: " + e.getMessage());
-            e.printStackTrace();
         } finally {
             running = false;
         }

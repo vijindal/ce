@@ -9,6 +9,7 @@ import org.ce.domain.identification.subcluster.OrderedToDisorderedTransformer;
 import org.ce.domain.identification.symmetry.SymmetryOperation;
 
 import java.util.List;
+import java.util.logging.Logger;
 
 /**
  * Orchestrates Stage 1 (Cluster Identification) of the CVM pipeline.
@@ -23,7 +24,7 @@ import java.util.List;
  *   <li>How do ordered-phase clusters map to HSP cluster types?</li>
  * </ul>
  *
- * <h2>Stage 1a â€” HSP clusters (disordered reference)</h2>
+ * <h2>Stage 1a â€" HSP clusters (disordered reference)</h2>
  * <p>The Highest Symmetric Phase (HSP) is the fully disordered limit of the
  * structure (e.g. A2 for B2, A1 for L1â‚‚).  Cluster enumeration on the HSP
  * using a <em>binary</em> basis (one site-operator symbol) gives the canonical
@@ -39,13 +40,13 @@ import java.util.List;
  *   <li>Compute Kikuchi-Baker coefficients from the recurrence</li>
  * </ol>
  *
- * <h2>Stage 1b â€” Phase clusters (ordered phase)</h2>
+ * <h2>Stage 1b â€" Phase clusters (ordered phase)</h2>
  * <p>The actual ordered phase (e.g. B2, L1â‚‚) has lower symmetry than the HSP.
  * Its clusters must be classified back into the HSP cluster types so that
  * CVM entropy contributions are correctly assigned.  This gives:
  * <ul>
- *   <li>{@code lc[t]} â€” how many ordered-phase clusters map to HSP type {@code t}</li>
- *   <li>{@code mh[t][j]} â€” normalized multiplicity of ordered cluster {@code j}
+ *   <li>{@code lc[t]} â€" how many ordered-phase clusters map to HSP type {@code t}</li>
+ *   <li>{@code mh[t][j]} â€" normalized multiplicity of ordered cluster {@code j}
  *       within HSP type {@code t}</li>
  * </ul>
  * </p>
@@ -86,6 +87,8 @@ import java.util.List;
  */
 public class ClusterIdentifier {
 
+    private static final Logger LOG = Logger.getLogger(ClusterIdentifier.class.getName());
+
     private ClusterIdentifier() {}
 
     /**
@@ -112,7 +115,9 @@ public class ClusterIdentifier {
         // ================================================================
         // STAGE 1a: HSP clusters (binary basis, disordered symmetry)
         // ================================================================
-        System.out.println("=== Stage 1a: Identifying HSP clusters ===");
+        LOG.fine("ClusterIdentifier.identify — ENTER: disClusters=" + disMaxClusCoord.size()
+                + ", ordClusters=" + maxClusCoord.size()
+                + ", disSymOps=" + disSymOps.size() + ", ordSymOps=" + symOps.size());
 
         // 1a-1. Enumerate HSP clusters with binary basis
         // Mathematica: basisBin = genBasisSymbolList[2, s]  â†’ {s[1]}
@@ -127,8 +132,7 @@ public class ClusterIdentifier {
         // tcdis = disClusData[[5]] - 1  (Mathematica)
         int tcdis = countNonEmptyClusters(disClusterData);
 
-        System.out.println("  tcdis (excl. empty) = " + tcdis);
-        System.out.println("  nxcdis = 1  (one point-cluster type in HSP)");
+        LOG.fine("ClusterIdentifier.identify — Stage 1a: tcdis=" + tcdis + ", nxcdis=1");
 
         // 1a-2. Compute Nij table
         // Only use non-empty clusters (indices 0..tcdis-1 in descending-size order)
@@ -137,8 +141,7 @@ public class ClusterIdentifier {
 
         int[][] nijTable = NijTableCalculator.compute(disClusList, disOrbitList);
 
-        System.out.println("  Nij table computed.");
-        NijTableCalculator.printDebug(nijTable);
+        LOG.fine("ClusterIdentifier.identify — Stage 1a: Nij table computed (" + tcdis + "x" + tcdis + ")");
 
         // 1a-3. Compute Kikuchi-Baker coefficients
         double[] mhdis = new double[tcdis];
@@ -149,13 +152,13 @@ public class ClusterIdentifier {
 
         double[] kbCoefficients = KikuchiBakerCalculator.compute(mhdis, nijTable);
 
-        System.out.println("  Kikuchi-Baker coefficients computed.");
-        KikuchiBakerCalculator.printDebug(mhdis, kbCoefficients);
+        LOG.fine("ClusterIdentifier.identify — Stage 1a: Kikuchi-Baker coefficients computed, kb[0]="
+                + String.format("%.4f", kbCoefficients[0]));
 
         // ================================================================
         // STAGE 1b: Ordered phase clusters (binary basis, phase symmetry)
         // ================================================================
-        System.out.println("\n=== Stage 1b: Identifying ordered-phase clusters ===");
+        LOG.fine("ClusterIdentifier.identify — Stage 1b: identifying ordered-phase clusters");
 
         // 1b-1. Enumerate ordered-phase clusters with binary basis
         // Mathematica: clusData = genClusCoordList[maxClusCoord, symOpList, basisBin]
@@ -163,7 +166,7 @@ public class ClusterIdentifier {
                 ClusCoordListGenerator.generate(maxClusCoord, symOps, basisBin);
 
         int tc = countNonEmptyClusters(phaseClusterData);
-        System.out.println("  tc (excl. empty) = " + tc);
+        LOG.fine("ClusterIdentifier.identify — Stage 1b: tc=" + tc);
 
         // 1b-2. Transform ordered cluster coordinates into HSP frame
         // Mathematica: clusCoordList = ordToDisordCoord[rotateMat, translateMat, clusCoordList]
@@ -209,13 +212,13 @@ public class ClusterIdentifier {
         int nxc    = lc[tcdis - 1];
         int nc     = tc - nxc;
 
-        System.out.println("  nxc = " + nxc);
-        System.out.println("  nc  = " + nc);
+        // Build lc summary string for the log
+        StringBuilder lcStr = new StringBuilder("[");
+        for (int t = 0; t < tcdis; t++) lcStr.append(lc[t]).append(t < tcdis - 1 ? ", " : "");
+        lcStr.append("]");
 
-        // Print lc summary
-        System.out.print("  lc = [");
-        for (int t = 0; t < tcdis; t++) System.out.print(lc[t] + (t < tcdis-1 ? ", " : ""));
-        System.out.println("]");
+        LOG.fine("ClusterIdentifier.identify — EXIT: tcdis=" + tcdis + ", tc=" + tc
+                + ", nxcdis=" + nxcdis + ", nxc=" + nxc + ", nc=" + nc + ", lc=" + lcStr);
 
         return new ClusterIdentificationResult(
                 disClusterData,

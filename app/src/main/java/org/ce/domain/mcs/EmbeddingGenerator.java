@@ -6,6 +6,7 @@ import org.ce.domain.identification.result.ClusCoordListResult;
 import org.ce.domain.identification.geometry.Vector3D;
 
 import java.util.*;
+import java.util.logging.Logger;
 
 /**
  * Generates all embeddings of abstract cluster types onto the lattice sites
@@ -30,6 +31,8 @@ import java.util.*;
  */
 public class EmbeddingGenerator {
 
+    private static final Logger LOG = Logger.getLogger(EmbeddingGenerator.class.getName());
+
     private EmbeddingGenerator() {}
 
     // -------------------------------------------------------------------------
@@ -52,6 +55,8 @@ public class EmbeddingGenerator {
             int                 L) {
 
         long __p = Profiler.tic("EmbeddingGenerator.generateEmbeddings");
+        LOG.fine("EmbeddingGenerator.generateEmbeddings — ENTER: N=" + latticePositions.size()
+                + " sites, tc=" + clusterData.getTc() + " cluster types, L=" + L);
 
         int N = latticePositions.size();
 
@@ -154,8 +159,11 @@ public class EmbeddingGenerator {
         }
 
         Profiler.toc("EmbeddingGenerator.generateEmbeddings", __p);
-        
-        return new EmbeddingData(allEmbeddings, siteToEmbeddings);
+        EmbeddingData result = new EmbeddingData(allEmbeddings, siteToEmbeddings);
+        LOG.fine("EmbeddingGenerator.generateEmbeddings — EXIT: " + result.totalEmbeddingCount()
+                + " total embeddings, avg " + String.format("%.1f", (double) result.totalEmbeddingCount() / N)
+                + " per site");
+        return result;
         
         // end
         // Note: cannot place toc after return; so report before returning
@@ -240,13 +248,13 @@ public class EmbeddingGenerator {
             int                 L,
             EmbeddingData       result) {
 
-        System.out.println("==============================");
-        System.out.println("[EmbeddingGenerator] DEBUG");
-        System.out.println("==============================");
-        System.out.println("  INPUT:");
-        System.out.println("    supercell L      : " + L);
-        System.out.println("    lattice sites    : " + latticePositions.size());
-        System.out.println("    cluster types    : " + clusterData.getTc());
+        LOG.fine("==============================");
+        LOG.fine("[EmbeddingGenerator] DEBUG");
+        LOG.fine("==============================");
+        LOG.fine("  INPUT:");
+        LOG.fine("    supercell L      : " + L);
+        LOG.fine("    lattice sites    : " + latticePositions.size());
+        LOG.fine("    cluster types    : " + clusterData.getTc());
 
         int totalTemplates = 0;
         for (int t = 0; t < clusterData.getOrbitList().size(); t++) {
@@ -254,22 +262,21 @@ public class EmbeddingGenerator {
             int cs = clusterData.getClusCoordList().get(t).getAllSites().size();
             totalTemplates += os * cs;
         }
-        System.out.println("    total templates  : " + totalTemplates
-                + "  (orbitSize Ã— clusterSize per type)");
+        LOG.fine("    total templates  : " + totalTemplates
+                + "  (orbitSize x clusterSize per type)");
 
-        System.out.println("  EXPECTED (after deduplication):");
-        System.out.printf("    %-16s %-12s %-14s %-14s%n",
-                "ClusterType", "orbitSize", "clusterSize", "instances/site");
+        LOG.fine("  EXPECTED (after deduplication):");
+        LOG.fine(String.format("    %-16s %-12s %-14s %-14s",
+                "ClusterType", "orbitSize", "clusterSize", "instances/site"));
         for (int t = 0; t < clusterData.getOrbitList().size(); t++) {
             int os = clusterData.getOrbitList().get(t).size();
             int cs = clusterData.getClusCoordList().get(t).getAllSites().size();
-            System.out.printf("    ClusterType[%2d]  %-12d %-14d %d%n",
-                    t, os, cs, os);
+            LOG.fine(String.format("    ClusterType[%2d]  %-12d %-14d %d", t, os, cs, os));
         }
 
-        System.out.println("  OUTPUT:");
+        LOG.fine("  OUTPUT:");
         result.printDebug();
-        System.out.println("==============================");
+        LOG.fine("==============================");
     }
 }
 

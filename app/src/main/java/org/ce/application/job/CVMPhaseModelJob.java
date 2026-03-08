@@ -1,10 +1,13 @@
 package org.ce.application.job;
 
 import org.ce.domain.cvm.CVMPhaseModel;
-import org.ce.application.service.CalculationProgressListener;
+import org.ce.application.port.CalculationProgressListener;
 import org.ce.domain.system.SystemIdentity;
+import org.ce.infrastructure.logging.LoggingConfig;
 
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Background job for CVM Phase Model (model-centric) calculations.
@@ -17,7 +20,9 @@ import java.util.UUID;
  * (e.g., by the GUI) and trigger automatic re-minimization in the model.</p>
  */
 public class CVMPhaseModelJob extends AbstractBackgroundJob {
-    
+
+    private static final Logger LOG = LoggingConfig.getLogger(CVMPhaseModelJob.class);
+
     private final CVMPhaseModel model;
     private final CalculationProgressListener externalListener;
     
@@ -44,7 +49,10 @@ public class CVMPhaseModelJob extends AbstractBackgroundJob {
     @Override
     public void run() {
         if (shouldStop()) return;
-        
+
+        LOG.info("CVMPhaseModelJob.run — ENTER: job=" + getId()
+                + ", system=" + system.getId() + ", T=" + model.getTemperature() + " K");
+
         try {
             running = true;
             setStatusMessage("Initializing CVM Phase Model...");
@@ -78,6 +86,7 @@ public class CVMPhaseModelJob extends AbstractBackgroundJob {
                 model, bridgeListener);
 
             if (!ok) {
+                LOG.warning("CVMPhaseModelJob.run — EXIT: FAILED — CVM Phase Model initialization failed");
                 markFailed("CVM Phase Model initialization failed");
                 return;
             }
@@ -86,11 +95,14 @@ public class CVMPhaseModelJob extends AbstractBackgroundJob {
             
             setProgress(100);
             setStatusMessage("CVM Phase Model ready for queries");
+            LOG.info("CVMPhaseModelJob.run — EXIT: COMPLETED — system=" + system.getId()
+                    + ", T=" + model.getTemperature() + " K");
             markCompleted();
             
         } catch (Exception e) {
+            LOG.log(Level.WARNING, "CVMPhaseModelJob.run — EXCEPTION: "
+                    + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
             markFailed("CVM Phase Model job failed: " + e.getMessage());
-            e.printStackTrace();
         } finally {
             running = false;
         }

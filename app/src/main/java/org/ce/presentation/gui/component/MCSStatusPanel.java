@@ -8,7 +8,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
-import org.ce.domain.mcs.event.MCSUpdate;
+import org.ce.domain.mcs.MCSUpdate;
 
 /**
  * Status panel for displaying MCS simulation metrics and progress.

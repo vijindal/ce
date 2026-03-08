@@ -4,7 +4,7 @@ import org.ce.domain.cvm.CVMPhaseModel;
 import org.ce.application.dto.CVMCalculationRequest;
 import org.ce.application.dto.PreparationResult;
 import org.ce.application.dto.MCSCalculationRequest;
-import org.ce.infrastructure.job.BackgroundJobManager;
+import org.ce.infrastructure.service.BackgroundJobManager;
 import org.ce.infrastructure.registry.ResultRepository;
 import org.ce.infrastructure.registry.SystemRegistry;
 import org.ce.application.job.BackgroundJob;
@@ -18,6 +18,8 @@ import org.ce.domain.system.SystemStatus;
 
 import java.nio.file.Paths;
 import java.util.Scanner;
+import java.util.logging.Level;
+import org.ce.infrastructure.logging.LoggingConfig;
 
 /**
  * Command-line interface for CE Thermodynamics Workbench.
@@ -458,6 +460,17 @@ public class CEWorkbenchCLI {
     }
     
     public static void main(String[] args) throws Exception {
+        // Configure logging before anything else; honour --log-level=FINEST etc.
+        Level logLevel = Level.INFO;
+        for (String arg : args) {
+            if (arg.startsWith("--log-level=")) {
+                try {
+                    logLevel = Level.parse(arg.substring("--log-level=".length()).toUpperCase());
+                } catch (IllegalArgumentException ignored) {}
+            }
+        }
+        LoggingConfig.configure(logLevel);
+
         CEWorkbenchCLI cli = new CEWorkbenchCLI();
         cli.run();
     }

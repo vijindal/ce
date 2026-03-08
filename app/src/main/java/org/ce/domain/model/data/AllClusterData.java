@@ -2,7 +2,7 @@ package org.ce.domain.model.data;
 
 import org.ce.domain.cvm.CMatrixResult;
 import org.ce.domain.identification.cluster.ClusterIdentificationResult;
-import org.ce.domain.identification.cf.CFIdentificationResult;
+import org.ce.domain.identification.cluster.CFIdentificationResult;
 
 /**
  * Unified container for all pre-computed cluster data across Stages 1-3.

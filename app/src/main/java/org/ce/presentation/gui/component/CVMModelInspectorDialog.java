@@ -7,13 +7,13 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import org.ce.domain.cvm.CVMFreeEnergy;
 import org.ce.domain.cvm.ClusterVariableEvaluator;
-import org.ce.domain.identification.cf.CFIdentificationResult;
+import org.ce.domain.identification.cluster.CFIdentificationResult;
 import org.ce.domain.identification.cluster.ClusterIdentificationResult;
 import org.ce.domain.model.data.AllClusterData;
 import org.ce.infrastructure.registry.SystemRegistry;
 import org.ce.domain.system.SystemIdentity;
-import org.ce.infrastructure.cache.AllClusterDataCache;
-import org.ce.infrastructure.key.KeyUtils;
+import org.ce.infrastructure.persistence.AllClusterDataCache;
+import org.ce.infrastructure.registry.KeyUtils;
 
 import java.util.List;
 import java.util.Optional;

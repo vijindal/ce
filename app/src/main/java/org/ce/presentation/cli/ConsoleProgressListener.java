@@ -1,7 +1,7 @@
 package org.ce.presentation.cli;
 
-import org.ce.application.service.CalculationProgressListener;
-import org.ce.domain.mcs.event.MCSUpdate;
+import org.ce.application.port.CalculationProgressListener;
+import org.ce.domain.mcs.MCSUpdate;
 
 /**
  * Console-based progress listener for CLI calculations.

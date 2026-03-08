@@ -1,7 +1,7 @@
 package org.ce.presentation.gui.view;
 
-import org.ce.application.service.CalculationProgressListener;
-import org.ce.domain.mcs.event.MCSUpdate;
+import org.ce.application.port.CalculationProgressListener;
+import org.ce.domain.mcs.MCSUpdate;
 
 /**
  * Adapter that wraps ResultsPanel to implement CalculationProgressListener.

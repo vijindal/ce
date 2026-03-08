@@ -9,6 +9,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.logging.Logger;
+import org.ce.infrastructure.logging.LoggingConfig;
 
 /**
  * Loader for system data with separated storage:
@@ -19,7 +21,9 @@ import java.util.Optional;
  * cluster/CF data (BCC_A2_T) while having different CECs.
  */
 public class SystemDataLoader {
-    
+
+    private static final Logger LOG = LoggingConfig.getLogger(SystemDataLoader.class);
+
     private static final String SYSTEMS_BASE_PATH = "/data/systems/";
     private static final String MODELS_BASE_PATH = "/data/models/";
     private static final String CEC_FILE = "cec.json";
@@ -32,7 +36,7 @@ public class SystemDataLoader {
     public static boolean cecExists(String elements, String structure, String phase, String model) {
         String cecKey = elements + "_" + structure + "_" + phase + "_" + model;
         boolean found = resourceExists(SYSTEMS_BASE_PATH + cecKey + "/" + CEC_FILE);
-        System.out.println("[SystemDataLoader.cecExists] key=" + cecKey + " found=" + found);
+        LOG.fine("key=" + cecKey + " found=" + found);
         return found;
     }
 
@@ -81,7 +85,7 @@ public class SystemDataLoader {
             if (json == null) return Optional.empty();
             return Optional.of(parseCecJson(new JSONObject(json)));
         } catch (Exception e) {
-            System.err.println("[SystemDataLoader.loadCecData] error for " + elements + ": " + e.getMessage());
+            LOG.warning("error for " + elements + ": " + e.getMessage());
             return Optional.empty();
         }
     }
@@ -163,7 +167,7 @@ public class SystemDataLoader {
             
             return Optional.of(data);
         } catch (Exception e) {
-            System.err.println("Error loading model data for " + structure + "_" + phase + "_" + model + ": " + e.getMessage());
+            LOG.warning("Error loading model data for " + structure + "_" + phase + "_" + model + ": " + e.getMessage());
             return Optional.empty();
         }
     }
@@ -186,20 +190,20 @@ public class SystemDataLoader {
     public static Optional<CECData> loadCecData(String elements, String structure,
                                                  String phase, String model) {
         String cecKey = elements + "_" + structure + "_" + phase + "_" + model;
-        System.out.println("[SystemDataLoader.loadCecData] key=" + cecKey);
+        LOG.fine("key=" + cecKey);
         try {
             String json = loadResourceAsString(SYSTEMS_BASE_PATH + cecKey + "/" + CEC_FILE);
             if (json == null) {
-                System.out.println("[SystemDataLoader.loadCecData] NOT FOUND: " + cecKey);
+                LOG.fine("NOT FOUND: " + cecKey);
                 return Optional.empty();
             }
             CECData data = parseCecJson(new JSONObject(json));
-            System.out.println("[SystemDataLoader.loadCecData] loaded " + cecKey
+            LOG.fine("loaded " + cecKey
                     + "  size=" + data.size()
                     + "  temperatureDependent=" + data.temperatureDependent);
             return Optional.of(data);
         } catch (Exception e) {
-            System.err.println("[SystemDataLoader.loadCecData] error for " + cecKey + ": " + e.getMessage());
+            LOG.warning("error for " + cecKey + ": " + e.getMessage());
             return Optional.empty();
         }
     }
@@ -221,7 +225,7 @@ public class SystemDataLoader {
         return loadCecData(elements, structure, phase, model)
                 .map(d -> {
                     double[] eci = d.evaluateAt(temperature);
-                    System.out.println("[SystemDataLoader.loadCecValuesAt] evaluated at T=" + temperature
+                    LOG.fine("evaluated at T=" + temperature
                             + "K  eci.length=" + eci.length);
                     return eci;
                 });
@@ -325,9 +329,9 @@ public class SystemDataLoader {
             Path cecFile = systemDir.resolve(CEC_FILE);
             Files.writeString(cecFile, obj.toString(2), StandardCharsets.UTF_8);
             
-            System.out.println("Saved CEC data to " + cecFile);
+            LOG.fine("Saved CEC data to " + cecFile);
         } catch (IOException e) {
-            System.err.println("Error saving CEC data: " + e.getMessage());
+            LOG.warning("Error saving CEC data: " + e.getMessage());
         }
     }
     
@@ -375,9 +379,9 @@ public class SystemDataLoader {
             Path modelFile = modelDir.resolve(MODEL_FILE);
             Files.writeString(modelFile, obj.toString(2), StandardCharsets.UTF_8);
             
-            System.out.println("Saved model data to " + modelFile);
+            LOG.fine("Saved model data to " + modelFile);
         } catch (IOException e) {
-            System.err.println("Error saving model data: " + e.getMessage());
+            LOG.warning("Error saving model data: " + e.getMessage());
         }
     }
     
@@ -403,7 +407,7 @@ public class SystemDataLoader {
             }
             return new String(is.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            System.err.println("Error reading resource " + resourcePath + ": " + e.getMessage());
+            LOG.warning("Error reading resource " + resourcePath + ": " + e.getMessage());
             return null;
         }
     }

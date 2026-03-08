@@ -1,13 +1,13 @@
 package org.ce.domain.mcs;
 
 import org.ce.domain.identification.geometry.Cluster;
-import org.ce.domain.mcs.event.MCSUpdate;
 
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CancellationException;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.logging.Logger;
 
 /**
  * Metropolis Monte Carlo engine: equilibration then averaging sweeps.
@@ -33,6 +33,8 @@ import java.util.function.Consumer;
  * @see     MCSRunner
  */
 public class MCEngine {
+
+    private static final Logger LOG = Logger.getLogger(MCEngine.class.getName());
 
     private final EmbeddingData       emb;
     private final double[]            eci;
@@ -116,7 +118,12 @@ public class MCEngine {
      * @return {@link MCResult}
      */
     public MCResult run(LatticeConfig config, MCSampler sampler) {
-        return useFlipStep ? runFlip(config, sampler) : runExchange(config, sampler);
+        LOG.fine("MCEngine.run — ENTER: N=" + config.getN() + ", T=" + T + " K"
+                + ", nEquil=" + nEquil + ", nAvg=" + nAvg
+                + ", ensemble=" + (useFlipStep ? "GRAND_CANONICAL" : "CANONICAL"));
+        MCResult result = useFlipStep ? runFlip(config, sampler) : runExchange(config, sampler);
+        LOG.fine("MCEngine.run — EXIT: acceptRate=" + String.format("%.3f", result.getAcceptRate()));
+        return result;
     }
 
     // -------------------------------------------------------------------------
@@ -133,6 +140,7 @@ public class MCEngine {
         
         // Calculate initial total energy (expensive, done once at start)
         double currentEnergy = LocalEnergyCalc.totalEnergy(config, emb, eci, orbits);
+        LOG.fine("MCEngine.runExchange — ENTER: N=" + N + ", E_initial=" + String.format("%.4f", currentEnergy) + " eV");
 
         for (int s = 0; s < nEquil; s++) {
             // Check for cancellation at the start of each sweep
@@ -169,8 +177,12 @@ public class MCEngine {
             }
         }
 
+        LOG.fine("MCEngine.runExchange — EQUIL DONE: sweeps=" + nEquil
+                + ", E_final=" + String.format("%.4f", currentEnergy) + " eV"
+                + ", acceptRate=" + String.format("%.3f", step.acceptRate()));
         step.resetCounters();
         sampler.reset();
+        LOG.fine("MCEngine.runExchange — AVERAGING: " + nAvg + " sweeps");
 
         for (int s = 0; s < nAvg; s++) {
             // Check for cancellation at the start of each sweep
@@ -207,6 +219,8 @@ public class MCEngine {
                 updateListener.accept(update);
             }
         }
+        LOG.fine("MCEngine.runExchange — EXIT: " + nAvg + " avg sweeps done, acceptRate="
+                + String.format("%.3f", step.acceptRate()));
         return buildResult(config, sampler, step.acceptRate());
     }
 
@@ -220,6 +234,7 @@ public class MCEngine {
         
         // Calculate initial total energy (expensive, done once at start)
         double currentEnergy = LocalEnergyCalc.totalEnergy(config, emb, eci, orbits);
+        LOG.fine("MCEngine.runFlip — ENTER: N=" + N + ", E_initial=" + String.format("%.4f", currentEnergy) + " eV");
 
         for (int s = 0; s < nEquil; s++) {
             // Check for cancellation at the start of each sweep
@@ -257,8 +272,12 @@ public class MCEngine {
             }
         }
 
+        LOG.fine("MCEngine.runFlip — EQUIL DONE: sweeps=" + nEquil
+                + ", E_final=" + String.format("%.4f", currentEnergy) + " eV"
+                + ", acceptRate=" + String.format("%.3f", step.acceptRate()));
         step.resetCounters();
         sampler.reset();
+        LOG.fine("MCEngine.runFlip — AVERAGING: " + nAvg + " sweeps");
 
         for (int s = 0; s < nAvg; s++) {
             // Check for cancellation at the start of each sweep
@@ -295,19 +314,36 @@ public class MCEngine {
                 updateListener.accept(update);
             }
         }
+        LOG.fine("MCEngine.runFlip — EXIT: " + nAvg + " avg sweeps done, acceptRate="
+                + String.format("%.3f", step.acceptRate()));
         return buildResult(config, sampler, step.acceptRate());
     }
 
     private MCResult buildResult(LatticeConfig config, MCSampler sampler,
                                   double acceptRate) {
         int L = (int) Math.round(Math.cbrt(config.getN() / 2.0));
-        return new MCResult(T,
+        MCResult result = new MCResult(T,
                 config.composition(),
                 sampler.meanCFs(),
                 sampler.meanEnergyPerSite(),
                 sampler.heatCapacityPerSite(T),
                 acceptRate,
                 nEquil, nAvg, L, config.getN());
+        double[] _cfs = result.getAvgCFs();
+        int _cfN = Math.min(5, _cfs.length);
+        StringBuilder _cfStr = new StringBuilder("[");
+        for (int _i = 0; _i < _cfN; _i++) {
+            if (_i > 0) _cfStr.append(", ");
+            _cfStr.append(String.format("%.5f", _cfs[_i]));
+        }
+        if (_cfs.length > _cfN) _cfStr.append(", ...");
+        _cfStr.append("]");
+        LOG.fine("MCEngine.buildResult — T=" + T + " K, N=" + config.getN() + " (L=" + L + ")"
+                + ", acceptRate=" + String.format("%.3f", acceptRate)
+                + ", <E>/site=" + String.format("%.6f", result.getEnergyPerSite()) + " eV"
+                + ", Cv/site=" + String.format("%.4e", result.getHeatCapacityPerSite()) + " eV/K"
+                + ", CFs[0.." + (_cfN-1) + "]=" + _cfStr);
+        return result;
     }
 }
 

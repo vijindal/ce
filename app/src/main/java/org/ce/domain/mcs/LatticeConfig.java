@@ -2,6 +2,7 @@ package org.ce.domain.mcs;
 
 import java.util.Arrays;
 import java.util.Random;
+import java.util.logging.Logger;
 
 /**
  * Flat occupation array representing the atomic configuration of a periodic
@@ -36,6 +37,8 @@ import java.util.Random;
  */
 public class LatticeConfig {
 
+    private static final Logger LOG = Logger.getLogger(LatticeConfig.class.getName());
+
     /** Number of chemical components. */
     private final int numComp;
 
@@ -62,6 +65,7 @@ public class LatticeConfig {
         this.numComp = numComp;
         this.occ     = new int[N];   // all zeros = pure A
         this.basis   = new SiteOperatorBasis(numComp);
+        LOG.fine("LatticeConfig — CREATED: N=" + N + " sites, numComp=" + numComp + " (all sites initialised to species 0)");
     }
 
     /**
@@ -169,6 +173,16 @@ public class LatticeConfig {
             }
             placed += count;
         }
+        double[] _x = composition();
+        StringBuilder _comp = new StringBuilder("LatticeConfig.randomise — EXIT: actual composition: ");
+        String[] _labels = {"A","B","C","D","E"};
+        for (int _c = 0; _c < numComp; _c++) {
+            if (_c > 0) _comp.append(", ");
+            String _lbl = _c < _labels.length ? _labels[_c] : ("C"+_c);
+            _comp.append(_lbl).append("=").append(String.format("%.4f", _x[_c]))
+                 .append(" (").append((int)Math.round(_x[_c]*occ.length)).append(" sites)");
+        }
+        LOG.fine(_comp.toString());
     }
 
     /**
@@ -237,20 +251,20 @@ public class LatticeConfig {
      * </pre>
      */
     public void printDebug() {
-        System.out.println("[LatticeConfig]");
-        System.out.println("  N          : " + occ.length);
-        System.out.println("  numComp    : " + numComp);
+        LOG.fine("[LatticeConfig]");
+        LOG.fine("  N          : " + occ.length);
+        LOG.fine("  numComp    : " + numComp);
         String[] labels = {"A","B","C","D","E"};
         double[] x = composition();
         for (int c = 0; c < numComp; c++) {
             String lbl = c < labels.length ? labels[c] : ("C"+c);
-            System.out.printf("  x[%d] (%s)  : %.5f  (%d sites)%n",
-                    c, lbl, x[c], countSpecies(c));
+            LOG.fine(String.format("  x[%d] (%s)  : %.5f  (%d sites)",
+                    c, lbl, x[c], countSpecies(c)));
         }
         int preview = Math.min(8, occ.length);
         StringBuilder sb = new StringBuilder("  occ[0.." + (preview-1) + "] : ");
         for (int i = 0; i < preview; i++) sb.append(occ[i]).append(' ');
-        System.out.println(sb.toString().trim());
+        LOG.fine(sb.toString().trim());
     }
 }
 

@@ -3,7 +3,7 @@ package org.ce.infrastructure.cvm;
 import org.ce.application.port.CVMSolverPort;
 import org.ce.domain.cvm.CVMEngine;
 import org.ce.domain.cvm.CVMSolverResult;
-import org.ce.domain.model.cvm.CVMModelInput;
+import org.ce.domain.cvm.CVMModelInput;
 import org.ce.domain.model.result.CVMResult;
 
 /**
