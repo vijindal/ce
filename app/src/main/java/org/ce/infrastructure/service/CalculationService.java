@@ -185,8 +185,20 @@ public class CalculationService {
             return PreparationResult.failure("ECI loading cancelled or failed. Cannot run MCS.");
         }
 
-        context.setECI(eciOpt.get());
-        listener.logMessage("✔ ECI set: " + eciOpt.get().length + " values");
+        // Expand ncf-length ECI to tc-length by padding with zeros for point/empty clusters
+        // (MCS embeddings use cluster types 0 to tc-1, but only ncf are optimization parameters)
+        double[] loadedECI = eciOpt.get();
+        double[] expandedECI = loadedECI;
+        if (loadedECI.length < clusterData.getTc()) {
+            expandedECI = new double[clusterData.getTc()];
+            System.arraycopy(loadedECI, 0, expandedECI, 0, loadedECI.length);
+            // Remaining indices (point=tc-2, empty=tc-1) stay 0.0
+            listener.logMessage("[MCS] Expanded ECI from " + loadedECI.length + " (ncf) to "
+                    + expandedECI.length + " (tc) by padding with zeros for constants");
+        }
+
+        context.setECI(expandedECI);
+        listener.logMessage("✔ ECI set: " + expandedECI.length + " values (tc=" + clusterData.getTc() + ")");
 
         // 6. Validate context readiness
         if (!context.isReady()) {
@@ -194,7 +206,7 @@ public class CalculationService {
             return PreparationResult.failure("ECI/Cluster Mismatch: " + context.getReadinessError());
         }
         LOG.info("CalculationService.prepareMCS — EXIT: context ready — tc=" + clusterData.getTc()
-                + " cluster types, ECI length=" + eciOpt.get().length);
+                + " cluster types, ECI length=" + expandedECI.length);
         return PreparationResult.success(context);
     }
     
@@ -279,7 +291,10 @@ public class CalculationService {
         listener.logMessage("  Stage 3: C-matrix ready");
         
         // 4. Load ECI/CEC
-        int requiredECILength = allData.getStage1().getDisClusterData().getTc();
+        // CVM expects ncf-length ECI (non-point cluster functions)
+        int requiredECILength = (allData.getStage2() != null)
+            ? allData.getStage2().getNcf()
+            : allData.getStage1().getDisClusterData().getTc();  // fallback
         listener.logMessage("[CVM] Loading CEC  key=" + cecKey + "  required length=" + requiredECILength);
         
         Optional<double[]> eciOpt = loadECI(elementsStr, system, request.getTemperature(), requiredECILength);
