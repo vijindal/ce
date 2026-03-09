@@ -1,7 +1,7 @@
 # CE Workbench - Project Status
 
-**Last Updated:** March 8, 2026
-**Version:** 0.3.7
+**Last Updated:** March 9, 2026 (evening)
+**Version:** 0.3.8
 **Compilation:** ✅ Successful (69 tests pass)
 **GUI Status:** ✅ Fully Functional
 **Binary CVM Solver:** ✅ Correct — 7 root-cause bugs fixed; 69 tests pass
@@ -115,6 +115,23 @@ app/src/main/resources/
 ---
 
 ## Recent Changes (Mar 2026)
+
+### ✅ Completed (Mar 9, 2026 evening)
+**MCS Energy Calculation Audit + Optimization**
+
+Comprehensive audit confirmed MCS energy formulas are mathematically equivalent to CVM:
+- Hmix/site formula uses CVM msdis coefficients: `hmixCoeff[t] = ECI[t] * count[t] / (size[t] * N)`
+- ΔE calculation for MC moves is correct: `ΔE = Σ_e ECI[t] · (Φ_new - Φ_old)` (no size division needed—implicitly cancelled by embedding sum)
+- Empty (size=0) and point (size=1) clusters correctly skipped—constant terms cancel in ΔE and Var(H)
+
+Performance optimizations (no physics change):
+1. Added `EmbeddingData.multiSiteEmbedCountsPerType()` — precomputes per-type embedding counts once (topology-invariant)
+2. Updated `MCSampler` constructor to accept precomputed counts; eliminates per-call heap allocations and O(E_multisite) recounting
+3. Pre-allocated `cfNumScratch[]` in `MCSampler` to avoid per-sweep allocations
+4. Removed redundant `hmixCoeff` field from `MCEngine`; now uses `sampler.meanHmixPerSite()` directly
+5. Guarded temporary config mutation in `LocalEnergyCalc.deltaEExchange()` with try/finally (correctness fix—prevents silent corruption on exception)
+
+All changes compile clean. MCS results numerically identical to pre-optimization baseline.
 
 ### ✅ Completed (Mar 8, 2026)
 **JUL Logging — All Three Calculation Types**
