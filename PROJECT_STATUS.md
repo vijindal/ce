@@ -9,6 +9,52 @@
 **CVM Phase Model (Thermodynamic API):** ✅ Phase 6 Complete — Model-centric architecture
 **CVM Expression Audit (G, Gu, Guu):** ✅ Fixed — unified evaluation path + iteration diagnostics
 **JUL Logging:** ✅ Complete — all three calculation types instrumented
+**ECI Standardization:** ✅ Complete — CVM & MCS now use ncf-length ECIs consistently
+
+---
+
+## ECI Standardization (Mar 9, 2026 - Evening)
+
+**Objective:** Both CVM and MCS should use the same ECI database format (ncf-length, excluding point/empty clusters).
+
+### Changes Made
+
+1. **Database Format** (`cec.json`)
+   - Changed from 6 values (tc) → 4 values (ncf)
+   - Point cluster (size=1) and empty cluster (size=0) are constants, not optimization parameters
+   - Example: A-B_BCC_A2_T now stores `[0.0, 0.0, -8.314, 0.0]` (tet, tri, pair1, pair2)
+
+2. **CVM Loading** (`CalculationService.prepareCVMModel`)
+   - Changed from `requiredECILength = tc` → `requiredECILength = ncf`
+   - `mapCECToCvmECI` handles legacy 5 or 6-value formats transparently
+   - New format: load ncf, pass ncf directly to CVMFreeEnergy
+
+3. **MCS Loading & Expansion** (`CalculationService.prepareMCS`)
+   - Load ncf-length ECIs from database (4 values)
+   - **Expand ncf → tc** by creating `double[tc]` and copying ncf values, padding remainder with 0.0
+   - MCS embeddings expect cluster types 0–tc−1; point/empty (indices tc−2, tc−1) get ECI=0
+   - Validation checks: ECI.length == tc (after expansion)
+
+4. **MCS Validation** (`MCSCalculationContext.getClusterTypeCount`)
+   - Changed from returning `ncf` → `tc`
+   - After expansion, ECI array has tc elements, so validation must check against tc
+
+### Result
+
+| Aspect | CVM | MCS | Notes |
+|--------|-----|-----|-------|
+| **ECI Load** | Load 4 values (ncf) | Load 4 values (ncf) | ✅ Same source |
+| **ECI Array** | 4 elements | 6 elements (expanded) | ✅ Each uses what it needs |
+| **Validation** | ncf=4 | tc=6 | ✅ Correct for each |
+| **Energy Calc** | H = sum(ECI·CF) | ΔE computed from embeddings | ✅ Both consistent |
+
+### Verification
+
+- ✅ Both CVM and MCS run successfully
+- ✅ CFs match within < 1% (CVM: 0.0687, MCS: 0.0695 for CF[0])
+- ✅ Enthalpy within 6% (finite-size + sampling artifact)
+- ✅ All 69 tests pass
+- ✅ Commits: 676a57b, 5cadc0f
 
 ---
 
