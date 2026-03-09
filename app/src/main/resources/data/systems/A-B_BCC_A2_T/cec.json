@@ -6,25 +6,24 @@
   "model": "T",
   "numComponents": 2,
   "clusterCount": 6,
+  "cecValuesLength": 4,
   "cecValues": [
     0.0,
     0.0,
-    0.0,
     -8.314,
-    0.0,
     0.0
   ],
   "units": "J/mol (adjusted for R=8.314 standard to match old R=1 calculations)",
   "description": [
     "Legacy test system for validating R=8.314 standard",
+    "CEC values contain only non-point CFs (ncf=4): [tet, tri, pair1, pair2]",
+    "Point cluster (rc=1) and empty cluster (rc=0) omitted (constants, not optimization variables)",
     "CEC values adjusted (old_value × 8.314) to preserve physics",
     "With old R=1.0: P=exp(-(-1.0)/(1.0×T))",
     "With new R=8.314: P=exp(-(-8.314)/(8.314×T))",
     "Both give identical acceptance probabilities",
     "1-neighbor pair (rc=2, mult=4) = -1.0 (original test setup)",
-    "II-neighbor pair (rc=2, mult=3) = 0.0",
-    "Point cluster (rc=1) = 0.0",
-    "Empty/Reference cluster (rc=0) = 0.0"
+    "II-neighbor pair (rc=2, mult=3) = 0.0"
   ],
   "reference": "Dummy system for legacy MCS reproducibility testing",
   "timestamp": "2026-02-27T18:00:00Z",

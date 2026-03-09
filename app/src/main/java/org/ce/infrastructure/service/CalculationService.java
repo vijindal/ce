@@ -139,6 +139,7 @@ public class CalculationService {
         // 4. Load cluster data from unified cache
         listener.logMessage("[MCS] Loading cluster data from cache...");
         ClusCoordListResult clusterData;
+        AllClusterData allData = null;
         try {
             // Load from AllClusterDataCache and extract the MCS-relevant subset
             Optional<AllClusterData> cached = AllClusterDataCache.load(clusterKey);
@@ -150,7 +151,7 @@ public class CalculationService {
                     componentSuffix + " " + system.getStructure() + "_" + system.getPhase() + " system.\n\n" +
                     "Delete this system, recreate it, and run identification.");
             }
-            AllClusterData allData = cached.get();
+            allData = cached.get();
             if (allData.getStage1() == null || allData.getStage1().getDisClusterData() == null) {
                 return PreparationResult.failure(
                     "Cluster data for '" + clusterKey + "' is missing Stage 1 (cluster identification).\n\n" +
@@ -161,13 +162,20 @@ public class CalculationService {
             return PreparationResult.failure(
                 "Failed to load cluster data for '" + clusterKey + "':\n" + ex.getMessage());
         }
-        
+
         context.setClusterData(clusterData);
+        // Also set AllClusterData for ECI validation (expects ncf, not tc)
+        if (allData != null && context instanceof MCSCalculationContext mcsContext) {
+            mcsContext.setAllClusterData(allData);
+        }
         listener.logMessage("✔ Cluster data loaded: tc=" + clusterData.getTc() +
             "  orbitList=" + clusterData.getOrbitList().size());
-        
+
         // 5. Load ECI/CEC
-        int requiredECILength = clusterData.getTc();
+        // For MCS, ECI count must match ncf (non-point CFs), not tc (total cluster types)
+        int requiredECILength = (allData != null && allData.getStage2() != null)
+            ? allData.getStage2().getNcf()
+            : clusterData.getTc();  // fallback if Stage2 not available
         listener.logMessage("[MCS] Loading CEC  key=" + cecKey + "  required length=" + requiredECILength);
         
         Optional<double[]> eciOpt = loadECI(elementsStr, system, request.getTemperature(), requiredECILength);

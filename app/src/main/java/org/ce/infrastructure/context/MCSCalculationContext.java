@@ -1,6 +1,7 @@
 package org.ce.infrastructure.context;
 
 import org.ce.domain.identification.result.ClusCoordListResult;
+import org.ce.domain.model.data.AllClusterData;
 import org.ce.domain.system.SystemIdentity;
 
 /**
@@ -17,6 +18,7 @@ public class MCSCalculationContext extends AbstractCalculationContext {
     private final long seed;
 
     private ClusCoordListResult clusterData;
+    private AllClusterData allClusterData;
 
     public MCSCalculationContext(
             SystemIdentity system,
@@ -42,6 +44,7 @@ public class MCSCalculationContext extends AbstractCalculationContext {
     public int getAveragingSteps() { return averagingSteps; }
     public long getSeed() { return seed; }
     public ClusCoordListResult getClusterData() { return clusterData; }
+    public AllClusterData getAllClusterData() { return allClusterData; }
 
     // -------------------------------------------------------------------------
     // MCS-specific Setter
@@ -49,6 +52,11 @@ public class MCSCalculationContext extends AbstractCalculationContext {
 
     public void setClusterData(ClusCoordListResult clusterData) {
         this.clusterData = clusterData;
+        validateReadiness();
+    }
+
+    public void setAllClusterData(AllClusterData allClusterData) {
+        this.allClusterData = allClusterData;
         validateReadiness();
     }
 
@@ -68,7 +76,9 @@ public class MCSCalculationContext extends AbstractCalculationContext {
 
     @Override
     protected int getClusterTypeCount() {
-        return clusterData != null ? clusterData.getTc() : 0;
+        return (allClusterData != null && allClusterData.getStage2() != null)
+            ? allClusterData.getStage2().getNcf()
+            : 0;
     }
 
     @Override
@@ -84,7 +94,10 @@ public class MCSCalculationContext extends AbstractCalculationContext {
         sb.append("Averaging: ").append(averagingSteps).append(" steps\n");
         sb.append("Seed: ").append(seed).append("\n");
         if (clusterData != null) {
-            sb.append("Cluster types: ").append(clusterData.getTc()).append("\n");
+            sb.append("Cluster types (tc): ").append(clusterData.getTc()).append("\n");
+        }
+        if (allClusterData != null && allClusterData.getStage2() != null) {
+            sb.append("Non-point CFs (ncf): ").append(allClusterData.getStage2().getNcf()).append("\n");
         }
         return sb.toString();
     }
