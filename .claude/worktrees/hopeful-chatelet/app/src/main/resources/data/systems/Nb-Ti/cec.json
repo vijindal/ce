@@ -1,0 +1,20 @@
+{
+  "cecKey": "Nb-Ti_BCC_A2_T",
+  "elements": "Nb-Ti",
+  "structure": "BCC",
+  "phase": "A2",
+  "model": "T",
+  "numComponents": 2,
+  "temperatureDependent": false,
+  "tc": 5,
+  "cecTerms": [
+    { "name": "J0 (empty)",          "a": 0.0,    "b": 0.0 },
+    { "name": "J1 (point)",          "a": 0.0,    "b": 0.0 },
+    { "name": "E21 (I-neighbor pair)","a": -390.0, "b": 0.0 },
+    { "name": "E22 (II-neighbor pair)","a": -260.0,"b": 0.0 },
+    { "name": "E3PQ (triangle)",     "a": 0.0,    "b": 0.0 }
+  ],
+  "cecUnits": "J/mol",
+  "reference": "Optimized CECs from Nb-Ti BCC phase diagram fitting",
+  "notes": "Tetrahedron term not listed in source — set to 0. tc=5 for BCC_A2_T."
+}

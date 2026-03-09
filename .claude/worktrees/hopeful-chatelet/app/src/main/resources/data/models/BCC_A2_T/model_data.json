@@ -1,0 +1,31 @@
+{
+  "modelId": "BCC_A2_T",
+  "structure": "BCC",
+  "phase": "A2",
+  "model": "T",
+  "description": "BCC A2 phase with tetrahedron CVM approximation",
+  "clusterData": {
+    "tcdis": 5,
+    "nxcdis": 1,
+    "tc": 5,
+    "nxc": 1,
+    "clusterFile": "cluster/A2-T.txt",
+    "symmetryGroup": "A2-SG",
+    "disorderedSymmetryGroup": "A2-SG",
+    "orderedSymmetryGroup": "A2-SG"
+  },
+  "cfData": {
+    "numComponents": 2,
+    "tcf": 15,
+    "nxcf": 2,
+    "ncf": 13,
+    "tcfdis": 15
+  },
+  "transformationMatrix": [
+    [1.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0],
+    [0.0, 0.0, 1.0]
+  ],
+  "translationVector": [0.0, 0.0, 0.0],
+  "notes": "Shared by all binary BCC systems using A2 phase and tetrahedron approximation"
+}

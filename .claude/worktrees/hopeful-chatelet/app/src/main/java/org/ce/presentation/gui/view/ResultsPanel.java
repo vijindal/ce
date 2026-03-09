@@ -186,7 +186,7 @@ public class ResultsPanel extends VBox {
         // Sampled text output every 50 sweeps (not every update)
         if (update.getStep() % 50 == 0) {
             String output = String.format(
-                "[Sweep %d] E=%.6f eV | dE=%.8f | sd(dE)=%.6f | Accept=%.1f%% | %s | Time=%dms%n",
+                "[Sweep %d] E=%.6f eV | Î”E=%.8f | Ïƒ(Î”E)=%.6f | Accept=%.1f%% | %s | Time=%dms%n",
                 update.getStep(),
                 update.getE_total(),
                 update.getDeltaE(),

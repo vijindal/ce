@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "CE Workbench GUI",
+      "runtimeExecutable": "gradlew.bat",
+      "runtimeArgs": ["run", "--no-configuration-cache"],
+      "port": 0
+    },
+    {
+      "name": "CE Workbench CLI",
+      "runtimeExecutable": "gradlew.bat",
+      "runtimeArgs": ["run", "--args=--cli", "--no-configuration-cache"],
+      "port": 0
+    }
+  ]
+}

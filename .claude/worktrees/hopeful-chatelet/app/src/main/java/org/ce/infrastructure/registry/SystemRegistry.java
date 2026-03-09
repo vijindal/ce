@@ -1,0 +1,291 @@
+package org.ce.infrastructure.registry;
+
+import org.ce.domain.system.SystemIdentity;
+import org.ce.domain.system.SystemStatus;
+import java.io.*;
+import java.nio.file.*;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
+import org.ce.infrastructure.logging.LoggingConfig;
+
+/**
+ * Central registry for managing systems and their computation status.
+ *
+ * <p>Owns both {@link SystemIdentity} (immutable) and {@link SystemStatus}
+ * (thread-safe mutable) for each registered system. Status updates must go
+ * through this registry to ensure thread safety.</p>
+ *
+ * <p>Calculation results are managed separately by {@link ResultRepository},
+ * following the Single Responsibility Principle.</p>
+ *
+ * <h2>Persistence Strategy</h2>
+ * <p>Uses deferred persistence to avoid synchronous disk I/O on every operation.
+ * Changes are tracked via a dirty flag and persisted:</p>
+ * <ul>
+ *   <li>Explicitly via {@link #persistIfDirty()}</li>
+ *   <li>On application shutdown via {@link #shutdown()}</li>
+ * </ul>
+ */
+public class SystemRegistry {
+
+    private static final Logger LOG = LoggingConfig.getLogger(SystemRegistry.class);
+
+    private final Path registryRoot;
+    private final Map<String, SystemIdentity> identities;
+    private final Map<String, SystemStatus> statuses;
+    
+    /** Tracks whether in-memory state differs from disk. */
+    private final AtomicBoolean dirty = new AtomicBoolean(false);
+    
+    private static final String CACHE_DIR = "cache";
+    private static final String SYSTEMS_FILE = "systems.dat";
+    
+    public SystemRegistry(Path workspaceRoot) throws IOException {
+        this.registryRoot = workspaceRoot.resolve(".ce-workbench");
+        this.identities = new ConcurrentHashMap<>();
+        this.statuses = new ConcurrentHashMap<>();
+        
+        // Initialize workspace
+        Files.createDirectories(registryRoot);
+        Files.createDirectories(registryRoot.resolve(CACHE_DIR));
+        
+        // Load existing systems
+        loadSystemsFromDisk();
+    }
+    
+    // =========================================================================
+    // System Identity Management
+    // =========================================================================
+
+    /**
+     * Register a new system in the registry.
+     * 
+     * <p>Note: Changes are deferred to disk. Call {@link #persistIfDirty()} or
+     * {@link #shutdown()} to persist.</p>
+     */
+    public void registerSystem(SystemIdentity system) {
+        Objects.requireNonNull(system, "system");
+        identities.put(system.getId(), system);
+        statuses.put(system.getId(), new SystemStatus());
+        dirty.set(true);
+    }
+    
+    /**
+     * Retrieve a system identity by ID.
+     */
+    public SystemIdentity getSystem(String systemId) {
+        return identities.get(systemId);
+    }
+    
+    /**
+     * Get all registered systems.
+     */
+    public Collection<SystemIdentity> getAllSystems() {
+        return new ArrayList<>(identities.values());
+    }
+    
+    /**
+     * Remove a system and its cached data.
+     */
+    public void removeSystem(String systemId) throws IOException {
+        identities.remove(systemId);
+        statuses.remove(systemId);
+        
+        // Delete cached data
+        Path systemCacheDir = registryRoot.resolve(CACHE_DIR).resolve(systemId);
+        if (Files.exists(systemCacheDir)) {
+            deleteDirectory(systemCacheDir);
+        }
+        
+        dirty.set(true);
+    }
+
+    // =========================================================================
+    // System Status Management (thread-safe)
+    // =========================================================================
+
+    /**
+     * Get the status for a system.
+     */
+    public SystemStatus getStatus(String systemId) {
+        return statuses.get(systemId);
+    }
+
+    /**
+     * Mark clusters as computed for a system.
+     */
+    public void markClustersComputed(String systemId, boolean computed) {
+        SystemStatus status = statuses.get(systemId);
+        if (status != null) {
+            status.setClustersComputed(computed);
+        }
+    }
+
+    /**
+     * Mark CFs as computed for a system.
+     */
+    public void markCfsComputed(String systemId, boolean computed) {
+        SystemStatus status = statuses.get(systemId);
+        if (status != null) {
+            status.setCfsComputed(computed);
+        }
+    }
+
+    /**
+     * Mark CEC availability for a system.
+     */
+    public void markCecAvailable(String systemId, boolean available) {
+        SystemStatus status = statuses.get(systemId);
+        if (status != null) {
+            status.setCecAvailable(available);
+        }
+    }
+
+    /**
+     * Convenience: check if clusters are computed.
+     */
+    public boolean isClustersComputed(String systemId) {
+        SystemStatus status = statuses.get(systemId);
+        return status != null && status.isClustersComputed();
+    }
+
+    /**
+     * Convenience: check if CFs are computed.
+     */
+    public boolean isCfsComputed(String systemId) {
+        SystemStatus status = statuses.get(systemId);
+        return status != null && status.isCfsComputed();
+    }
+
+    /**
+     * Convenience: check if CEC is available.
+     */
+    public boolean isCecAvailable(String systemId) {
+        SystemStatus status = statuses.get(systemId);
+        return status != null && status.isCecAvailable();
+    }
+
+    // =========================================================================
+    // Cache Directory Management
+    // =========================================================================
+    
+    /**
+     * Get the cache directory for a specific system.
+     */
+    public Path getSystemCacheDir(String systemId) throws IOException {
+        Path cacheDir = registryRoot.resolve(CACHE_DIR).resolve(systemId);
+        Files.createDirectories(cacheDir);
+        return cacheDir;
+    }
+    
+    // =========================================================================
+    // Persistence
+    // =========================================================================
+
+    /**
+     * Persist registry to disk if there are unsaved changes.
+     * 
+     * @return true if data was written, false if already up-to-date
+     */
+    public boolean persistIfDirty() {
+        if (dirty.compareAndSet(true, false)) {
+            saveSystemsToDisk();
+            return true;
+        }
+        return false;
+    }
+    
+    /**
+     * Shutdown hook: persist any unsaved changes.
+     * Call this on application exit.
+     */
+    public void shutdown() {
+        persistIfDirty();
+    }
+    
+    /**
+     * Get workspace statistics.
+     */
+    public RegistryStats getStats() {
+        return new RegistryStats(
+            identities.size(),
+            registryRoot.toFile().getTotalSpace(),
+            getDirectorySize(registryRoot)
+        );
+    }
+    
+    // ===================== PRIVATE HELPERS =====================
+    
+    private void loadSystemsFromDisk() {
+        Path systemsFile = registryRoot.resolve(SYSTEMS_FILE);
+        if (!Files.exists(systemsFile)) {
+            return;
+        }
+        
+        try {
+            // TODO: Implement deserialization from file
+            // For now, systems are built at runtime
+        } catch (Exception e) {
+            LOG.warning("Failed to load systems: " + e.getMessage());
+        }
+    }
+    
+    private void saveSystemsToDisk() {
+        try {
+            Path systemsFile = registryRoot.resolve(SYSTEMS_FILE);
+            // TODO: Implement serialization to file
+        } catch (Exception e) {
+            LOG.warning("Failed to save systems: " + e.getMessage());
+        }
+    }
+    
+
+    private void deleteDirectory(Path path) throws IOException {
+        Files.walk(path)
+            .sorted(Comparator.reverseOrder())
+            .forEach(p -> {
+                try {
+                    Files.delete(p);
+                } catch (IOException e) {
+                    LOG.warning("Failed to delete: " + p);
+                }
+            });
+    }
+    
+    private long getDirectorySize(Path path) {
+        try {
+            return Files.walk(path)
+                .filter(Files::isRegularFile)
+                .mapToLong(p -> {
+                    try {
+                        return Files.size(p);
+                    } catch (IOException e) {
+                        return 0;
+                    }
+                })
+                .sum();
+        } catch (IOException e) {
+            return 0;
+        }
+    }
+    
+    // ===================== INNER CLASSES =====================
+    
+    /**
+     * Statistics about the registry.
+     */
+    public static class RegistryStats {
+        public final int systemCount;
+        public final long totalSpace;
+        public final long usedSpace;
+        
+        public RegistryStats(int systemCount, long totalSpace, long usedSpace) {
+            this.systemCount = systemCount;
+            this.totalSpace = totalSpace;
+            this.usedSpace = usedSpace;
+        }
+    }
+}
+

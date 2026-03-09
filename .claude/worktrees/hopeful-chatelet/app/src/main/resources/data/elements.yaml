@@ -1,0 +1,416 @@
+# Periodic Table Elements Data
+# Format: symbol, name, atomicNumber, mass, row, column
+elements:
+  - symbol: H
+    name: Hydrogen
+    atomicNumber: 1
+    mass: 1.008
+    row: 1
+    column: 1
+  - symbol: He
+    name: Helium
+    atomicNumber: 2
+    mass: 4.003
+    row: 1
+    column: 18
+  
+  - symbol: Li
+    name: Lithium
+    atomicNumber: 3
+    mass: 6.941
+    row: 2
+    column: 1
+  - symbol: Be
+    name: Beryllium
+    atomicNumber: 4
+    mass: 9.012
+    row: 2
+    column: 2
+  - symbol: B
+    name: Boron
+    atomicNumber: 5
+    mass: 10.81
+    row: 2
+    column: 13
+  - symbol: C
+    name: Carbon
+    atomicNumber: 6
+    mass: 12.01
+    row: 2
+    column: 14
+  - symbol: N
+    name: Nitrogen
+    atomicNumber: 7
+    mass: 14.01
+    row: 2
+    column: 15
+  - symbol: O
+    name: Oxygen
+    atomicNumber: 8
+    mass: 16.00
+    row: 2
+    column: 16
+  - symbol: F
+    name: Fluorine
+    atomicNumber: 9
+    mass: 19.00
+    row: 2
+    column: 17
+  - symbol: Ne
+    name: Neon
+    atomicNumber: 10
+    mass: 20.18
+    row: 2
+    column: 18
+  
+  - symbol: Na
+    name: Sodium
+    atomicNumber: 11
+    mass: 22.99
+    row: 3
+    column: 1
+  - symbol: Mg
+    name: Magnesium
+    atomicNumber: 12
+    mass: 24.31
+    row: 3
+    column: 2
+  - symbol: Al
+    name: Aluminum
+    atomicNumber: 13
+    mass: 26.98
+    row: 3
+    column: 13
+  - symbol: Si
+    name: Silicon
+    atomicNumber: 14
+    mass: 28.09
+    row: 3
+    column: 14
+  - symbol: P
+    name: Phosphorus
+    atomicNumber: 15
+    mass: 30.97
+    row: 3
+    column: 15
+  - symbol: S
+    name: Sulfur
+    atomicNumber: 16
+    mass: 32.07
+    row: 3
+    column: 16
+  - symbol: Cl
+    name: Chlorine
+    atomicNumber: 17
+    mass: 35.45
+    row: 3
+    column: 17
+  - symbol: Ar
+    name: Argon
+    atomicNumber: 18
+    mass: 39.95
+    row: 3
+    column: 18
+  
+  - symbol: K
+    name: Potassium
+    atomicNumber: 19
+    mass: 39.10
+    row: 4
+    column: 1
+  - symbol: Ca
+    name: Calcium
+    atomicNumber: 20
+    mass: 40.08
+    row: 4
+    column: 2
+  - symbol: Sc
+    name: Scandium
+    atomicNumber: 21
+    mass: 44.96
+    row: 4
+    column: 3
+  - symbol: Ti
+    name: Titanium
+    atomicNumber: 22
+    mass: 47.87
+    row: 4
+    column: 4
+  - symbol: V
+    name: Vanadium
+    atomicNumber: 23
+    mass: 50.94
+    row: 4
+    column: 5
+  - symbol: Cr
+    name: Chromium
+    atomicNumber: 24
+    mass: 52.00
+    row: 4
+    column: 6
+  - symbol: Mn
+    name: Manganese
+    atomicNumber: 25
+    mass: 54.94
+    row: 4
+    column: 7
+  - symbol: Fe
+    name: Iron
+    atomicNumber: 26
+    mass: 55.85
+    row: 4
+    column: 8
+  - symbol: Co
+    name: Cobalt
+    atomicNumber: 27
+    mass: 58.93
+    row: 4
+    column: 9
+  - symbol: Ni
+    name: Nickel
+    atomicNumber: 28
+    mass: 58.69
+    row: 4
+    column: 10
+  - symbol: Cu
+    name: Copper
+    atomicNumber: 29
+    mass: 63.55
+    row: 4
+    column: 11
+  - symbol: Zn
+    name: Zinc
+    atomicNumber: 30
+    mass: 65.38
+    row: 4
+    column: 12
+  - symbol: Ga
+    name: Gallium
+    atomicNumber: 31
+    mass: 69.72
+    row: 4
+    column: 13
+  - symbol: Ge
+    name: Germanium
+    atomicNumber: 32
+    mass: 72.63
+    row: 4
+    column: 14
+  - symbol: As
+    name: Arsenic
+    atomicNumber: 33
+    mass: 74.92
+    row: 4
+    column: 15
+  - symbol: Se
+    name: Selenium
+    atomicNumber: 34
+    mass: 78.96
+    row: 4
+    column: 16
+  - symbol: Br
+    name: Bromine
+    atomicNumber: 35
+    mass: 79.90
+    row: 4
+    column: 17
+  - symbol: Kr
+    name: Krypton
+    atomicNumber: 36
+    mass: 83.80
+    row: 4
+    column: 18
+  
+  - symbol: Rb
+    name: Rubidium
+    atomicNumber: 37
+    mass: 85.47
+    row: 5
+    column: 1
+  - symbol: Sr
+    name: Strontium
+    atomicNumber: 38
+    mass: 87.62
+    row: 5
+    column: 2
+  - symbol: Y
+    name: Yttrium
+    atomicNumber: 39
+    mass: 88.91
+    row: 5
+    column: 3
+  - symbol: Zr
+    name: Zirconium
+    atomicNumber: 40
+    mass: 91.22
+    row: 5
+    column: 4
+  - symbol: Nb
+    name: Niobium
+    atomicNumber: 41
+    mass: 92.91
+    row: 5
+    column: 5
+  - symbol: Mo
+    name: Molybdenum
+    atomicNumber: 42
+    mass: 95.95
+    row: 5
+    column: 6
+  - symbol: Tc
+    name: Technetium
+    atomicNumber: 43
+    mass: 98.00
+    row: 5
+    column: 7
+  - symbol: Ru
+    name: Ruthenium
+    atomicNumber: 44
+    mass: 101.1
+    row: 5
+    column: 8
+  - symbol: Rh
+    name: Rhodium
+    atomicNumber: 45
+    mass: 102.9
+    row: 5
+    column: 9
+  - symbol: Pd
+    name: Palladium
+    atomicNumber: 46
+    mass: 106.4
+    row: 5
+    column: 10
+  - symbol: Ag
+    name: Silver
+    atomicNumber: 47
+    mass: 107.9
+    row: 5
+    column: 11
+  - symbol: Cd
+    name: Cadmium
+    atomicNumber: 48
+    mass: 112.4
+    row: 5
+    column: 12
+  - symbol: In
+    name: Indium
+    atomicNumber: 49
+    mass: 114.8
+    row: 5
+    column: 13
+  - symbol: Sn
+    name: Tin
+    atomicNumber: 50
+    mass: 118.7
+    row: 5
+    column: 14
+  - symbol: Sb
+    name: Antimony
+    atomicNumber: 51
+    mass: 121.8
+    row: 5
+    column: 15
+  - symbol: Te
+    name: Tellurium
+    atomicNumber: 52
+    mass: 127.6
+    row: 5
+    column: 16
+  - symbol: I
+    name: Iodine
+    atomicNumber: 53
+    mass: 126.9
+    row: 5
+    column: 17
+  - symbol: Xe
+    name: Xenon
+    atomicNumber: 54
+    mass: 131.3
+    row: 5
+    column: 18
+  
+  - symbol: Cs
+    name: Cesium
+    atomicNumber: 55
+    mass: 132.9
+    row: 6
+    column: 1
+  - symbol: Ba
+    name: Barium
+    atomicNumber: 56
+    mass: 137.3
+    row: 6
+    column: 2
+  - symbol: Hf
+    name: Hafnium
+    atomicNumber: 72
+    mass: 178.5
+    row: 6
+    column: 4
+  - symbol: Ta
+    name: Tantalum
+    atomicNumber: 73
+    mass: 180.9
+    row: 6
+    column: 5
+  - symbol: W
+    name: Tungsten
+    atomicNumber: 74
+    mass: 183.8
+    row: 6
+    column: 6
+  - symbol: Re
+    name: Rhenium
+    atomicNumber: 75
+    mass: 186.2
+    row: 6
+    column: 7
+  - symbol: Os
+    name: Osmium
+    atomicNumber: 76
+    mass: 190.2
+    row: 6
+    column: 8
+  - symbol: Ir
+    name: Iridium
+    atomicNumber: 77
+    mass: 192.2
+    row: 6
+    column: 9
+  - symbol: Pt
+    name: Platinum
+    atomicNumber: 78
+    mass: 195.1
+    row: 6
+    column: 10
+  - symbol: Au
+    name: Gold
+    atomicNumber: 79
+    mass: 197.0
+    row: 6
+    column: 11
+  - symbol: Hg
+    name: Mercury
+    atomicNumber: 80
+    mass: 200.6
+    row: 6
+    column: 12
+  - symbol: Tl
+    name: Thallium
+    atomicNumber: 81
+    mass: 204.4
+    row: 6
+    column: 13
+  - symbol: Pb
+    name: Lead
+    atomicNumber: 82
+    mass: 207.2
+    row: 6
+    column: 14
+  - symbol: Bi
+    name: Bismuth
+    atomicNumber: 83
+    mass: 209.0
+    row: 6
+    column: 15
