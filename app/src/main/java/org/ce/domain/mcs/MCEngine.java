@@ -86,6 +86,7 @@ public class MCEngine {
         this.useFlipStep = useFlipStep;
         this.deltaMu     = deltaMu.clone();
         this.rng         = rng;
+        this.hmixCoeff   = emb.computeHmixCoeff(eci, orbits.size());
     }
 
     // -------------------------------------------------------------------------
@@ -198,13 +199,16 @@ public class MCEngine {
                 currentEnergy += stepDeltaE;  // Accumulate (0 if rejected)
                 sweepDeltaE += stepDeltaE;   // Track sweep aggregate
             }
-            sampler.sample(config, emb, eci);
-            
-            // Emit update after each sweep (step = cumulative sweep number)
+            sampler.sample(config, emb);
+
+            // Emit update after each sweep.
+            // currentEnergy = H_total tracked via incremental ΔE (monitoring only).
+            // ΔHmix = ΔH_total for canonical ensemble (reference x·H_pure is fixed),
+            // so convergence trends are valid. Final Hmix comes from time-averaged CFs.
             if (updateListener != null) {
                 long elapsedMs = System.currentTimeMillis() - startTime;
                 int sweepNum = nEquil + s + 1;  // Cumulative sweep count
-                
+
                 MCSUpdate update = new MCSUpdate(
                     sweepNum,
                     currentEnergy,
@@ -293,13 +297,16 @@ public class MCEngine {
                 currentEnergy += stepDeltaE;  // Accumulate (0 if rejected)
                 sweepDeltaE += stepDeltaE;   // Track sweep aggregate
             }
-            sampler.sample(config, emb, eci);
-            
-            // Emit update after each sweep (step = cumulative sweep number)
+            sampler.sample(config, emb);
+
+            // Emit update after each sweep.
+            // currentEnergy = H_total tracked via incremental ΔE (monitoring only).
+            // ΔHmix = ΔH_total for canonical ensemble (reference x·H_pure is fixed),
+            // so convergence trends are valid. Final Hmix comes from time-averaged CFs.
             if (updateListener != null) {
                 long elapsedMs = System.currentTimeMillis() - startTime;
                 int sweepNum = nEquil + s + 1;  // Cumulative sweep count
-                
+
                 MCSUpdate update = new MCSUpdate(
                     sweepNum,
                     currentEnergy,
@@ -322,26 +329,35 @@ public class MCEngine {
     private MCResult buildResult(LatticeConfig config, MCSampler sampler,
                                   double acceptRate) {
         int L = (int) Math.round(Math.cbrt(config.getN() / 2.0));
+        double[] cfs = sampler.meanCFs();
+
+        // Hmix/site = sum_t  hmixCoeff[t] * <u_t>   (CVM-equivalent formula)
+        double hmix = 0.0;
+        for (int t = 0; t < Math.min(hmixCoeff.length, cfs.length); t++) {
+            hmix += hmixCoeff[t] * cfs[t];
+        }
+
         MCResult result = new MCResult(T,
                 config.composition(),
-                sampler.meanCFs(),
+                cfs,
                 sampler.meanEnergyPerSite(),
+                hmix,
                 sampler.heatCapacityPerSite(T),
                 acceptRate,
                 nEquil, nAvg, L, config.getN());
-        double[] _cfs = result.getAvgCFs();
-        int _cfN = Math.min(5, _cfs.length);
+        int _cfN = Math.min(5, cfs.length);
         StringBuilder _cfStr = new StringBuilder("[");
         for (int _i = 0; _i < _cfN; _i++) {
             if (_i > 0) _cfStr.append(", ");
-            _cfStr.append(String.format("%.5f", _cfs[_i]));
+            _cfStr.append(String.format("%.5f", cfs[_i]));
         }
-        if (_cfs.length > _cfN) _cfStr.append(", ...");
+        if (cfs.length > _cfN) _cfStr.append(", ...");
         _cfStr.append("]");
         LOG.fine("MCEngine.buildResult — T=" + T + " K, N=" + config.getN() + " (L=" + L + ")"
                 + ", acceptRate=" + String.format("%.3f", acceptRate)
-                + ", <E>/site=" + String.format("%.6f", result.getEnergyPerSite()) + " eV"
-                + ", Cv/site=" + String.format("%.4e", result.getHeatCapacityPerSite()) + " eV/K"
+                + ", <E>/site=" + String.format("%.6f", result.getEnergyPerSite())
+                + ", Hmix/site=" + String.format("%.6f", result.getHmixPerSite())
+                + ", Cv/site=" + String.format("%.4e", result.getHeatCapacityPerSite())
                 + ", CFs[0.." + (_cfN-1) + "]=" + _cfStr);
         return result;
     }
