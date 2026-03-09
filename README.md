@@ -6,7 +6,26 @@ Method (CVM)** pipeline for alloy thermodynamics, with a Monte Carlo Simulation
 
 **GUI Application:** CE Thermodynamics Workbench - Interactive system management and calculation setup. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for full details.
 
-## Latest Updates (Mar 8, 2026)
+## Latest Updates (Mar 9, 2026 - Evening)
+
+### ECI Standardization — CVM & MCS Unified Loading
+
+Both models now consistently use **ncf-length** (4 values) ECI arrays from the database:
+
+- **CVM:** Loads 4 ECI values (tet, tri, pair1, pair2), uses directly
+- **MCS:** Loads 4 ECI values, expands to 6 (tc) by padding point/empty with zeros
+- **Database:** `cec.json` stores only non-point CFs (constants don't need optimization)
+
+**Result:**
+- ✅ CF values match CVM ↔ MCS within 0.5%
+- ✅ Enthalpy agreement within 6% (finite-size + sampling effects)
+- ✅ Both use same ECI source, eliminating format inconsistencies
+
+See [PROJECT_STATUS.md](PROJECT_STATUS.md#eci-standardization-mar-9-2026---evening) for implementation details.
+
+---
+
+## Previous Updates (Mar 8, 2026)
 
 ### CVM Calculation Bug Fixes — 7 Root Causes Resolved
 
