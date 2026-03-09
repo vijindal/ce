@@ -136,13 +136,15 @@ public class MCSRunner {
             compSb.append(String.format("x[%d]=%.4f  ", c, x[c]));
         LOG.fine(compSb.toString());
 
-        // 4. Orbit sizes and orbit list for sampler
+        // 4. Orbit sizes, orbit list, and CF-based energy coefficients for sampler
         int tc = clusterData.getTc();
         int[] orbitSizes = new int[tc];
         List<List<Cluster>> orbits = clusterData.getOrbitList();
         for (int t = 0; t < tc; t++)
             orbitSizes[t] = orbits.get(t).size();
-        MCSampler sampler = new MCSampler(N, orbitSizes, orbits, R);
+        double[] hTotalCoeff = emb.computeHTotalCoeff(eci, tc);
+        double   hTotalConst = emb.computeHTotalConst(eci, tc);
+        MCSampler sampler = new MCSampler(N, orbitSizes, orbits, R, hTotalCoeff, hTotalConst);
 
         // 5. Engine
         MCEngine engine = new MCEngine(

@@ -19,6 +19,7 @@ public class MCResult {
     private final double[] composition;      // x[c] for each component c
     private final double[] avgCFs;
     private final double   energyPerSite;
+    private final double   hmixPerSite;      // Hmix/site from CF formula: sum_t ECI[t]*msdis[t]*<u_t>
     private final double   heatCapacityPerSite;
     private final double   acceptRate;
     private final long     nEquilSweeps;
@@ -31,13 +32,14 @@ public class MCResult {
     // -------------------------------------------------------------------------
 
     MCResult(double temperature, double[] composition, double[] avgCFs,
-             double energyPerSite, double heatCapacityPerSite,
+             double energyPerSite, double hmixPerSite, double heatCapacityPerSite,
              double acceptRate, long nEquilSweeps, long nAvgSweeps,
              int supercellSize, int nSites) {
         this.temperature         = temperature;
         this.composition         = composition.clone();
         this.avgCFs              = avgCFs.clone();
         this.energyPerSite       = energyPerSite;
+        this.hmixPerSite         = hmixPerSite;
         this.heatCapacityPerSite = heatCapacityPerSite;
         this.acceptRate          = acceptRate;
         this.nEquilSweeps        = nEquilSweeps;
@@ -58,6 +60,8 @@ public class MCResult {
     public double[] getAvgCFs()              { return avgCFs.clone(); }
     public int      getNumClusterTypes()     { return avgCFs.length; }
     public double   getEnergyPerSite()       { return energyPerSite; }
+    /** Enthalpy of mixing per site: {@code sum_t ECI[t]*msdis[t]*<u_t>} (excludes point/empty clusters). */
+    public double   getHmixPerSite()         { return hmixPerSite; }
     public double   getHeatCapacityPerSite() { return heatCapacityPerSite; }
     public double   getAcceptRate()          { return acceptRate; }
     public long     getNEquilSweeps()        { return nEquilSweeps; }
@@ -76,7 +80,8 @@ public class MCResult {
         System.out.printf( "  equil sweeps   : %d%n",         nEquilSweeps);
         System.out.printf( "  avg   sweeps   : %d%n",         nAvgSweeps);
         System.out.printf( "  accept rate    : %.4f%n",       acceptRate);
-        System.out.printf( "  âŸ¨EâŸ©/site       : %+.6f%n",     energyPerSite);
+        System.out.printf( "  <E>/site       : %+.6f%n",     energyPerSite);
+        System.out.printf( "  Hmix/site      : %+.6f%n",     hmixPerSite);
         System.out.printf( "  Cv/site        : %+.4e%n",      heatCapacityPerSite);
         String[] lbl = {"A","B","C","D","E"};
         System.out.println("  composition:");

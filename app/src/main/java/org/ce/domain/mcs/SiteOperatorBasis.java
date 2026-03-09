@@ -25,10 +25,10 @@ package org.ce.domain.mcs;
  *
  * <ul>
  *   <li><b>Binary (numComp=2):</b>
- *       {@code Ï†_1(Ïƒ) = 1 âˆ’ 2Ïƒ}  â†’  A=+1, B=âˆ’1</li>
+ *       phi_1(sigma) = 2*sigma - 1  →  A=-1, B=+1  (matches CVM convention)</li>
  *   <li><b>Ternary (numComp=3):</b>
- *       {@code Ï†_1(Ïƒ) = 1 âˆ’ Ïƒ}   â†’  A=+1, B=0, C=âˆ’1<br>
- *       {@code Ï†_2(Ïƒ) = 1 âˆ’ 3Ïƒ(1âˆ’Ïƒ) âˆ’ (Ïƒâˆ’1)Â²}  (renormalised Chebyshev)</li>
+ *       phi_1 ≈ [-1.225, 0, +1.225]  →  A=-, B=0, C=+<br>
+ *       phi_2 ≈ [+0.707, -1.414, +0.707]</li>
  *   <li><b>General:</b> uses the Gram-Schmidt orthogonalised power basis
  *       over the uniform measure, precomputed and stored in {@link #basisMatrix}.</li>
  * </ul>
@@ -151,10 +151,11 @@ public class SiteOperatorBasis {
      * <pre>
      *   Î£_{Ïƒ=0}^{nâˆ’1} Ï†_Î±(Ïƒ) Â· Ï†_Î²(Ïƒ) / n = Î´_{Î±Î²}
      * </pre>
-     * <p>Special cases match the standard CVM literature:</p>
+     * <p>Actual output values (A=index 0, B=index 1, C=index 2 — A is negative, last component positive,
+     * matching the CVM/RMatrixCalculator convention):</p>
      * <ul>
-     *   <li>Binary:  {@code Ï†_1 = [+1, âˆ’1]}  (spin operator)</li>
-     *   <li>Ternary: {@code Ï†_1 = [+1, 0, âˆ’1]},  {@code Ï†_2 = [+1, âˆ’2, +1]/âˆš6}</li>
+     *   <li>Binary:  phi_1 = [-1, +1]</li>
+     *   <li>Ternary: phi_1 ≈ [-1.225, 0, +1.225],  phi_2 ≈ [+0.707, -1.414, +0.707]</li>
      * </ul>
      */
     private static double[][] buildBasis(int n) {
@@ -236,8 +237,8 @@ public class SiteOperatorBasis {
      * <p>Output format (ternary example):</p>
      * <pre>
      * [SiteOperatorBasis]  numComp=3
-     *   Ï†_1 : Ïƒ=0: +1.000  Ïƒ=1:  0.000  Ïƒ=2: -1.000
-     *   Ï†_2 : Ïƒ=0: +0.816  Ïƒ=1: -1.633  Ïƒ=2: +0.816
+     *   phi_1 : sigma=0: -1.225  sigma=1:  0.000  sigma=2: +1.225
+     *   phi_2 : sigma=0: +0.707  sigma=1: -1.414  sigma=2: +0.707
      * </pre>
      */
     public void printDebug() {

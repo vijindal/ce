@@ -9,27 +9,37 @@ import java.util.logging.Logger;
  * Accumulates running averages of thermodynamic observables during the
  * averaging phase of a Monte Carlo simulation.
  *
- * <h2>Observables</h2>
+ * <h2>Observables tracked</h2>
  * <ul>
- *   <li>{@code âŸ¨HâŸ©} and {@code âŸ¨HÂ²âŸ©} â€” for heat-capacity estimation</li>
- *   <li>{@code âŸ¨u_tâŸ©} for each cluster type {@code t} â€” supercell-averaged
- *       correlation functions</li>
+ *   <li>{@code <Hmix>} and {@code <Hmix^2>} for heat-capacity estimation via
+ *       fluctuation formula</li>
+ *   <li>{@code <u_t>} for each multi-site cluster type {@code t}</li>
  * </ul>
  *
- * <h2>CF formula</h2>
+ * <h2>Why empty and point clusters are skipped</h2>
+ * <ul>
+ *   <li><b>Empty (size=0):</b> Phi=1 always; contributes a constant ECI[0] per
+ *       site to H_total regardless of configuration.  Cancels in delta-E
+ *       (Metropolis criterion), in Var(H) (hence Cv), and in Hmix by definition.</li>
+ *   <li><b>Point (size=1) in canonical ensemble:</b> composition is fixed, so
+ *       u_point is constant throughout the simulation.  Contributes a constant
+ *       to H, which again cancels in delta-E, Var(H), and Hmix.</li>
+ * </ul>
+ * <p>Only multi-site clusters (size &gt; 1) carry configuration-dependent
+ * information relevant to Hmix, Gmix, and Smix.</p>
+ *
+ * <h2>Single-pass CF + energy formula</h2>
  * <pre>
- *   u_t = Î£_{e âˆˆ allEmbeddings, e.type==t} Î¦(e)
- *         â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
- *               embedCount_t
+ *   u_t      = sum_{e: type==t} Phi(e) / embedCount_t      [size > 1 types only]
+ *
+ *   Hmix/site = sum_t  hmixCoeff[t] * u_t                  [= CVM Hmix formula]
  * </pre>
- * <p>CORRECTED FORMULA (v2): Normalizes by the total embedding count for each
- * cluster type. This gives the average cluster product, which is the
- * mathematically correct basis for the CVM. {@link LocalEnergyCalc#clusterProduct}
- * is called with orbit data to evaluate {@code Î¦(e)} for any number of
- * components.</p>
+ * <p>One embedding loop computes {@code Phi(e)} once, accumulates CF numerators,
+ * and from the normalised CFs derives Hmix via the precomputed coefficient array
+ * (structurally identical to the CVM energy formula).</p>
  *
  * @author  CE Project
- * @version 2.0
+ * @version 3.0
  * @see     MCEngine
  */
 public class MCSampler {
@@ -39,14 +49,23 @@ public class MCSampler {
     /** Boltzmann constant in eV/K. */
     public static final double K_B = 8.617333262e-5;
 
-    private final int                              tc;
-    private final int[]                            orbitSizes;
-    private final int                              N;
-    private final List<List<Cluster>>              orbits;
-    private final double                           R;
+    private final int                 tc;
+    private final int[]               orbitSizes;
+    private final int                 N;
+    private final List<List<Cluster>> orbits;
+    private final double              R;
 
-    private double   sumE  = 0.0;
-    private double   sumE2 = 0.0;
+    /**
+     * Per-cluster-type Hmix coefficients: {@code hmixCoeff[t] = ECI[t] * msdis[t]}
+     * for size &gt; 1 types; zero for empty and point clusters.
+     * From {@link EmbeddingData#computeHmixCoeff}.
+     * <p>Used both to compute Hmix/site from CFs and to accumulate the
+     * energy running sum for the heat-capacity fluctuation formula.</p>
+     */
+    private final double[]            hmixCoeff;
+
+    private double   sumHmix  = 0.0;
+    private double   sumHmix2 = 0.0;
     private double[] sumCF;
     private long     nSamples = 0;
 
@@ -58,22 +77,25 @@ public class MCSampler {
      * Constructs a sampler.
      *
      * @param N          number of lattice sites
-     * @param orbitSizes {@code orbitSizes[t]} = orbit size for cluster type {@code t}
-     * @param orbits     orbit list from {@code ClusCoordListResult.getOrbitList()},
-     *                   needed to evaluate decorated cluster products
+     * @param orbitSizes {@code orbitSizes[t]} = orbit size for cluster type t
+     * @param orbits     orbit list for evaluating decorated cluster products
+     * @param R          gas constant (in energy units matching ECI)
+     * @param hmixCoeff  per-type Hmix coefficients;
+     *                   from {@link EmbeddingData#computeHmixCoeff}
      */
     public MCSampler(int N, int[] orbitSizes,
-                     List<List<Cluster>> orbits,
-                     double R) {
+                     List<List<Cluster>> orbits, double R,
+                     double[] hmixCoeff) {
         if (N <= 0) throw new IllegalArgumentException("N must be > 0, got " + N);
+        if (R <= 0) throw new IllegalArgumentException("R must be > 0");
         this.N          = N;
         this.tc         = orbitSizes.length;
         this.orbitSizes = orbitSizes.clone();
         this.orbits     = orbits;
         this.sumCF      = new double[tc];
-        if (R <= 0) throw new IllegalArgumentException("R must be > 0");
-        this.R = R;
-        LOG.fine("MCSampler — CREATED: N=" + N + " sites, tc=" + tc + " cluster types, R=" + R);
+        this.R          = R;
+        this.hmixCoeff  = hmixCoeff.clone();
+        LOG.fine("MCSampler -- CREATED: N=" + N + " sites, tc=" + tc + " cluster types, R=" + R);
     }
 
     // -------------------------------------------------------------------------
@@ -81,46 +103,50 @@ public class MCSampler {
     // -------------------------------------------------------------------------
 
     /**
-     * Accumulates one sample of observables.
+     * Accumulates one configuration snapshot into all running averages.
      *
-     * <h2>Updated CF formula</h2>
+     * <p>Single embedding loop over multi-site clusters only (size &gt; 1).
+     * Empty and point clusters are skipped because their contributions are
+     * constant in the canonical ensemble and cancel in Hmix, delta-E, and Var(H).</p>
+     *
      * <pre>
-     *   u_t = Î£_{e âˆˆ allEmbeddings, e.type==t} Î¦(e)
-     *         â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-     *              embedCount_t
+     *   u_t        = cfNum[t] / embedCount_t       (multi-site types only)
+     *   Hmix/site  = sum_t  hmixCoeff[t] * u_t     (CVM-aligned formula)
      * </pre>
-     * <p>This averages the cluster product over all embeddings of type t,
-     * which is the mathematically correct normalization for the CVM.</p>
      *
      * @param config current configuration
      * @param emb    embedding data
-     * @param eci    effective cluster interactions
      */
-    public void sample(LatticeConfig config,
-                       EmbeddingData emb,
-                       double[] eci) {
+    public void sample(LatticeConfig config, EmbeddingData emb) {
         long __p = Profiler.tic("MCSampler.sample");
 
-        double H = LocalEnergyCalc.totalEnergy(config, emb, eci, orbits);
-        sumE  += H;
-        sumE2 += H * H;
+        double[] cfNum    = new double[tc];
+        int[]    embedCnt = new int[tc];
 
-        // Accumulate CF numerators and embedding counts per cluster type
-        double[] cfNum = new double[tc];
-        int[] embedCount = new int[tc];
+        // Single pass: multi-site clusters only (size > 1)
         for (Embedding e : emb.getAllEmbeddings()) {
-            int t = e.getClusterType();
-            if (t < tc) {
-                embedCount[t]++;
-                cfNum[t] += LocalEnergyCalc.clusterProduct(e, config, orbits);
-            }
+            int t    = e.getClusterType();
+            int size = e.size();
+            if (t >= tc || size <= 1) continue;   // skip empty (size=0) and point (size=1)
+            double phi = LocalEnergyCalc.clusterProduct(e, config, orbits);
+            embedCnt[t]++;
+            cfNum[t] += phi;
         }
-        // Normalize by embedding count for each type
+
+        // Normalise CFs; derive Hmix from CFs via precomputed coefficients
+        double hmix_per_site = 0.0;
         for (int t = 0; t < tc; t++) {
-            if (embedCount[t] > 0) {
-                sumCF[t] += cfNum[t] / embedCount[t];
+            if (embedCnt[t] > 0) {
+                double u = cfNum[t] / embedCnt[t];
+                sumCF[t]      += u;
+                hmix_per_site += hmixCoeff[t] * u;
             }
         }
+
+        // Accumulate Hmix (total, not per-site) for fluctuation formula
+        double Hmix = hmix_per_site * N;
+        sumHmix  += Hmix;
+        sumHmix2 += Hmix * Hmix;
         nSamples++;
 
         Profiler.toc("MCSampler.sample", __p);
@@ -130,16 +156,29 @@ public class MCSampler {
     // Accessors
     // -------------------------------------------------------------------------
 
-    public long     getSampleCount()              { return nSamples; }
-    public double   meanEnergyPerSite()           { return nSamples == 0 ? 0.0 : (sumE / nSamples) / N; }
+    public long getSampleCount() { return nSamples; }
 
+    /** Returns mean Hmix per site averaged over all samples. */
+    public double meanHmixPerSite() {
+        return nSamples == 0 ? 0.0 : (sumHmix / nSamples) / N;
+    }
+
+    /**
+     * Returns heat capacity per site from the Hmix fluctuation formula:
+     * {@code Cv/site = Var(Hmix) / (N * R * T^2)}.
+     *
+     * <p>Equivalent to the full H_total fluctuation in the canonical ensemble
+     * because empty and point cluster contributions are configuration-independent
+     * (their variance is zero).</p>
+     */
     public double heatCapacityPerSite(double T) {
         if (nSamples < 2) return 0.0;
-        double mH  = sumE  / nSamples;
-        double mH2 = sumE2 / nSamples;
+        double mH  = sumHmix  / nSamples;
+        double mH2 = sumHmix2 / nSamples;
         return (mH2 - mH * mH) / ((double) N * R * T * T);
     }
 
+    /** Returns time-averaged CFs for multi-site cluster types; zero for size&le;1 types. */
     public double[] meanCFs() {
         double[] r = new double[tc];
         if (nSamples == 0) return r;
@@ -148,7 +187,7 @@ public class MCSampler {
     }
 
     public void reset() {
-        sumE = 0; sumE2 = 0;
+        sumHmix = 0; sumHmix2 = 0;
         sumCF = new double[tc];
         nSamples = 0;
     }
@@ -159,14 +198,13 @@ public class MCSampler {
 
     public void printDebug(double T) {
         LOG.fine("[MCSampler]");
-        LOG.fine(String.format("  samples    : %d", nSamples));
-        LOG.fine(String.format("  <E>/site   : %+.6f", meanEnergyPerSite()));
-        LOG.fine(String.format("  Cv/site    : %+.4e  (T=%.1f K)", heatCapacityPerSite(T), T));
+        LOG.fine(String.format("  samples      : %d", nSamples));
+        LOG.fine(String.format("  Hmix/site    : %+.6f", meanHmixPerSite()));
+        LOG.fine(String.format("  Cv/site      : %+.4e  (T=%.1f K)", heatCapacityPerSite(T), T));
         double[] cfs = meanCFs();
-        LOG.fine("  <u_t>:");
+        LOG.fine("  <u_t> (multi-site only):");
         for (int t = 0; t < tc; t++)
-            LOG.fine(String.format("    t=%d  orb=%-3d  u=%+.6f", t, orbitSizes[t], cfs[t]));
+            if (cfs[t] != 0.0)
+                LOG.fine(String.format("    t=%d  orb=%-3d  u=%+.6f", t, orbitSizes[t], cfs[t]));
     }
 }
-
-

@@ -86,6 +86,108 @@ public class EmbeddingData {
     public int siteCount() { return siteToEmbeddings.length; }
 
     // -------------------------------------------------------------------------
+    // CF-based energy coefficient arrays
+    // -------------------------------------------------------------------------
+
+    /**
+     * Computes per-cluster-type coefficients for the <b>total energy</b>:
+     *
+     * <pre>
+     *   H_total/site = hTotalConst + sum_t  hTotalCoeff[t] * u_t
+     *
+     *   hTotalCoeff[t] = ECI[t] * msdis[t]   for size &ge; 1
+     *   msdis[t]       = embedCount[t] / (size[t] * N)
+     * </pre>
+     *
+     * <p>Empty clusters (size=0) are excluded here; their constant contribution
+     * ECI[t] per site is returned by {@link #computeHTotalConst}.</p>
+     *
+     * @param eci effective cluster interactions
+     * @param tc  total number of cluster types
+     * @return hTotalCoeff array of length tc; zero for empty (size=0) types
+     */
+    public double[] computeHTotalCoeff(double[] eci, int tc) {
+        int N = siteCount();
+        int[] counts = new int[tc];
+        int[] sizes  = new int[tc];
+        for (Embedding e : allEmbeddings) {
+            int t = e.getClusterType();
+            if (t < tc) {
+                counts[t]++;
+                sizes[t] = e.size();
+            }
+        }
+        double[] coeff = new double[tc];
+        for (int t = 0; t < tc && t < eci.length; t++) {
+            if (sizes[t] >= 1) {   // include point (size=1) and multi-site; exclude empty (size=0)
+                coeff[t] = eci[t] * counts[t] / ((double) sizes[t] * N);
+            }
+        }
+        return coeff;
+    }
+
+    /**
+     * Returns the per-site constant energy from empty clusters (size=0).
+     *
+     * <p>Empty clusters have Phi(e)=1 always, so they contribute ECI[t]
+     * per site regardless of configuration.</p>
+     *
+     * @param eci effective cluster interactions
+     * @param tc  total number of cluster types
+     * @return constant per-site energy from empty-cluster types (0 if none)
+     */
+    public double computeHTotalConst(double[] eci, int tc) {
+        double constant = 0.0;
+        for (Embedding e : allEmbeddings) {
+            int t = e.getClusterType();
+            if (t < tc && t < eci.length && e.size() == 0) {
+                constant = eci[t];   // Phi(empty)=1; N embeddings → ECI[t] per site
+                break;               // only one empty-cluster type expected
+            }
+        }
+        return constant;
+    }
+
+    /**
+     * Computes the per-cluster-type coefficient array for the <b>mixing enthalpy</b>:
+     *
+     * <pre>
+     *   Hmix/site = sum_t  hmixCoeff[t] * avgCF[t]
+     *
+     *   hmixCoeff[t] = ECI[t] * msdis[t]
+     *   msdis[t]     = embedCount[t] / (size[t] * N)
+     * </pre>
+     *
+     * <p>Only multi-site clusters (size &gt; 1) are included. Empty (size=0) and
+     * point (size=1) types contribute zero because their reference-state terms
+     * cancel in the mixing enthalpy.</p>
+     *
+     * @param eci effective cluster interactions; {@code eci[t]} for cluster type t
+     * @param tc  total number of cluster types
+     * @return hmixCoeff array of length tc; zero for size&le;1 types
+     */
+    public double[] computeHmixCoeff(double[] eci, int tc) {
+        int N = siteCount();
+        int[] counts = new int[tc];
+        int[] sizes  = new int[tc];
+        for (Embedding e : allEmbeddings) {
+            int t = e.getClusterType();
+            if (t < tc) {
+                counts[t]++;
+                sizes[t] = e.size();
+            }
+        }
+        double[] coeff = new double[tc];
+        for (int t = 0; t < tc && t < eci.length; t++) {
+            if (sizes[t] > 1) {
+                coeff[t] = eci[t] * counts[t] / ((double) sizes[t] * N);
+            }
+            // size == 0 (empty) or size == 1 (point): coeff stays 0
+        }
+        return coeff;
+    }
+
+    // -------------------------------------------------------------------------
     // Targeted query
     // -------------------------------------------------------------------------
 
