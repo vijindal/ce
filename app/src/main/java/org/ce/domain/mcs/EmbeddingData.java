@@ -188,6 +188,31 @@ public class EmbeddingData {
     }
 
     // -------------------------------------------------------------------------
+    // Per-type counts (MCS sampler optimization)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns the count of multi-site embeddings (size &gt; 1) per cluster type.
+     *
+     * <p>This array is topology-invariant (unchanging during a simulation) and is
+     * precomputed once for use in {@link MCSampler} to avoid recounting on every
+     * sample call.</p>
+     *
+     * @param tc total number of cluster types
+     * @return array of length tc; {@code result[t]} = count of multi-site embeddings of type t
+     */
+    public int[] multiSiteEmbedCountsPerType(int tc) {
+        int[] counts = new int[tc];
+        for (Embedding e : allEmbeddings) {
+            int t = e.getClusterType();
+            if (t < tc && e.size() > 1) {
+                counts[t]++;
+            }
+        }
+        return counts;
+    }
+
+    // -------------------------------------------------------------------------
     // Targeted query
     // -------------------------------------------------------------------------
 

@@ -86,7 +86,6 @@ public class MCEngine {
         this.useFlipStep = useFlipStep;
         this.deltaMu     = deltaMu.clone();
         this.rng         = rng;
-        this.hmixCoeff   = emb.computeHmixCoeff(eci, orbits.size());
     }
 
     // -------------------------------------------------------------------------
@@ -225,7 +224,7 @@ public class MCEngine {
         }
         LOG.fine("MCEngine.runExchange — EXIT: " + nAvg + " avg sweeps done, acceptRate="
                 + String.format("%.3f", step.acceptRate()));
-        return buildResult(config, sampler, step.acceptRate());
+        return buildResult(config, sampler, step.acceptRate(), currentEnergy);
     }
 
     private MCResult runFlip(LatticeConfig config, MCSampler sampler) {
@@ -323,24 +322,23 @@ public class MCEngine {
         }
         LOG.fine("MCEngine.runFlip — EXIT: " + nAvg + " avg sweeps done, acceptRate="
                 + String.format("%.3f", step.acceptRate()));
-        return buildResult(config, sampler, step.acceptRate());
+        return buildResult(config, sampler, step.acceptRate(), currentEnergy);
     }
 
     private MCResult buildResult(LatticeConfig config, MCSampler sampler,
-                                  double acceptRate) {
+                                  double acceptRate, double currentEnergy) {
         int L = (int) Math.round(Math.cbrt(config.getN() / 2.0));
         double[] cfs = sampler.meanCFs();
 
-        // Hmix/site = sum_t  hmixCoeff[t] * <u_t>   (CVM-equivalent formula)
-        double hmix = 0.0;
-        for (int t = 0; t < Math.min(hmixCoeff.length, cfs.length); t++) {
-            hmix += hmixCoeff[t] * cfs[t];
-        }
+        // Hmix/site is computed directly from sampler's time-averaged CFs and coefficients
+        // (sampler.meanHmixPerSite() = sum_t hmixCoeff[t] * <u_t>, CVM-equivalent formula)
+        double hmix = sampler.meanHmixPerSite();
 
+        int N = config.getN();
         MCResult result = new MCResult(T,
                 config.composition(),
                 cfs,
-                sampler.meanEnergyPerSite(),
+                currentEnergy / N,
                 hmix,
                 sampler.heatCapacityPerSite(T),
                 acceptRate,

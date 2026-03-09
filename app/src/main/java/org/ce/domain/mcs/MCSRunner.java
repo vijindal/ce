@@ -142,9 +142,9 @@ public class MCSRunner {
         List<List<Cluster>> orbits = clusterData.getOrbitList();
         for (int t = 0; t < tc; t++)
             orbitSizes[t] = orbits.get(t).size();
-        double[] hTotalCoeff = emb.computeHTotalCoeff(eci, tc);
-        double   hTotalConst = emb.computeHTotalConst(eci, tc);
-        MCSampler sampler = new MCSampler(N, orbitSizes, orbits, R, hTotalCoeff, hTotalConst);
+        double[] hmixCoeff = emb.computeHmixCoeff(eci, tc);
+        int[] multiSiteEmbedCounts = emb.multiSiteEmbedCountsPerType(tc);
+        MCSampler sampler = new MCSampler(N, orbitSizes, orbits, R, hmixCoeff, multiSiteEmbedCounts);
 
         // 5. Engine
         MCEngine engine = new MCEngine(

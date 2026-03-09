@@ -8,7 +8,7 @@ import java.util.List;
  * Static utility for computing cluster-expansion energy contributions
  * for any structure and any number of chemical components.
  *
- * <h2>Cluster product â€” general n-component case</h2>
+ * <h2>Cluster product â€" general n-component case</h2>
  * <p>A decorated cluster (CF) orbit member has sites labelled with basis
  * symbols {@code "s1"}, {@code "s2"}, â€¦  The cluster product is:</p>
  * <pre>
@@ -33,9 +33,9 @@ import java.util.List;
  * cluster appears {@code clusterSize} times in {@code allEmbeddings}.
  * For empty clusters (size=0), no division is performed to avoid NaN.</p>
  *
- * <h2>Î”E for a single-site occupation change at site i</h2>
+ * <h2>Î"E for a single-site occupation change at site i</h2>
  * <pre>
- *   Î”E = Î£_{e âˆˆ siteToEmbeddings[i]}  ECI[e.type] Â· [Î¦_new(e) âˆ’ Î¦_old(e)]
+ *   Î"E = Î£_{e âˆˆ siteToEmbeddings[i]}  ECI[e.type] Â· [Î¦_new(e) âˆ’ Î¦_old(e)]
  * </pre>
  *
  * @author  CE Project
@@ -49,7 +49,7 @@ public final class LocalEnergyCalc {
     private LocalEnergyCalc() {}
 
     // -------------------------------------------------------------------------
-    // Cluster product â€” general
+    // Cluster product â€" general
     // -------------------------------------------------------------------------
 
     /**
@@ -153,7 +153,7 @@ public final class LocalEnergyCalc {
     }
 
     // -------------------------------------------------------------------------
-    // Î”E for a single-site change
+    // Î"E for a single-site change
     // -------------------------------------------------------------------------
 
     /**
@@ -163,7 +163,7 @@ public final class LocalEnergyCalc {
      * <p>This is the general form used by both {@link ExchangeStep} and
      * {@link FlipStep}:</p>
      * <pre>
-     *   Î”E = Î£_{e âˆ‹ i}  ECI[t] Â· [Î¦(e, newOcc_i) âˆ’ Î¦(e, oldOcc_i)]
+     *   Î"E = Î£_{e âˆ‹ i}  ECI[t] Â· [Î¦(e, newOcc_i) âˆ’ Î¦(e, oldOcc_i)]
      * </pre>
      *
      * @param i      site index
@@ -172,7 +172,7 @@ public final class LocalEnergyCalc {
      * @param emb    embedding data
      * @param eci    effective cluster interactions
      * @param orbits orbit list from {@code ClusCoordListResult.getOrbitList()}
-     * @return energy change Î”E
+     * @return energy change Î"E
      */
     public static double deltaESingleSite(int i,
                                            int newOcc,
@@ -243,7 +243,7 @@ public final class LocalEnergyCalc {
      * @param emb    embedding data
      * @param eci    effective cluster interactions
      * @param orbits orbit list
-     * @return energy change Î”E
+     * @return energy change Î"E
      */
     public static double deltaEExchange(int i, int j,
                                          LatticeConfig config,
@@ -258,14 +258,18 @@ public final class LocalEnergyCalc {
             return 0.0;
         }
 
-        // Î”E_i: change site i from occI â†’ occJ (all others, including j, unchanged)
+        // dE_i: change site i from occI -> occJ (all others, including j, unchanged)
         double dEi = deltaESingleSite(i, occJ, config, emb, eci, orbits);
 
-        // Î”E_j: change site j from occJ â†’ occI, given that site i is NOW occJ
-        // Apply i's change temporarily
+        // dE_j: change site j from occJ -> occI, given that site i is NOW occJ
+        // Apply i’s change temporarily, guarded with try/finally to ensure restoration
         config.setOccupation(i, occJ);
-        double dEj = deltaESingleSite(j, occI, config, emb, eci, orbits);
-        config.setOccupation(i, occI);  // restore
+        double dEj;
+        try {
+            dEj = deltaESingleSite(j, occI, config, emb, eci, orbits);
+        } finally {
+            config.setOccupation(i, occI);  // always restore, even if exception occurs
+        }
 
         Profiler.toc("LocalEnergyCalc.deltaEExchange", __p);
         return dEi + dEj;

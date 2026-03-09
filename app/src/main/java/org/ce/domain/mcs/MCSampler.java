@@ -64,6 +64,19 @@ public class MCSampler {
      */
     private final double[]            hmixCoeff;
 
+    /**
+     * Per-cluster-type count of multi-site embeddings (size &gt; 1).
+     * Topology-invariant, precomputed at construction to avoid per-call recounting.
+     * From {@link EmbeddingData#multiSiteEmbedCountsPerType}.
+     */
+    private final int[]               multiSiteEmbedCounts;
+
+    /**
+     * Scratch array for accumulating cluster-product numerators during sample().
+     * Pre-allocated once to avoid per-call heap allocations.
+     */
+    private final double[]            cfNumScratch;
+
     private double   sumHmix  = 0.0;
     private double   sumHmix2 = 0.0;
     private double[] sumCF;
@@ -76,25 +89,29 @@ public class MCSampler {
     /**
      * Constructs a sampler.
      *
-     * @param N          number of lattice sites
-     * @param orbitSizes {@code orbitSizes[t]} = orbit size for cluster type t
-     * @param orbits     orbit list for evaluating decorated cluster products
-     * @param R          gas constant (in energy units matching ECI)
-     * @param hmixCoeff  per-type Hmix coefficients;
-     *                   from {@link EmbeddingData#computeHmixCoeff}
+     * @param N                      number of lattice sites
+     * @param orbitSizes             {@code orbitSizes[t]} = orbit size for cluster type t
+     * @param orbits                 orbit list for evaluating decorated cluster products
+     * @param R                      gas constant (in energy units matching ECI)
+     * @param hmixCoeff              per-type Hmix coefficients;
+     *                               from {@link EmbeddingData#computeHmixCoeff}
+     * @param multiSiteEmbedCounts   per-type count of multi-site embeddings (size > 1);
+     *                               from {@link EmbeddingData#multiSiteEmbedCountsPerType}
      */
     public MCSampler(int N, int[] orbitSizes,
                      List<List<Cluster>> orbits, double R,
-                     double[] hmixCoeff) {
+                     double[] hmixCoeff, int[] multiSiteEmbedCounts) {
         if (N <= 0) throw new IllegalArgumentException("N must be > 0, got " + N);
         if (R <= 0) throw new IllegalArgumentException("R must be > 0");
-        this.N          = N;
-        this.tc         = orbitSizes.length;
-        this.orbitSizes = orbitSizes.clone();
-        this.orbits     = orbits;
-        this.sumCF      = new double[tc];
-        this.R          = R;
-        this.hmixCoeff  = hmixCoeff.clone();
+        this.N                     = N;
+        this.tc                    = orbitSizes.length;
+        this.orbitSizes            = orbitSizes.clone();
+        this.orbits                = orbits;
+        this.sumCF                 = new double[tc];
+        this.R                     = R;
+        this.hmixCoeff             = hmixCoeff.clone();
+        this.multiSiteEmbedCounts  = multiSiteEmbedCounts.clone();
+        this.cfNumScratch          = new double[tc];
         LOG.fine("MCSampler -- CREATED: N=" + N + " sites, tc=" + tc + " cluster types, R=" + R);
     }
 
@@ -120,8 +137,8 @@ public class MCSampler {
     public void sample(LatticeConfig config, EmbeddingData emb) {
         long __p = Profiler.tic("MCSampler.sample");
 
-        double[] cfNum    = new double[tc];
-        int[]    embedCnt = new int[tc];
+        // Zero out scratch array; use precomputed embedding counts
+        for (int t = 0; t < tc; t++) cfNumScratch[t] = 0.0;
 
         // Single pass: multi-site clusters only (size > 1)
         for (Embedding e : emb.getAllEmbeddings()) {
@@ -129,15 +146,16 @@ public class MCSampler {
             int size = e.size();
             if (t >= tc || size <= 1) continue;   // skip empty (size=0) and point (size=1)
             double phi = LocalEnergyCalc.clusterProduct(e, config, orbits);
-            embedCnt[t]++;
-            cfNum[t] += phi;
+            cfNumScratch[t] += phi;
         }
 
         // Normalise CFs; derive Hmix from CFs via precomputed coefficients
+        // Uses precomputed embedding counts (multiSiteEmbedCounts) to avoid per-call recounting
         double hmix_per_site = 0.0;
         for (int t = 0; t < tc; t++) {
-            if (embedCnt[t] > 0) {
-                double u = cfNum[t] / embedCnt[t];
+            int embedCnt = multiSiteEmbedCounts[t];
+            if (embedCnt > 0) {
+                double u = cfNumScratch[t] / embedCnt;
                 sumCF[t]      += u;
                 hmix_per_site += hmixCoeff[t] * u;
             }
