@@ -355,8 +355,9 @@ public class CECDatabaseDialog extends Dialog<Void> {
         targetCombo.setPrefWidth(350);
         targetCombo.setPromptText("Choose a target system (K >= 2)...");
 
-        // Filter to systems with AllClusterData
+        // Filter to systems with K >= 2 (multi-component) and AllClusterData available
         List<SystemIdentity> validSystems = registry.getAllSystems().stream()
+            .filter(s -> s.getNumComponents() >= 2)  // Only multi-component systems
             .filter(s -> {
                 String clusterKey = KeyUtils.clusterKey(s);
                 try {

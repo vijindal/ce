@@ -94,9 +94,9 @@ public class CEWorkbenchApplication extends Application {
         try {
             // Check if A-B test system exists in cache
             String clusterKey = "BCC_A2_T_bin";
-            Optional<org.ce.domain.model.data.AllClusterData> cachedData = 
+            Optional<org.ce.domain.model.data.AllClusterData> cachedData =
                 org.ce.infrastructure.persistence.AllClusterDataCache.load(clusterKey);
-            
+
             if (cachedData.isPresent() && cachedData.get().isComplete()) {
                 String systemId = "A-B_BCC_A2_T";
                 // Only register if not already present
@@ -111,12 +111,36 @@ public class CEWorkbenchApplication extends Application {
                         .clusterFilePath("cluster/A2-T.txt")
                         .symmetryGroupName("A2-SG")
                         .build();
-                    
+
                     systemRegistry.registerSystem(testSystem);
                     systemRegistry.markClustersComputed(systemId, true);
                     systemRegistry.markCfsComputed(systemId, true);
                     systemRegistry.markCecAvailable(systemId, true);
-                    
+
+                    LOG.info("Auto-registered test system: " + systemId);
+                }
+            }
+
+            // Register Nb-Ti system (same cluster key as A-B since both are K=2 BCC_A2_T)
+            if (cachedData.isPresent() && cachedData.get().isComplete()) {
+                String systemId = "Nb-Ti_BCC_A2_T";
+                if (systemRegistry.getSystem(systemId) == null) {
+                    SystemIdentity nbTiSystem = SystemIdentity.builder()
+                        .id(systemId)
+                        .name("Nb-Ti BCC A2 (T)")
+                        .structure("BCC")
+                        .phase("A2")
+                        .model("T")
+                        .components(new String[]{"Nb", "Ti"})
+                        .clusterFilePath("cluster/A2-T.txt")
+                        .symmetryGroupName("A2-SG")
+                        .build();
+
+                    systemRegistry.registerSystem(nbTiSystem);
+                    systemRegistry.markClustersComputed(systemId, true);
+                    systemRegistry.markCfsComputed(systemId, true);
+                    systemRegistry.markCecAvailable(systemId, true);
+
                     LOG.info("Auto-registered test system: " + systemId);
                 }
             }
