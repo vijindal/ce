@@ -12,6 +12,7 @@ import org.ce.infrastructure.service.BackgroundJobManager;
 import org.ce.infrastructure.registry.ResultRepository;
 import org.ce.infrastructure.registry.SystemRegistry;
 import org.ce.presentation.gui.component.CVMModelInspectorDialog;
+import org.ce.presentation.gui.component.CECDatabaseDialog;
 import org.ce.presentation.gui.view.CalculationSetupPanel;
 import org.ce.presentation.gui.view.LogConsolePanel;
 import org.ce.presentation.gui.view.SystemRegistryPanel;
@@ -173,7 +174,13 @@ public class CEWorkbenchApplication extends Application {
         Menu editMenu = new Menu("Edit");
         MenuItem preferencesItem = new MenuItem("Preferences");
         editMenu.getItems().add(preferencesItem);
-        
+
+        // Database menu
+        Menu databaseMenu = new Menu("Database");
+        MenuItem cecDatabaseItem = new MenuItem("CEC Database...");
+        cecDatabaseItem.setOnAction(e -> showCECDatabase());
+        databaseMenu.getItems().add(cecDatabaseItem);
+
         // View menu
         Menu viewMenu = new Menu("View");
         CheckMenuItem backgroundJobsItem = new CheckMenuItem("Background Jobs Panel");
@@ -194,8 +201,8 @@ public class CEWorkbenchApplication extends Application {
         MenuItem aboutItem = new MenuItem("About");
         MenuItem docsItem = new MenuItem("Documentation");
         helpMenu.getItems().addAll(aboutItem, new SeparatorMenuItem(), docsItem);
-        
-        menuBar.getMenus().addAll(fileMenu, editMenu, viewMenu, toolsMenu, helpMenu);
+
+        menuBar.getMenus().addAll(fileMenu, editMenu, databaseMenu, viewMenu, toolsMenu, helpMenu);
         return menuBar;
     }
     
@@ -252,7 +259,12 @@ public class CEWorkbenchApplication extends Application {
         CVMModelInspectorDialog dialog = new CVMModelInspectorDialog(systemRegistry);
         dialog.showAndWait();
     }
-    
+
+    private void showCECDatabase() {
+        CECDatabaseDialog dialog = new CECDatabaseDialog(systemRegistry);
+        dialog.showAndWait();
+    }
+
     public static void main(String[] args) {
         // Parse --log-level flag before launching JavaFX
         Level logLevel = Level.INFO;

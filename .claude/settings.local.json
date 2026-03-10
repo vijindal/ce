@@ -13,7 +13,13 @@
       "Bash(./gradlew build -x test -x integrationTest)",
       "Bash(./gradlew build -x test)",
       "Bash(./gradlew test -x integrationTest)",
-      "Bash(./gradlew clean build -x test)"
+      "Bash(./gradlew clean build -x test)",
+      "Bash(C:Usersadmin.claudeprojectsd--codes-cememoryMEMORY.md:*)",
+      "Bash(mvn clean compile -q)",
+      "Bash(./gradlew compileJava -x test)",
+      "Bash(./gradlew clean compileJava -x test)",
+      "Bash(python -c \":*)",
+      "Bash(git add -A)"
     ]
   }
 }
