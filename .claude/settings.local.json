@@ -20,7 +20,13 @@
       "Bash(./gradlew clean compileJava -x test)",
       "Bash(python -c \":*)",
       "Bash(git add -A)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git add \"C:\\\\Users\\\\admin\\\\.claude\\\\projects\\\\d--codes-ce\\\\memory\\\\MEMORY.md\")",
+      "Bash(xargs cat)",
+      "Bash(git add app/src/main/java/org/ce/presentation/gui/CEWorkbenchApplication.java app/src/main/java/org/ce/presentation/gui/component/CECDatabaseDialog.java)",
+      "Bash(./gradlew test --tests CECAssemblyIntegrationTest -i)",
+      "Bash(./gradlew test --tests CECAssemblyIntegrationTest)",
+      "Bash(./gradlew clean test --tests CECAssemblyIntegrationTest)"
     ]
   }
 }
