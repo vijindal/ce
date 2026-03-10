@@ -135,19 +135,11 @@ public class CECDatabaseDialog extends Dialog<Void> {
         nameCol.setCellValueFactory(cf -> new javafx.beans.property.SimpleStringProperty(cf.getValue().name));
         nameCol.setPrefWidth(150);
 
-        TableColumn<CecTermRow, Double> aCol = new TableColumn<>("a (J/mol)");
-        aCol.setCellValueFactory(cf -> new javafx.beans.property.SimpleObjectProperty<>(cf.getValue().a));
-        aCol.setPrefWidth(100);
+        TableColumn<CecTermRow, Double> aCol = new TableColumn<>("Value (J/mol)");
+        aCol.setCellValueFactory(cf -> new javafx.beans.property.SimpleObjectProperty<>(cf.getValue().value));
+        aCol.setPrefWidth(120);
 
-        TableColumn<CecTermRow, Double> bCol = new TableColumn<>("b (J/(mol·K))");
-        bCol.setCellValueFactory(cf -> new javafx.beans.property.SimpleObjectProperty<>(cf.getValue().b));
-        bCol.setPrefWidth(120);
-
-        TableColumn<CecTermRow, Double> eciCol = new TableColumn<>("ECI @ T");
-        eciCol.setCellValueFactory(cf -> new javafx.beans.property.SimpleObjectProperty<>(cf.getValue().eciAtT));
-        eciCol.setPrefWidth(100);
-
-        cecTable.getColumns().addAll(indexCol, nameCol, aCol, bCol, eciCol);
+        cecTable.getColumns().addAll(indexCol, nameCol, aCol);
 
         // Status and buttons
         Label statusLabel = new Label("Ready");
@@ -156,20 +148,16 @@ public class CECDatabaseDialog extends Dialog<Void> {
         HBox buttonBox = new HBox(10);
         buttonBox.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
 
-        TextField tempField = new TextField("298.15");
-        tempField.setPrefWidth(100);
-        Label tempLabel = new Label("Temperature (K):");
-
         Button editButton = new Button("Edit Row");
         Button saveButton = new Button("Save");
 
-        buttonBox.getChildren().addAll(tempLabel, tempField, editButton, saveButton);
+        buttonBox.getChildren().addAll(editButton, saveButton);
 
         // System selection change handler
         systemCombo.setOnAction(e -> {
             SystemIdentity system = systemCombo.getValue();
             if (system != null) {
-                loadCECData(system, cecTable, statusLabel, tempField);
+                loadCECData(system, cecTable, statusLabel);
             }
         });
 
@@ -187,7 +175,6 @@ public class CECDatabaseDialog extends Dialog<Void> {
 
             // Update column editability
             aCol.setEditable(editMode);
-            bCol.setEditable(editMode);
 
             if (editMode) {
                 statusLabel.setText("Editing mode ON - modify values and click 'Done Editing'");
@@ -199,7 +186,7 @@ public class CECDatabaseDialog extends Dialog<Void> {
             LOG.fine("CECDatabaseDialog.editButton — edit mode toggled: " + editMode);
         });
 
-        // Make a and b columns editable
+        // Make value column editable
         aCol.setCellFactory(TextFieldTableCell.forTableColumn(new DoubleStringConverter()));
         aCol.setOnEditCommit(event -> {
             CecTermRow row = event.getRowValue();
@@ -207,30 +194,8 @@ public class CECDatabaseDialog extends Dialog<Void> {
             if (row != null && newValue != null && currentCecData != null && currentCecData.cecTerms != null) {
                 if (row.index < currentCecData.cecTerms.length) {
                     currentCecData.cecTerms[row.index].a = newValue;
-                    row.a = newValue;
-                    try {
-                        double temp = Double.parseDouble(tempField.getText());
-                        row.eciAtT = newValue + currentCecData.cecTerms[row.index].b * temp;
-                    } catch (NumberFormatException ignored) {}
-                    LOG.fine("CECDatabaseDialog.aCol — updated index " + row.index + " to a=" + newValue);
-                    cecTable.refresh();
-                }
-            }
-        });
-
-        bCol.setCellFactory(TextFieldTableCell.forTableColumn(new DoubleStringConverter()));
-        bCol.setOnEditCommit(event -> {
-            CecTermRow row = event.getRowValue();
-            Double newValue = event.getNewValue();
-            if (row != null && newValue != null && currentCecData != null && currentCecData.cecTerms != null) {
-                if (row.index < currentCecData.cecTerms.length) {
-                    currentCecData.cecTerms[row.index].b = newValue;
-                    row.b = newValue;
-                    try {
-                        double temp = Double.parseDouble(tempField.getText());
-                        row.eciAtT = currentCecData.cecTerms[row.index].a + newValue * temp;
-                    } catch (NumberFormatException ignored) {}
-                    LOG.fine("CECDatabaseDialog.bCol — updated index " + row.index + " to b=" + newValue);
+                    row.value = newValue;
+                    LOG.fine("CECDatabaseDialog.valueCol — updated index " + row.index + " to " + newValue);
                     cecTable.refresh();
                 }
             }
@@ -253,7 +218,6 @@ public class CECDatabaseDialog extends Dialog<Void> {
                 editMode = false;
                 editButton.setText("Edit Row");
                 aCol.setEditable(false);
-                bCol.setEditable(false);
                 cecTable.setEditable(false);
                 LOG.fine("CECDatabaseDialog.saveButton — CEC data saved for system: " + currentBrowserSystem.getId());
             } catch (Exception ex) {
@@ -263,29 +227,9 @@ public class CECDatabaseDialog extends Dialog<Void> {
             }
         });
 
-        // Temperature change handler - recalculate ECI@T
-        tempField.setOnAction(e -> {
-            if (cecTable.getItems() != null && !cecTable.getItems().isEmpty()) {
-                double temp = 298.15;
-                try {
-                    temp = Double.parseDouble(tempField.getText());
-                } catch (NumberFormatException ignored) {}
-                final double finalTemp = temp;
-                cecTable.getItems().forEach(row -> {
-                    if (currentCecData != null && currentCecData.cecTerms != null &&
-                        row.index < currentCecData.cecTerms.length) {
-                        row.eciAtT = currentCecData.cecTerms[row.index].a +
-                                     currentCecData.cecTerms[row.index].b * finalTemp;
-                    }
-                });
-                cecTable.refresh();
-                LOG.fine("CECDatabaseDialog — recalculated ECI@T at T=" + finalTemp + "K");
-            }
-        });
-
         // Initial load
         if (!allSystems.isEmpty()) {
-            loadCECData(allSystems.get(0), cecTable, statusLabel, tempField);
+            loadCECData(allSystems.get(0), cecTable, statusLabel);
         }
 
         tab.getChildren().addAll(
@@ -302,7 +246,7 @@ public class CECDatabaseDialog extends Dialog<Void> {
     }
 
     private void loadCECData(SystemIdentity system, TableView<CecTermRow> table,
-                             Label statusLabel, TextField tempField) {
+                             Label statusLabel) {
         LOG.fine("CECDatabaseDialog.loadCECData — loading CEC for system: " + system.getId());
 
         String elements = String.join("-", system.getComponents());
@@ -316,23 +260,18 @@ public class CECDatabaseDialog extends Dialog<Void> {
             SystemDataLoader.CECData data = cecData.get();
             this.currentCecData = data;
             this.currentBrowserSystem = system;
-            double temp = 298.15;
-            try {
-                temp = Double.parseDouble(tempField.getText());
-            } catch (NumberFormatException ignored) {}
 
             int cecCount = 0;
             if (data.cecTerms != null) {
                 for (int i = 0; i < data.cecTerms.length; i++) {
                     SystemDataLoader.CECTerm term = data.cecTerms[i];
-                    double eciAtT = term.a + term.b * temp;
-                    table.getItems().add(new CecTermRow(i, term.name, term.a, term.b, eciAtT));
+                    table.getItems().add(new CecTermRow(i, term.name, term.a));
                 }
                 cecCount = data.cecTerms.length;
             } else if (data.cecValues != null) {
                 for (int i = 0; i < data.cecValues.length; i++) {
                     double val = data.cecValues[i];
-                    table.getItems().add(new CecTermRow(i, "ECI_" + i, val, 0.0, val));
+                    table.getItems().add(new CecTermRow(i, "ECI_" + i, val));
                 }
                 cecCount = data.cecValues.length;
             }
@@ -351,16 +290,12 @@ public class CECDatabaseDialog extends Dialog<Void> {
     private static class CecTermRow {
         int index;
         String name;
-        double a;
-        double b;
-        double eciAtT;
+        double value;
 
-        CecTermRow(int index, String name, double a, double b, double eciAtT) {
+        CecTermRow(int index, String name, double value) {
             this.index = index;
             this.name = name;
-            this.a = a;
-            this.b = b;
-            this.eciAtT = eciAtT;
+            this.value = value;
         }
     }
 
@@ -374,12 +309,22 @@ public class CECDatabaseDialog extends Dialog<Void> {
         Label title = new Label("CEC Assembly");
         title.setFont(Font.font("System", FontWeight.BOLD, 13));
 
-        // Target system selector
+        // Instruction
+        Label instruction = new Label(
+            "Assemble higher-order (ternary+) CECs from binary subsystem CECs + pure-order terms.");
+        instruction.setStyle("-fx-font-size: 10; -fx-text-fill: #666666;");
+
+        // Step 1: Target system selector
+        VBox step1Box = new VBox(6);
+        step1Box.setStyle("-fx-border-color: #e0e0e0; -fx-border-width: 1; -fx-padding: 10;");
+
+        Label step1Label = new Label("STEP 1: Select Target System");
+        step1Label.setFont(Font.font("System", FontWeight.BOLD, 11));
+
         HBox targetBox = new HBox(10);
         targetBox.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-
         Label targetLabel = new Label("Target System:");
-        targetLabel.setPrefWidth(100);
+        targetLabel.setPrefWidth(120);
 
         ComboBox<SystemIdentity> targetCombo = new ComboBox<>();
         targetCombo.setPrefWidth(350);
@@ -417,40 +362,38 @@ public class CECDatabaseDialog extends Dialog<Void> {
         });
 
         targetBox.getChildren().addAll(targetLabel, targetCombo);
+        step1Box.getChildren().addAll(step1Label, targetBox);
 
-        // Temperature field
-        HBox tempBox = new HBox(10);
-        Label tempLabel = new Label("Temperature (K):");
-        tempLabel.setPrefWidth(100);
-        TextField tempField = new TextField("298.15");
-        tempField.setPrefWidth(100);
-        tempBox.getChildren().addAll(tempLabel, tempField);
+        // Step 2: Required subsystems validation
+        VBox step2Box = new VBox(6);
+        step2Box.setStyle("-fx-border-color: #e0e0e0; -fx-border-width: 1; -fx-padding: 10;");
 
-        // Subsystems panel with scrollable subsystem listing by order
-        VBox subsystemsPanel = new VBox(8);
-        subsystemsPanel.setStyle("-fx-border-color: #e0e0e0; -fx-border-width: 1; -fx-padding: 10;");
-        Label subsystemsTitle = new Label("Available Subsystems:");
-        subsystemsTitle.setFont(Font.font("System", FontWeight.BOLD, 11));
+        Label step2Label = new Label("STEP 2: Verify Required Subsystems");
+        step2Label.setFont(Font.font("System", FontWeight.BOLD, 11));
 
-        // Use ScrollPane for scrollable subsystem list
         ScrollPane subsystemsScroll = new ScrollPane();
         VBox subsystemsContent = new VBox(8);
         subsystemsContent.setPadding(new Insets(5));
         subsystemsScroll.setContent(subsystemsContent);
-        subsystemsScroll.setPrefHeight(200);
+        subsystemsScroll.setPrefHeight(150);
         subsystemsScroll.setStyle("-fx-control-inner-background: #ffffff;");
 
-        subsystemsPanel.getChildren().addAll(subsystemsTitle, subsystemsScroll);
+        Label subsystemsHelp = new Label("Shows all subsystems required to assemble the target system:");
+        subsystemsHelp.setStyle("-fx-font-size: 9; -fx-text-fill: #666666;");
 
-        // Buttons
-        HBox actionBox = new HBox(10);
-        Button assembleButton = new Button("Assemble");
-        Button saveButton = new Button("Save Assembled CECs");
-        actionBox.getChildren().addAll(assembleButton, saveButton);
+        step2Box.getChildren().addAll(step2Label, subsystemsHelp, subsystemsScroll);
 
         // Status
-        Label statusLabel = new Label("Select a target system");
+        Label statusLabel = new Label("Select a target system to begin");
         statusLabel.setStyle("-fx-text-fill: #666666;");
+
+        // Action buttons
+        HBox actionBox = new HBox(10);
+        Button assembleButton = new Button("ASSEMBLE");
+        Button saveButton = new Button("SAVE Assembled CECs");
+        assembleButton.setStyle("-fx-font-size: 10; -fx-padding: 8 15;");
+        saveButton.setStyle("-fx-font-size: 10; -fx-padding: 8 15;");
+        actionBox.getChildren().addAll(assembleButton, saveButton);
 
         // Target system selection handler
         targetCombo.setOnAction(e -> {
@@ -463,39 +406,47 @@ public class CECDatabaseDialog extends Dialog<Void> {
                     .subsystemsByOrder(target.getComponents());
 
                 int K = target.getNumComponents();
+                boolean allExists = true;
+                int totalSubsystems = 0;
+                int foundSubsystems = 0;
+
                 for (int order = 2; order < K; order++) {
                     List<List<String>> subsystemsAtOrder = subsystemsByOrder.getOrDefault(order, new ArrayList<>());
                     if (subsystemsAtOrder.isEmpty()) continue;
 
                     // Create section for this order
-                    VBox orderSection = new VBox(6);
+                    VBox orderSection = new VBox(4);
                     orderSection.setStyle("-fx-border-color: #d0d0d0; -fx-border-width: 0 0 1 0; -fx-padding: 5;");
 
-                    Label orderLabel = new Label("Order " + order + " Subsystems (K=" + order + "):");
+                    Label orderLabel = new Label("Order " + order + " Subsystems:");
                     orderLabel.setFont(Font.font("System", FontWeight.BOLD, 10));
 
-                    VBox subsystemList = new VBox(3);
-                    subsystemList.setPadding(new Insets(5, 0, 5, 15));
+                    VBox subsystemList = new VBox(2);
+                    subsystemList.setPadding(new Insets(3, 0, 3, 15));
 
                     for (List<String> subsys : subsystemsAtOrder) {
                         String subsysKey = CECAssemblyService.toElementString(subsys);
                         HBox subsysRow = new HBox(10);
 
                         Label subsysLabel = new Label(subsysKey);
-                        subsysLabel.setPrefWidth(100);
+                        subsysLabel.setPrefWidth(120);
 
                         // Check if CEC exists
                         boolean cecExists = SystemDataLoader.cecExists(subsysKey, target.getStructure(),
                             target.getPhase(), target.getModel());
-                        Label statusLabel2 = new Label(cecExists ? "✓ Found" : "✗ Missing");
-                        statusLabel2.setPrefWidth(80);
+                        totalSubsystems++;
+                        if (cecExists) foundSubsystems++;
+                        else allExists = false;
+
+                        Label statusIcon = new Label(cecExists ? "✓" : "✗");
+                        statusIcon.setPrefWidth(30);
                         if (cecExists) {
-                            statusLabel2.setStyle("-fx-text-fill: #008000;");
+                            statusIcon.setStyle("-fx-text-fill: #008000; -fx-font-weight: bold;");
                         } else {
-                            statusLabel2.setStyle("-fx-text-fill: #ff0000;");
+                            statusIcon.setStyle("-fx-text-fill: #ff0000; -fx-font-weight: bold;");
                         }
 
-                        subsysRow.getChildren().addAll(subsysLabel, statusLabel2);
+                        subsysRow.getChildren().addAll(statusIcon, subsysLabel);
                         subsystemList.getChildren().add(subsysRow);
                     }
 
@@ -503,18 +454,28 @@ public class CECDatabaseDialog extends Dialog<Void> {
                     subsystemsContent.getChildren().add(orderSection);
                 }
 
-                statusLabel.setText("Ready to assemble (" + K + " components)");
-                statusLabel.setStyle("-fx-text-fill: #008000;");
+                // Update status
+                if (allExists) {
+                    statusLabel.setText("✓ All " + foundSubsystems + " subsystems found. Ready to assemble!");
+                    statusLabel.setStyle("-fx-text-fill: #008000;");
+                    assembleButton.setDisable(false);
+                } else {
+                    statusLabel.setText("✗ Missing " + (totalSubsystems - foundSubsystems) + " of " + totalSubsystems
+                        + " subsystems. Cannot assemble.");
+                    statusLabel.setStyle("-fx-text-fill: #ff0000;");
+                    assembleButton.setDisable(true);
+                }
+
                 LOG.fine("CECDatabaseDialog.Assembly — target system selected: " + target.getId()
-                    + " with K=" + K + " components");
+                    + " with K=" + K + " components (" + foundSubsystems + "/" + totalSubsystems + " subsystems found)");
             }
         });
 
-        // Assemble handler (placeholder)
+        // Assemble handler (placeholder for Phase 6)
         assembleButton.setOnAction(e -> {
             SystemIdentity target = targetCombo.getValue();
             if (target != null) {
-                statusLabel.setText("Assembly in progress... (placeholder)");
+                statusLabel.setText("Assembly in progress... (Phase 6 implementation)");
                 statusLabel.setStyle("-fx-text-fill: #ff9900;");
                 LOG.fine("CECDatabaseDialog.Assembly — assemble button clicked for: " + target.getId());
             } else {
@@ -523,12 +484,14 @@ public class CECDatabaseDialog extends Dialog<Void> {
             }
         });
 
+        assembleButton.setDisable(true);
+
         tab.getChildren().addAll(
             title,
-            targetBox,
-            tempBox,
+            instruction,
             new Separator(),
-            subsystemsPanel,
+            step1Box,
+            step2Box,
             new Separator(),
             actionBox,
             statusLabel
