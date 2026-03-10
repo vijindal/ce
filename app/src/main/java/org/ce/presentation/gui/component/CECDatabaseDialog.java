@@ -5,6 +5,8 @@ import javafx.scene.control.*;
 import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.util.converter.DoubleStringConverter;
 import javafx.scene.layout.*;
+import java.nio.file.Paths;
+import java.util.TreeMap;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import org.ce.domain.system.SystemIdentity;
@@ -40,6 +42,12 @@ public class CECDatabaseDialog extends Dialog<Void> {
     private SystemDataLoader.CECData currentCecData;
     private SystemIdentity currentBrowserSystem;
     private boolean editMode = false;
+
+    // Assembly tab state
+    private int[] assemblyCfOrderMap;
+    private Map<Integer, double[]> assemblyTransformedByOrder;
+    private AllClusterData assemblyTargetData;
+    private SystemIdentity currentAssemblyTarget;
 
     public CECDatabaseDialog(SystemRegistry registry) {
         this.registry = registry;
@@ -245,6 +253,23 @@ public class CECDatabaseDialog extends Dialog<Void> {
         return tab;
     }
 
+    /**
+     * Extracts ECI values from CECData, handling both cecTerms and cecValues formats.
+     * For cecTerms, extracts the 'a' (constant) value; for cecValues, returns the array directly.
+     */
+    private double[] extractECIValues(SystemDataLoader.CECData cecData) {
+        if (cecData.cecTerms != null) {
+            double[] vals = new double[cecData.cecTerms.length];
+            for (int i = 0; i < cecData.cecTerms.length; i++) {
+                vals[i] = cecData.cecTerms[i].a;  // constant term (no temperature)
+            }
+            return vals;
+        } else if (cecData.cecValues != null) {
+            return cecData.cecValues.clone();
+        }
+        return new double[0];
+    }
+
     private void loadCECData(SystemIdentity system, TableView<CecTermRow> table,
                              Label statusLabel) {
         LOG.fine("CECDatabaseDialog.loadCECData — loading CEC for system: " + system.getId());
@@ -301,7 +326,7 @@ public class CECDatabaseDialog extends Dialog<Void> {
 
     // ==================== TAB 2: CEC ASSEMBLY ====================
 
-    private VBox createAssemblyTab() {
+    private ScrollPane createAssemblyTab() {
         VBox tab = new VBox(10);
         tab.setPadding(new Insets(15));
 
@@ -387,13 +412,121 @@ public class CECDatabaseDialog extends Dialog<Void> {
         Label statusLabel = new Label("Select a target system to begin");
         statusLabel.setStyle("-fx-text-fill: #666666;");
 
+        // STEP 3: Assembly Results (initially hidden) — defined here so button handlers can reference it
+        VBox step3Box = new VBox(8);
+        step3Box.setStyle("-fx-border-color: #e0e0e0; -fx-border-width: 1; -fx-padding: 10;");
+        step3Box.setVisible(false);
+
+        Label step3Label = new Label("STEP 3: Assembly Results");
+        step3Label.setFont(Font.font("System", FontWeight.BOLD, 11));
+
+        // 3a: Derived ECIs table
+        Label derivedLabel = new Label("3a. Derived ECIs (from subsystem transformations) — READ ONLY");
+        derivedLabel.setStyle("-fx-font-size: 10; -fx-font-weight: bold;");
+
+        TableView<ECITableRow> derivedECIsTable = new TableView<>();
+        derivedECIsTable.setPrefHeight(150);
+
+        TableColumn<ECITableRow, Integer> derivedIndexCol = new TableColumn<>("CF Index");
+        derivedIndexCol.setCellValueFactory(cf -> new javafx.beans.property.SimpleObjectProperty<>(cf.getValue().cfIndex));
+        derivedIndexCol.setPrefWidth(80);
+
+        TableColumn<ECITableRow, Double> derivedValueCol = new TableColumn<>("Assembled ECI (J/mol)");
+        derivedValueCol.setCellValueFactory(cf -> new javafx.beans.property.SimpleObjectProperty<>(cf.getValue().value));
+        derivedValueCol.setPrefWidth(200);
+
+        derivedECIsTable.getColumns().addAll(derivedIndexCol, derivedValueCol);
+        derivedECIsTable.setEditable(false);
+
+        // 3b: Pure-K ECIs table (editable)
+        Label pureKLabel = new Label("3b. Pure Order-K ECIs — ENTER VALUES MANUALLY");
+        pureKLabel.setStyle("-fx-font-size: 10; -fx-font-weight: bold; -fx-padding: 10 0 0 0;");
+
+        TableView<ECITableRow> pureKECIsTable = new TableView<>();
+        pureKECIsTable.setPrefHeight(150);
+
+        TableColumn<ECITableRow, Integer> pureIndexCol = new TableColumn<>("CF Index");
+        pureIndexCol.setCellValueFactory(cf -> new javafx.beans.property.SimpleObjectProperty<>(cf.getValue().cfIndex));
+        pureIndexCol.setPrefWidth(80);
+
+        TableColumn<ECITableRow, Double> pureValueCol = new TableColumn<>("ECI Value (J/mol)");
+        pureValueCol.setCellValueFactory(cf -> new javafx.beans.property.SimpleObjectProperty<>(cf.getValue().value));
+        pureValueCol.setPrefWidth(200);
+        pureValueCol.setCellFactory(TextFieldTableCell.forTableColumn(new DoubleStringConverter()));
+        pureValueCol.setOnEditCommit(event -> {
+            ECITableRow row = event.getRowValue();
+            if (row != null) {
+                row.value = event.getNewValue();
+                pureKECIsTable.refresh();
+            }
+        });
+
+        pureKECIsTable.getColumns().addAll(pureIndexCol, pureValueCol);
+        pureKECIsTable.setEditable(true);
+
+        step3Box.getChildren().addAll(
+            step3Label,
+            derivedLabel,
+            derivedECIsTable,
+            pureKLabel,
+            pureKECIsTable
+        );
+
         // Action buttons
         HBox actionBox = new HBox(10);
         Button assembleButton = new Button("ASSEMBLE");
         Button saveButton = new Button("SAVE Assembled CECs");
         assembleButton.setStyle("-fx-font-size: 10; -fx-padding: 8 15;");
         saveButton.setStyle("-fx-font-size: 10; -fx-padding: 8 15;");
+        saveButton.setDisable(true);  // Enable after successful assembly
         actionBox.getChildren().addAll(assembleButton, saveButton);
+
+        // Save button handler
+        saveButton.setOnAction(e -> {
+            if (currentAssemblyTarget == null || assemblyCfOrderMap == null) {
+                statusLabel.setText("Please assemble first");
+                statusLabel.setStyle("-fx-text-fill: #ff0000;");
+                return;
+            }
+
+            try {
+                statusLabel.setText("Saving... please wait");
+                statusLabel.setStyle("-fx-text-fill: #ff9900;");
+
+                int K = currentAssemblyTarget.getNumComponents();
+                int tcf = assemblyTargetData.getStage2().getTcf();
+
+                // Collect pure-K values from table
+                double[] pureKECIs = new double[pureKECIsTable.getItems().size()];
+                for (int i = 0; i < pureKECIsTable.getItems().size(); i++) {
+                    pureKECIs[i] = pureKECIsTable.getItems().get(i).value;
+                }
+
+                // Call assemble to combine derived + pure-K contributions
+                double[] finalECIs = CECAssemblyService.assemble(
+                    assemblyTransformedByOrder, pureKECIs, assemblyCfOrderMap, assemblyTargetData);
+
+                // Build CECData
+                SystemDataLoader.CECData cecData = new SystemDataLoader.CECData();
+                cecData.elements = String.join("-", currentAssemblyTarget.getComponents());
+                cecData.cecValues = finalECIs;
+                cecData.cecUnits = "J/mol";
+                cecData.reference = currentAssemblyTarget.getId();
+                cecData.tc = tcf;
+
+                // Save to database
+                SystemDataLoader.saveCecData(cecData, Paths.get(System.getProperty("user.home")));
+
+                statusLabel.setText("✓ Saved assembled CECs for " + currentAssemblyTarget.getId());
+                statusLabel.setStyle("-fx-text-fill: #008000;");
+                LOG.fine("Assembly: saved CECs for " + currentAssemblyTarget.getId() + " to database");
+
+            } catch (Exception ex) {
+                statusLabel.setText("Save error: " + ex.getMessage());
+                statusLabel.setStyle("-fx-text-fill: #ff0000;");
+                LOG.warning("Assembly save error: " + ex.getMessage());
+            }
+        });
 
         // Target system selection handler
         targetCombo.setOnAction(e -> {
@@ -471,16 +604,117 @@ public class CECDatabaseDialog extends Dialog<Void> {
             }
         });
 
-        // Assemble handler (placeholder for Phase 6)
+        // Assemble handler — full pipeline implementation (Phase 6)
         assembleButton.setOnAction(e -> {
             SystemIdentity target = targetCombo.getValue();
-            if (target != null) {
-                statusLabel.setText("Assembly in progress... (Phase 6 implementation)");
-                statusLabel.setStyle("-fx-text-fill: #ff9900;");
-                LOG.fine("CECDatabaseDialog.Assembly — assemble button clicked for: " + target.getId());
-            } else {
+            if (target == null) {
                 statusLabel.setText("Please select a target system");
                 statusLabel.setStyle("-fx-text-fill: #ff0000;");
+                return;
+            }
+
+            try {
+                statusLabel.setText("Assembling... please wait");
+                statusLabel.setStyle("-fx-text-fill: #ff9900;");
+
+                // 1. Load AllClusterData
+                String clusterKey = KeyUtils.clusterKey(target);
+                Optional<AllClusterData> dataOpt = AllClusterDataCache.load(clusterKey);
+                if (dataOpt.isEmpty() || !dataOpt.get().isComplete()) {
+                    statusLabel.setText("Error: AllClusterData not available for " + target.getId());
+                    statusLabel.setStyle("-fx-text-fill: #ff0000;");
+                    LOG.warning("Assembly: AllClusterData not found for " + clusterKey);
+                    return;
+                }
+
+                AllClusterData targetData = dataOpt.get();
+                int K = target.getNumComponents();
+                int tcf = targetData.getStage2().getTcf();
+
+                // 2. Classify CFs by minimum order
+                int[] cfOrderMap = CECAssemblyService.classifyCFsByOrder(targetData);
+
+                // 3. For each subsystem order, load CEC and transform
+                Map<Integer, List<List<String>>> subsystemsByOrder = CECAssemblyService.subsystemsByOrder(target.getComponents());
+                Map<Integer, double[]> transformedByOrder = new TreeMap<>();
+
+                for (int order = 2; order < K; order++) {
+                    List<List<String>> subsystems = subsystemsByOrder.getOrDefault(order, new ArrayList<>());
+                    if (subsystems.isEmpty()) continue;
+
+                    double[] orderContributions = new double[tcf];
+
+                    for (List<String> subsys : subsystems) {
+                        String subsysKey = CECAssemblyService.toElementString(subsys);
+                        Optional<SystemDataLoader.CECData> cecDataOpt = SystemDataLoader.loadCecData(
+                            subsysKey, target.getStructure(), target.getPhase(), target.getModel());
+
+                        if (cecDataOpt.isEmpty()) {
+                            statusLabel.setText("Error: CEC not found for subsystem " + subsysKey);
+                            statusLabel.setStyle("-fx-text-fill: #ff0000;");
+                            LOG.warning("Assembly: CEC not found for " + subsysKey);
+                            return;
+                        }
+
+                        SystemDataLoader.CECData cecData = cecDataOpt.get();
+                        double[] sourceECIs = extractECIValues(cecData);
+
+                        double[] transformed = CECAssemblyService.transformToTarget(
+                            sourceECIs, order, K, cfOrderMap, targetData);
+
+                        // Accumulate contributions for this order
+                        for (int i = 0; i < tcf && i < transformed.length; i++) {
+                            orderContributions[i] += transformed[i];
+                        }
+
+                        LOG.fine("Assembly: transformed " + subsysKey + " (order " + order + ")");
+                    }
+
+                    transformedByOrder.put(order, orderContributions);
+                }
+
+                // 4. Save state for Save button
+                this.assemblyCfOrderMap = cfOrderMap;
+                this.assemblyTransformedByOrder = transformedByOrder;
+                this.assemblyTargetData = targetData;
+                this.currentAssemblyTarget = target;
+
+                // 5. Compute accumulated derived ECIs
+                double[] derivedECIs = new double[tcf];
+                for (double[] contributions : transformedByOrder.values()) {
+                    for (int i = 0; i < tcf && i < contributions.length; i++) {
+                        derivedECIs[i] += contributions[i];
+                    }
+                }
+
+                // 6. Populate derived ECIs table
+                derivedECIsTable.getItems().clear();
+                for (int i = 0; i < cfOrderMap.length; i++) {
+                    if (cfOrderMap[i] < K) {  // Derived CF
+                        derivedECIsTable.getItems().add(new ECITableRow(i, derivedECIs[i]));
+                    }
+                }
+
+                // 7. Populate pure-K ECIs table with default 0.0
+                pureKECIsTable.getItems().clear();
+                for (int i = 0; i < cfOrderMap.length; i++) {
+                    if (cfOrderMap[i] == K) {  // Pure-K CF
+                        pureKECIsTable.getItems().add(new ECITableRow(i, 0.0));
+                    }
+                }
+
+                // 8. Show results section and enable Save
+                step3Box.setVisible(true);
+                saveButton.setDisable(false);
+
+                statusLabel.setText("✓ Assembly complete! Enter pure-K ECI values and click Save.");
+                statusLabel.setStyle("-fx-text-fill: #008000;");
+                LOG.fine("Assembly: complete for " + target.getId() + " (tcf=" + tcf + ", derived=" + derivedECIsTable.getItems().size() + ", pure-K=" + pureKECIsTable.getItems().size() + ")");
+
+            } catch (Exception ex) {
+                statusLabel.setText("Assembly error: " + ex.getMessage());
+                statusLabel.setStyle("-fx-text-fill: #ff0000;");
+                LOG.warning("Assembly error: " + ex.getMessage());
             }
         });
 
@@ -492,11 +726,28 @@ public class CECDatabaseDialog extends Dialog<Void> {
             new Separator(),
             step1Box,
             step2Box,
+            step3Box,
             new Separator(),
             actionBox,
             statusLabel
         );
 
-        return tab;
+        // Wrap in ScrollPane and return
+        ScrollPane scrollPane = new ScrollPane(tab);
+        scrollPane.setFitToWidth(true);
+        return scrollPane;
+    }
+
+    /**
+     * Simple DTO for ECI table rows (CF Index + Value).
+     */
+    private static class ECITableRow {
+        int cfIndex;
+        double value;
+
+        ECITableRow(int cfIndex, double value) {
+            this.cfIndex = cfIndex;
+            this.value = value;
+        }
     }
 }
