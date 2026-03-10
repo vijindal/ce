@@ -158,7 +158,7 @@ public class MCSRunner {
             engine.setCancellationCheck(cancellationCheck);
         }
         MCResult result = engine.run(config, sampler);
-        LOG.fine(String.format("MCSRunner.run — EXIT: acceptRate=%.3f, <E>/site=%.6f eV", result.getAcceptRate(), result.getEnergyPerSite()));
+        LOG.fine(String.format("MCSRunner.run — EXIT: acceptRate=%.3f, <E>/site=%.6f J/mol", result.getAcceptRate(), result.getEnergyPerSite()));
         return result;
     }
 

@@ -140,7 +140,7 @@ public class MCEngine {
         
         // Calculate initial total energy (expensive, done once at start)
         double currentEnergy = LocalEnergyCalc.totalEnergy(config, emb, eci, orbits);
-        LOG.fine("MCEngine.runExchange — ENTER: N=" + N + ", E_initial=" + String.format("%.4f", currentEnergy) + " eV");
+        LOG.fine("MCEngine.runExchange — ENTER: N=" + N + ", E_initial=" + String.format("%.4f", currentEnergy) + " J/mol");
 
         for (int s = 0; s < nEquil; s++) {
             // Check for cancellation at the start of each sweep
@@ -178,7 +178,7 @@ public class MCEngine {
         }
 
         LOG.fine("MCEngine.runExchange — EQUIL DONE: sweeps=" + nEquil
-                + ", E_final=" + String.format("%.4f", currentEnergy) + " eV"
+                + ", E_final=" + String.format("%.4f", currentEnergy) + " J/mol"
                 + ", acceptRate=" + String.format("%.3f", step.acceptRate()));
         step.resetCounters();
         sampler.reset();
@@ -237,7 +237,7 @@ public class MCEngine {
         
         // Calculate initial total energy (expensive, done once at start)
         double currentEnergy = LocalEnergyCalc.totalEnergy(config, emb, eci, orbits);
-        LOG.fine("MCEngine.runFlip — ENTER: N=" + N + ", E_initial=" + String.format("%.4f", currentEnergy) + " eV");
+        LOG.fine("MCEngine.runFlip — ENTER: N=" + N + ", E_initial=" + String.format("%.4f", currentEnergy) + " J/mol");
 
         for (int s = 0; s < nEquil; s++) {
             // Check for cancellation at the start of each sweep
@@ -276,7 +276,7 @@ public class MCEngine {
         }
 
         LOG.fine("MCEngine.runFlip — EQUIL DONE: sweeps=" + nEquil
-                + ", E_final=" + String.format("%.4f", currentEnergy) + " eV"
+                + ", E_final=" + String.format("%.4f", currentEnergy) + " J/mol"
                 + ", acceptRate=" + String.format("%.3f", step.acceptRate()));
         step.resetCounters();
         sampler.reset();

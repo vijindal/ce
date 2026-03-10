@@ -137,8 +137,8 @@ public final class MCSCalculationUseCase {
             LOG.info("MCSCalculationUseCase.execute — DONE: T=" + context.getTemperature() + " K"
                     + ", elapsed=" + elapsedMs + " ms"
                     + ", acceptRate=" + String.format("%.3f", mcResult.acceptRate())
-                    + ", <E>/site=" + String.format("%.6f", mcResult.energyPerSite()) + " eV"
-                    + ", Cv/site=" + String.format("%.4e", mcResult.heatCapacityPerSite()) + " eV/K"
+                    + ", <E>/site=" + String.format("%.6f", mcResult.energyPerSite()) + " J/mol"
+                    + ", Cv/site=" + String.format("%.4e", mcResult.heatCapacityPerSite()) + " J/(mol·K)"
                     + ", CFs=" + _cfStr);
             logResults(mcResult, elapsedMs);
             return mcResult;
@@ -193,9 +193,9 @@ public final class MCSCalculationUseCase {
         }
 
         progressPort.logMessage("  Average Energy (per site): "
-            + String.format("%.6f", result.energyPerSite()) + " eV");
+            + String.format("%.6f", result.energyPerSite()) + " J/mol");
         progressPort.logMessage("  Heat Capacity (per site): "
-            + String.format("%.6f", result.heatCapacityPerSite()) + " eV/K");
+            + String.format("%.6f", result.heatCapacityPerSite()) + " J/(mol·K)");
         progressPort.logMessage("  Acceptance Rate: "
             + String.format("%.2f", result.acceptRate() * 100) + "%");
 
