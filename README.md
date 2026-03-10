@@ -275,16 +275,17 @@ ce/
 
 ## Documentation
 
-Project documentation has been consolidated to reduce overlap and stale design notes.
+Project documentation is organized by audience and purpose:
 
+**Essential documents (start here):**
+- `README.md`: Project overview and quick start guide (this file)
 - `PROJECT_STATUS.md`: Current implementation status, known issues, and next steps
-- `docs/ARCHITECTURE_CONTRACT.md`: Enforceable layer/dependency rules for migration
-- `docs/DELTA_E_OPTIMIZATION.md`: MCS delta-energy optimization details
-- `docs/GUI_DESIGN_GUIDE.md`: GUI design and behavior reference
-- `docs/MCS_MONITORING_DESIGN.md`: Monitoring/telemetry design for MCS
-- `docs/extracted-mathematica-functions.md`: Algorithm reference from source derivations
+- `ARCHITECTURE_CONTRACT.md`: Enforceable layer/dependency rules
 
-Redundant planning markdown at repository root has been removed; architecture and migration policy now live under `docs/` and `PROJECT_STATUS.md`.
+**Design & Implementation reference:**
+- `DESIGN_AND_MONITORING_REFERENCE.md`: GUI design guide + MCS real-time monitoring design
+- `PERFORMANCE_OPTIMIZATION_REFERENCE.md`: MCS delta-energy optimization technical details
+- `docs/extracted-mathematica-functions.md`: Algorithm reference from source derivations
 
 ---
 

@@ -14,11 +14,13 @@ import org.ce.infrastructure.logging.LoggingConfig;
 
 /**
  * Loader for system data with separated storage:
- * - CECs: Element-specific, stored in /data/systems/{Elements}/cec.json
+ * - CECs: Element-specific, stored in /data/systems/{cecKey}/cec.json (classpath)
+ *         or {workspaceRoot}/data/systems/{cecKey}/cec.json (user workspace, takes priority)
  * - Model data: Shared cluster/CF data, stored in /data/models/{Structure}_{Phase}_{Model}/model_data.json
- * 
- * This separation allows multiple alloy systems (Ti-Nb, Ti-V, Ti-Zr) to share the same 
- * cluster/CF data (BCC_A2_T) while having different CECs.
+ *
+ * <p>The workspace root is set once at application startup via {@link #setWorkspaceRoot(Path)}.
+ * All load operations check the workspace before falling back to bundled classpath resources,
+ * so user-assembled or edited CECs always take precedence over shipped defaults.</p>
  */
 public class SystemDataLoader {
 
@@ -28,15 +30,39 @@ public class SystemDataLoader {
     private static final String MODELS_BASE_PATH = "/data/models/";
     private static final String CEC_FILE = "cec.json";
     private static final String MODEL_FILE = "model_data.json";
+
+    /** Workspace root set once at startup. {@code null} until configured. */
+    private static volatile Path workspaceRoot = null;
+
+    /**
+     * Configure the user workspace root.
+     * Call once during application startup before any load/save operations.
+     *
+     * @param root workspace root directory (e.g. {@code ~/.ce-workbench})
+     */
+    public static void setWorkspaceRoot(Path root) {
+        workspaceRoot = root;
+        LOG.fine("Workspace root configured: " + root);
+    }
     
     /**
      * Checks if CEC data exists for the given elements + model combination.
      * Key format: {elements}_{structure}_{phase}_{model}  e.g. "Nb-Ti_BCC_A2_T"
+     * Checks user workspace first, then bundled classpath resources.
      */
     public static boolean cecExists(String elements, String structure, String phase, String model) {
         String cecKey = elements + "_" + structure + "_" + phase + "_" + model;
+        // 1. User workspace takes priority
+        if (workspaceRoot != null) {
+            Path wsFile = workspaceRoot.resolve("data/systems").resolve(cecKey).resolve(CEC_FILE);
+            if (Files.exists(wsFile)) {
+                LOG.fine("key=" + cecKey + " found=true (workspace)");
+                return true;
+            }
+        }
+        // 2. Fall back to bundled classpath
         boolean found = resourceExists(SYSTEMS_BASE_PATH + cecKey + "/" + CEC_FILE);
-        LOG.fine("key=" + cecKey + " found=" + found);
+        LOG.fine("key=" + cecKey + " found=" + found + " (classpath)");
         return found;
     }
 
@@ -185,12 +211,30 @@ public class SystemDataLoader {
     /**
      * Loads CEC data for the given elements + model combination.
      * Key: {elements}_{structure}_{phase}_{model}  e.g. "Nb-Ti_BCC_A2_T"
-     * File: /data/systems/Nb-Ti_BCC_A2_T/cec.json
+     * Checks user workspace first ({@code ~/.ce-workbench/data/systems/{cecKey}/cec.json}),
+     * then falls back to bundled classpath ({@code /data/systems/{cecKey}/cec.json}).
      */
     public static Optional<CECData> loadCecData(String elements, String structure,
                                                  String phase, String model) {
         String cecKey = elements + "_" + structure + "_" + phase + "_" + model;
         LOG.fine("key=" + cecKey);
+
+        // 1. User workspace takes priority
+        if (workspaceRoot != null) {
+            Path wsFile = workspaceRoot.resolve("data/systems").resolve(cecKey).resolve(CEC_FILE);
+            if (Files.exists(wsFile)) {
+                try {
+                    String json = Files.readString(wsFile, StandardCharsets.UTF_8);
+                    CECData data = parseCecJson(new JSONObject(json));
+                    LOG.fine("loaded " + cecKey + " from workspace  size=" + data.size());
+                    return Optional.of(data);
+                } catch (Exception e) {
+                    LOG.warning("Error reading workspace CEC for " + cecKey + ": " + e.getMessage());
+                }
+            }
+        }
+
+        // 2. Fall back to bundled classpath
         try {
             String json = loadResourceAsString(SYSTEMS_BASE_PATH + cecKey + "/" + CEC_FILE);
             if (json == null) {
@@ -198,14 +242,43 @@ public class SystemDataLoader {
                 return Optional.empty();
             }
             CECData data = parseCecJson(new JSONObject(json));
-            LOG.fine("loaded " + cecKey
-                    + "  size=" + data.size()
+            LOG.fine("loaded " + cecKey + " from classpath  size=" + data.size()
                     + "  temperatureDependent=" + data.temperatureDependent);
             return Optional.of(data);
         } catch (Exception e) {
             LOG.warning("error for " + cecKey + ": " + e.getMessage());
             return Optional.empty();
         }
+    }
+
+    /**
+     * Validates that loaded CEC data has the correct count matching the cluster model's ncf.
+     * ncf (number of cluster functions) = optimization variables only
+     * (excludes point cluster and other non-optimization CFs)
+     * @param cecData loaded CEC data
+     * @param structure e.g., "BCC"
+     * @param phase e.g., "A2"
+     * @param model e.g., "T"
+     * @return true if CEC count matches expected ncf, false otherwise
+     */
+    public static boolean validateCecCount(CECData cecData, String structure, String phase, String model) {
+        Optional<CFResultMetadata> cfMetadata = loadCFResult(structure, phase, model);
+        if (cfMetadata.isEmpty()) {
+            LOG.warning("Cannot validate CEC count: CF metadata not found for " + structure + "_" + phase + "_" + model);
+            return true; // Don't fail if metadata is missing
+        }
+
+        int expectedNcf = cfMetadata.get().ncf;
+        int actualCount = cecData.size();
+
+        if (actualCount != expectedNcf) {
+            LOG.warning("CEC count mismatch for " + cecData.elements + ": "
+                    + "expected " + expectedNcf + " (ncf), got " + actualCount);
+            return false;
+        }
+
+        LOG.fine("CEC count validated: " + cecData.elements + " has " + actualCount + " CEs (matches ncf)");
+        return true;
     }
 
     /**
@@ -298,36 +371,59 @@ public class SystemDataLoader {
     }
     
     /**
-     * Saves CEC data to external directory.
-     * @param cecData CEC data to save
-     * @param externalDataPath path to external data directory
+     * Saves CEC data to the workspace (or supplied external directory).
+     *
+     * <p>The directory is derived from the full model-qualified cecKey
+     * ({@code {elements}_{structure}_{phase}_{model}}), matching the key used
+     * by {@link #loadCecData(String, String, String, String)} and
+     * {@link #cecExists(String, String, String, String)}.  When
+     * {@code cecData.structure}/{@code phase}/{@code model} are populated the full
+     * key is used; otherwise the directory falls back to {@code elements} alone
+     * (legacy behaviour).</p>
+     *
+     * @param cecData        CEC data to save (set {@code structure}, {@code phase},
+     *                       {@code model} for correct key resolution)
+     * @param externalDataPath base path; the file is written to
+     *                         {@code {externalDataPath}/data/systems/{cecKey}/cec.json}
      */
     public static void saveCecData(CECData cecData, Path externalDataPath) {
         try {
-            Path systemDir = externalDataPath.resolve("systems").resolve(cecData.elements);
+            String cecKey = (cecData.structure != null && !cecData.structure.isEmpty())
+                    ? cecData.elements + "_" + cecData.structure + "_" + cecData.phase + "_" + cecData.model
+                    : cecData.elements;
+            Path systemDir = externalDataPath.resolve("data/systems").resolve(cecKey);
             Files.createDirectories(systemDir);
             
             JSONObject obj = new JSONObject();
             obj.put("elements", cecData.elements);
-            
-            if (cecData.cecValues != null) {
-                JSONArray arr = new JSONArray();
-                for (double val : cecData.cecValues) {
-                    arr.put(val);
+            if (cecData.structure != null) obj.put("structure", cecData.structure);
+            if (cecData.phase     != null) obj.put("phase",     cecData.phase);
+            if (cecData.model     != null) obj.put("model",     cecData.model);
+
+            if (cecData.cecTerms != null && cecData.cecTerms.length > 0) {
+                obj.put("temperatureDependent", true);
+                JSONArray terms = new JSONArray();
+                for (SystemDataLoader.CECTerm t : cecData.cecTerms) {
+                    JSONObject term = new JSONObject();
+                    term.put("name", t.name != null ? t.name : "");
+                    term.put("a", t.a);
+                    term.put("b", t.b);
+                    terms.put(term);
                 }
+                obj.put("cecTerms", terms);
+            } else if (cecData.cecValues != null) {
+                JSONArray arr = new JSONArray();
+                for (double val : cecData.cecValues) arr.put(val);
                 obj.put("cecValues", arr);
             }
-            
-            if (cecData.cecUnits != null) {
-                obj.put("cecUnits", cecData.cecUnits);
-            }
-            
-            if (cecData.reference != null) {
-                obj.put("reference", cecData.reference);
-            }
-            
+
+            if (cecData.cecUnits  != null) obj.put("cecUnits",  cecData.cecUnits);
+            if (cecData.reference != null) obj.put("reference", cecData.reference);
+            if (cecData.notes     != null) obj.put("notes",     cecData.notes);
+
             Path cecFile = systemDir.resolve(CEC_FILE);
             Files.writeString(cecFile, obj.toString(2), StandardCharsets.UTF_8);
+            LOG.info("Saved CEC data to " + cecFile);
             
             LOG.fine("Saved CEC data to " + cecFile);
         } catch (IOException e) {
@@ -428,6 +524,9 @@ public class SystemDataLoader {
      */
     public static class CECData {
         public String    elements;
+        public String    structure;            // e.g. "BCC" — set before calling saveCecData()
+        public String    phase;               // e.g. "A2"  — set before calling saveCecData()
+        public String    model;               // e.g. "T"   — set before calling saveCecData()
         public boolean   temperatureDependent;
         public int       tc;                  // expected ECI array length
         public CECTerm[] cecTerms;            // length == tc

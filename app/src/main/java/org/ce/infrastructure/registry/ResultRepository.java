@@ -2,8 +2,11 @@ package org.ce.infrastructure.registry;
 
 import org.ce.domain.model.data.CalculationMethod;
 import org.ce.domain.model.data.CalculationRecord;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -268,9 +271,25 @@ public class ResultRepository {
 
     private void loadResultFile(Path file) {
         try {
-            String json = Files.readString(file);
-            // TODO: Implement JSON deserialization for CalculationRecord
-            // For now, result files are placeholders
+            String json = Files.readString(file, StandardCharsets.UTF_8);
+            JSONObject obj = new JSONObject(json);
+            String id         = obj.getString("id");
+            String systemId   = obj.getString("systemId");
+            LocalDateTime ts  = LocalDateTime.parse(obj.getString("timestamp"));
+            CalculationMethod method = CalculationMethod.valueOf(obj.getString("method"));
+            double temperature = obj.getDouble("temperature");
+            double[] composition = null;
+            if (obj.has("composition")) {
+                JSONArray ca = obj.getJSONArray("composition");
+                composition = new double[ca.length()];
+                for (int i = 0; i < ca.length(); i++) composition[i] = ca.getDouble(i);
+            }
+            double G = obj.optDouble("gibbsEnergy", Double.NaN);
+            double H = obj.optDouble("enthalpy",    Double.NaN);
+            double S = obj.optDouble("entropy",      Double.NaN);
+            CalculationRecord record = new CalculationRecord(
+                    id, systemId, ts, method, temperature, composition, G, H, S, null);
+            results.put(id, record);
         } catch (Exception e) {
             LOG.warning("Failed to load: " + file + " - " + e.getMessage());
         }
@@ -299,18 +318,21 @@ public class ResultRepository {
     }
 
     private String serializeRecord(CalculationRecord record) {
-        // TODO: Implement proper JSON serialization for CalculationRecord
-        // For now, return a minimal JSON stub
-        return String.format(
-            "{\"id\":\"%s\",\"systemId\":\"%s\",\"method\":\"%s\",\"T\":%.2f,\"G\":%.6f,\"H\":%.6f,\"S\":%.8f}",
-            record.id(),
-            record.systemId(),
-            record.method(),
-            record.temperature(),
-            record.gibbsEnergy(),
-            record.enthalpy(),
-            record.entropy()
-        );
+        JSONObject obj = new JSONObject();
+        obj.put("id",          record.id());
+        obj.put("systemId",    record.systemId());
+        obj.put("timestamp",   record.timestamp().toString());
+        obj.put("method",      record.method().name());
+        obj.put("temperature", record.temperature());
+        if (record.composition() != null) {
+            JSONArray ca = new JSONArray();
+            for (double v : record.composition()) ca.put(v);
+            obj.put("composition", ca);
+        }
+        obj.put("gibbsEnergy", record.gibbsEnergy());
+        obj.put("enthalpy",    record.enthalpy());
+        obj.put("entropy",     record.entropy());
+        return obj.toString(2);
     }
 
     private void cleanOrphanedFiles(long cutoffMs) throws IOException {

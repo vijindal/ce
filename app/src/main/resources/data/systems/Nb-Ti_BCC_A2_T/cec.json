@@ -5,25 +5,22 @@
   "phase": "A2",
   "model": "T",
   "numComponents": 2,
-  "clusterCount": 6,
+  "clusterCount": 4,
+  "cecValuesLength": 4,
   "cecValues": [
     0.0,
     0.0,
     -390.0,
-    -260.0,
-    0.0,
-    0.0
+    -260.0
   ],
   "units": "J/mol",
   "description": [
     "Tetrahedron 4-body (rc=4, mult=6) = 0.0",
     "Triangle (rc=3, mult=12) = 0.0",
     "1-neighbor pair (rc=2, mult=4) = -390.0",
-    "II-neighbor pair (rc=2, mult=3) = -260.0",
-    "Point cluster (rc=1) = 0.0",
-    "Empty/Reference cluster (rc=0) = 0.0"
+    "II-neighbor pair (rc=2, mult=3) = -260.0"
   ],
   "reference": "Optimized from Nb-Ti BCC phase diagram fitting",
   "timestamp": "2026-02-27T17:00:00Z",
-  "notes": "6 cluster types from BCC_A2_T model; matches Ti-Nb coupling"
+  "notes": "4 cluster functions (ncf=4) from BCC_A2_T model; matches Ti-Nb coupling. Point cluster and empty/reference cluster omitted (non-optimization variables)."
 }

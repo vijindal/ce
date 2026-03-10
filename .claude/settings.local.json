@@ -26,7 +26,20 @@
       "Bash(git add app/src/main/java/org/ce/presentation/gui/CEWorkbenchApplication.java app/src/main/java/org/ce/presentation/gui/component/CECDatabaseDialog.java)",
       "Bash(./gradlew test --tests CECAssemblyIntegrationTest -i)",
       "Bash(./gradlew test --tests CECAssemblyIntegrationTest)",
-      "Bash(./gradlew clean test --tests CECAssemblyIntegrationTest)"
+      "Bash(./gradlew clean test --tests CECAssemblyIntegrationTest)",
+      "Bash(ls -lh *.md)",
+      "Bash(for f in *.md)",
+      "Bash(do echo \"=== $f ===\")",
+      "Read(//d/codes/ce/**)",
+      "Bash(done)",
+      "Bash(python3 -c \"import json; data = json.load\\(open\\(''/d/codes/ce/data/cluster_cache/BCC_A2_T_bin/all_cluster_data.json''\\)\\); print\\(''tcf:'', data[''stage2''][''tcf'']\\); print\\(''cfBasisIndices length:'', len\\(data[''stage3''][''cfBasisIndices'']\\)\\)\")",
+      "Bash(python3:*)",
+      "Bash(git checkout app/src/main/resources/data/systems/A-B_BCC_A2_T/cec.json)",
+      "Bash(./gradlew test -k \"CECAssembly\")",
+      "Bash(./gradlew test --tests \"*CECAssembly*\")",
+      "Bash(./gradlew test --tests \"*SystemDiscovery*\")",
+      "Bash(./gradlew test)",
+      "Bash(./gradlew clean compileJava test)"
     ]
   }
 }

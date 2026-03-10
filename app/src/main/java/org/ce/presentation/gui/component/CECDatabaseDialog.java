@@ -219,8 +219,12 @@ public class CECDatabaseDialog extends Dialog<Void> {
                 return;
             }
             try {
+                // Populate model fields so saveCecData uses the full cecKey as directory
+                currentCecData.structure = currentBrowserSystem.getStructure();
+                currentCecData.phase     = currentBrowserSystem.getPhase();
+                currentCecData.model     = currentBrowserSystem.getModel();
                 SystemDataLoader.saveCecData(currentCecData,
-                    Paths.get(System.getProperty("user.home")));
+                    Paths.get(System.getProperty("user.home")).resolve(".ce-workbench"));
                 statusLabel.setText("Saved successfully to database");
                 statusLabel.setStyle("-fx-text-fill: #008000;");
                 editMode = false;
@@ -507,16 +511,20 @@ public class CECDatabaseDialog extends Dialog<Void> {
                 double[] finalECIs = CECAssemblyService.assemble(
                     assemblyTransformedByOrder, pureKECIs, assemblyCfOrderMap, assemblyTargetData);
 
-                // Build CECData
+                // Build CECData — populate all fields including model for correct key resolution
                 SystemDataLoader.CECData cecData = new SystemDataLoader.CECData();
-                cecData.elements = String.join("-", currentAssemblyTarget.getComponents());
+                cecData.elements  = String.join("-", currentAssemblyTarget.getComponents());
+                cecData.structure = currentAssemblyTarget.getStructure();
+                cecData.phase     = currentAssemblyTarget.getPhase();
+                cecData.model     = currentAssemblyTarget.getModel();
                 cecData.cecValues = finalECIs;
-                cecData.cecUnits = "J/mol";
+                cecData.cecUnits  = "J/mol";
                 cecData.reference = currentAssemblyTarget.getId();
-                cecData.tc = tcf;
+                cecData.tc        = tcf;
 
-                // Save to database
-                SystemDataLoader.saveCecData(cecData, Paths.get(System.getProperty("user.home")));
+                // Save to workspace (~/.ce-workbench/data/systems/{cecKey}/cec.json)
+                SystemDataLoader.saveCecData(cecData,
+                    Paths.get(System.getProperty("user.home")).resolve(".ce-workbench"));
 
                 statusLabel.setText("✓ Saved assembled CECs for " + currentAssemblyTarget.getId());
                 statusLabel.setStyle("-fx-text-fill: #008000;");

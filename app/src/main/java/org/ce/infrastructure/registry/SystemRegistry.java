@@ -2,7 +2,10 @@ package org.ce.infrastructure.registry;
 
 import org.ce.domain.system.SystemIdentity;
 import org.ce.domain.system.SystemStatus;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -85,7 +88,32 @@ public class SystemRegistry {
     public Collection<SystemIdentity> getAllSystems() {
         return new ArrayList<>(identities.values());
     }
-    
+
+    /**
+     * Auto-discover and register systems from the filesystem.
+     *
+     * <p>Scans the systems directory for CEC files and auto-generates SystemIdentity
+     * objects. This eliminates the need for manual system registration.</p>
+     *
+     * @param systemsRoot Root directory containing system subdirectories
+     *                    (e.g., {@code app/src/main/resources/data/systems/})
+     * @return Number of systems discovered and registered
+     */
+    public int loadSystemsFromFilesystem(Path systemsRoot) {
+        List<SystemIdentity> discovered = SystemDiscovery.discoverSystems(systemsRoot);
+        for (SystemIdentity system : discovered) {
+            if (identities.containsKey(system.getId())) {
+                LOG.fine("System already registered: " + system.getId());
+                continue;
+            }
+            registerSystem(system);
+            // Mark as having CEC available (discovered from filesystem)
+            markCecAvailable(system.getId(), true);
+            LOG.info("Auto-registered system: " + system.getId());
+        }
+        return discovered.size();
+    }
+
     /**
      * Remove a system and its cached data.
      */
@@ -223,19 +251,66 @@ public class SystemRegistry {
         if (!Files.exists(systemsFile)) {
             return;
         }
-        
         try {
-            // TODO: Implement deserialization from file
-            // For now, systems are built at runtime
+            String json = Files.readString(systemsFile, StandardCharsets.UTF_8);
+            JSONArray arr = new JSONArray(json);
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject obj = arr.getJSONObject(i);
+                String id = obj.getString("id");
+                if (identities.containsKey(id)) continue; // don't overwrite already-loaded
+
+                JSONArray compsArr = obj.getJSONArray("components");
+                String[] components = new String[compsArr.length()];
+                for (int j = 0; j < compsArr.length(); j++) components[j] = compsArr.getString(j);
+
+                SystemIdentity system = SystemIdentity.builder()
+                    .id(id)
+                    .name(obj.optString("name", id))
+                    .structure(obj.optString("structure", ""))
+                    .phase(obj.optString("phase", ""))
+                    .model(obj.optString("model", ""))
+                    .components(components)
+                    .clusterFilePath("")
+                    .symmetryGroupName("")
+                    .build();
+                identities.put(id, system);
+
+                SystemStatus st = new SystemStatus();
+                st.setCecAvailable(obj.optBoolean("cecAvailable", false));
+                st.setClustersComputed(obj.optBoolean("clustersComputed", false));
+                st.setCfsComputed(obj.optBoolean("cfsComputed", false));
+                statuses.put(id, st);
+            }
+            LOG.info("Loaded " + arr.length() + " systems from registry file");
         } catch (Exception e) {
             LOG.warning("Failed to load systems: " + e.getMessage());
         }
     }
-    
+
     private void saveSystemsToDisk() {
         try {
             Path systemsFile = registryRoot.resolve(SYSTEMS_FILE);
-            // TODO: Implement serialization to file
+            JSONArray arr = new JSONArray();
+            for (SystemIdentity s : identities.values()) {
+                JSONObject obj = new JSONObject();
+                obj.put("id", s.getId());
+                obj.put("name", s.getName());
+                obj.put("structure", s.getStructure());
+                obj.put("phase", s.getPhase());
+                obj.put("model", s.getModel());
+                JSONArray comps = new JSONArray();
+                for (String c : s.getComponents()) comps.put(c);
+                obj.put("components", comps);
+                SystemStatus st = statuses.get(s.getId());
+                if (st != null) {
+                    obj.put("cecAvailable", st.isCecAvailable());
+                    obj.put("clustersComputed", st.isClustersComputed());
+                    obj.put("cfsComputed", st.isCfsComputed());
+                }
+                arr.put(obj);
+            }
+            Files.writeString(systemsFile, arr.toString(2), StandardCharsets.UTF_8);
+            LOG.fine("Saved " + identities.size() + " systems to registry file");
         } catch (Exception e) {
             LOG.warning("Failed to save systems: " + e.getMessage());
         }

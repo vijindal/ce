@@ -9,8 +9,10 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.ce.infrastructure.service.BackgroundJobManager;
+import org.ce.infrastructure.data.SystemDataLoader;
 import org.ce.infrastructure.registry.ResultRepository;
 import org.ce.infrastructure.registry.SystemRegistry;
+import org.ce.infrastructure.registry.WorkspaceManager;
 import org.ce.presentation.gui.component.CVMModelInspectorDialog;
 import org.ce.presentation.gui.component.CECDatabaseDialog;
 import org.ce.presentation.gui.view.CalculationSetupPanel;
@@ -19,6 +21,8 @@ import org.ce.presentation.gui.view.SystemRegistryPanel;
 import org.ce.presentation.gui.view.ResultsPanel;
 import org.ce.domain.system.SystemIdentity;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Optional;
 import java.util.logging.Level;
@@ -74,78 +78,62 @@ public class CEWorkbenchApplication extends Application {
     }
     
     private void initializeBackgroundServices() throws Exception {
-        // Initialize registry with workspace directory
-        String userHome = System.getProperty("user.home");
-        systemRegistry = new SystemRegistry(Paths.get(userHome));
-        resultRepository = new ResultRepository(Paths.get(userHome).resolve(".ce-workbench"));
-        
+        Path userHome = Paths.get(System.getProperty("user.home"));
+
+        // Single workspace manager — owns all persistent path resolution
+        WorkspaceManager workspace = new WorkspaceManager(userHome);
+
+        // Configure SystemDataLoader's workspace root so user CECs are found/saved correctly
+        SystemDataLoader.setWorkspaceRoot(workspace.getRoot());
+
+        // Registry and repository both root under the same workspace
+        systemRegistry    = new SystemRegistry(userHome);
+        resultRepository  = new ResultRepository(userHome);
+
         // Initialize job manager with 2 concurrent jobs
         jobManager = new BackgroundJobManager(2);
-        
-        // Register test systems that have cached data
-        registerCachedTestSystems();
+
+        // Auto-discover and register alloy systems from the filesystem
+        loadAlloySystemsFromFilesystem();
     }
-    
+
     /**
-     * Registers test systems that have pre-computed cluster data in the cache.
-     * This ensures the CVM Model Inspector and other tools can access these systems.
+     * Auto-discover and register alloy systems from the filesystem.
+     *
+     * <p>Scans {@code app/src/main/resources/data/systems/} for CEC files and
+     * automatically registers discovered systems. No code changes needed to add new systems.</p>
      */
-    private void registerCachedTestSystems() {
+    private void loadAlloySystemsFromFilesystem() {
         try {
-            // Check if A-B test system exists in cache
-            String clusterKey = "BCC_A2_T_bin";
-            Optional<org.ce.domain.model.data.AllClusterData> cachedData =
-                org.ce.infrastructure.persistence.AllClusterDataCache.load(clusterKey);
+            // Determine the absolute path to systems directory
+            Path systemsDir = Paths.get("app/src/main/resources/data/systems");
 
-            if (cachedData.isPresent() && cachedData.get().isComplete()) {
-                String systemId = "A-B_BCC_A2_T";
-                // Only register if not already present
-                if (systemRegistry.getSystem(systemId) == null) {
-                    SystemIdentity testSystem = SystemIdentity.builder()
-                        .id(systemId)
-                        .name("A-B BCC A2 (T)")
-                        .structure("BCC")
-                        .phase("A2")
-                        .model("T")
-                        .components(new String[]{"A", "B"})
-                        .clusterFilePath("cluster/A2-T.txt")
-                        .symmetryGroupName("A2-SG")
-                        .build();
+            // Try to resolve relative to current working directory
+            if (!Files.exists(systemsDir)) {
+                // If running from JAR, try classpath resource approach
+                String classesPath = CEWorkbenchApplication.class.getProtectionDomain()
+                    .getCodeSource().getLocation().getPath();
+                Path basePath = Paths.get(classesPath).getParent();
+                systemsDir = basePath.resolve("app/src/main/resources/data/systems");
 
-                    systemRegistry.registerSystem(testSystem);
-                    systemRegistry.markClustersComputed(systemId, true);
-                    systemRegistry.markCfsComputed(systemId, true);
-                    systemRegistry.markCecAvailable(systemId, true);
-
-                    LOG.info("Auto-registered test system: " + systemId);
+                // If still not found, try from parent directory
+                if (!Files.exists(systemsDir)) {
+                    systemsDir = Paths.get(System.getProperty("user.dir"))
+                        .resolve("app/src/main/resources/data/systems");
                 }
             }
 
-            // Register Nb-Ti system (same cluster key as A-B since both are K=2 BCC_A2_T)
-            if (cachedData.isPresent() && cachedData.get().isComplete()) {
-                String systemId = "Nb-Ti_BCC_A2_T";
-                if (systemRegistry.getSystem(systemId) == null) {
-                    SystemIdentity nbTiSystem = SystemIdentity.builder()
-                        .id(systemId)
-                        .name("Nb-Ti BCC A2 (T)")
-                        .structure("BCC")
-                        .phase("A2")
-                        .model("T")
-                        .components(new String[]{"Nb", "Ti"})
-                        .clusterFilePath("cluster/A2-T.txt")
-                        .symmetryGroupName("A2-SG")
-                        .build();
-
-                    systemRegistry.registerSystem(nbTiSystem);
-                    systemRegistry.markClustersComputed(systemId, true);
-                    systemRegistry.markCfsComputed(systemId, true);
-                    systemRegistry.markCecAvailable(systemId, true);
-
-                    LOG.info("Auto-registered test system: " + systemId);
-                }
+            if (!Files.exists(systemsDir)) {
+                LOG.warning("Systems directory not found: " + systemsDir);
+                return;
             }
+
+            // Auto-discover and register systems
+            int loaded = systemRegistry.loadSystemsFromFilesystem(systemsDir);
+            LOG.info("Loaded " + loaded + " alloy systems from filesystem");
+
         } catch (Exception e) {
-            LOG.warning("Failed to register test systems: " + e.getMessage());
+            LOG.warning("Failed to load alloy systems from filesystem: " + e.getMessage());
         }
     }
     
