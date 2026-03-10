@@ -19,6 +19,8 @@ import org.ce.infrastructure.context.MCSCalculationContext;
 import org.ce.domain.system.SystemIdentity;
 import org.ce.infrastructure.logging.LoggingConfig;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Logger;
 
 /**
@@ -44,7 +46,8 @@ public class CalculationSetupPanel extends VBox {
     
     // Common parameters
     private final TextField temperatureField;
-    private final TextField compositionField;
+    private final VBox compositionContainer;     // Dynamic composition fields container
+    private final List<TextField> compositionFields = new ArrayList<>();  // Current composition fields
     
     // MCS parameters
     private final TextField mcsSupercellSizeField;
@@ -88,7 +91,7 @@ public class CalculationSetupPanel extends VBox {
 
         // Initialize common parameters
         temperatureField = new TextField("7.0");
-        compositionField = new TextField("0.5");
+        compositionContainer = new VBox(4);
         
         // Initialize MCS parameters
         mcsSupercellSizeField = new TextField("4");
@@ -132,19 +135,21 @@ public class CalculationSetupPanel extends VBox {
         VBox section = new VBox(4);
         Label label = new Label("Common");
         label.setStyle("-fx-font-size: 10; -fx-font-weight: bold;");
-        
+
         GridPane grid = new GridPane();
         grid.setHgap(8);
         grid.setVgap(6);
         grid.setPadding(new Insets(0));
-        
+
         temperatureField.setPrefHeight(22);
-        compositionField.setPrefHeight(22);
-        
+
         addCompactRow(grid, 0, "Temperature (K)", temperatureField);
-        addCompactRow(grid, 1, "Composition (x)", compositionField);
-        
-        section.getChildren().addAll(label, grid);
+
+        section.getChildren().addAll(label, grid, compositionContainer);
+
+        // Initialize composition fields to binary (fallback if no system selected)
+        rebuildCompositionFields(null);
+
         return section;
     }
 
@@ -188,6 +193,53 @@ public class CalculationSetupPanel extends VBox {
         return section;
     }
 
+    /**
+     * Rebuilds composition fields dynamically based on selected system.
+     * Shows K TextFields (one per component) with labels from system.getComponents().
+     * If system is null, defaults to binary (K=2).
+     */
+    private void rebuildCompositionFields(SystemIdentity system) {
+        compositionContainer.getChildren().clear();
+        compositionFields.clear();
+
+        List<String> labels;
+        if (system != null) {
+            labels = system.getComponents();
+        } else {
+            labels = List.of("A", "B");  // default binary fallback
+        }
+
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(4);
+
+        Label header = new Label("Composition");
+        header.setStyle("-fx-font-size: 10; -fx-font-weight: bold;");
+
+        int K = labels.size();
+        double defaultVal = Math.round(10000.0 / K) / 10000.0;  // e.g., 0.5, 0.3333
+
+        for (int i = 0; i < K; i++) {
+            TextField field = new TextField(String.format("%.4f", defaultVal));
+            field.setPrefHeight(22);
+            compositionFields.add(field);
+            addCompactRow(grid, i, "x_" + labels.get(i), field);
+        }
+
+        compositionContainer.getChildren().addAll(header, grid);
+    }
+
+    /**
+     * Extracts composition values from all composition fields into an array.
+     */
+    private double[] getCompositionArray() {
+        double[] arr = new double[compositionFields.size()];
+        for (int i = 0; i < compositionFields.size(); i++) {
+            arr[i] = Double.parseDouble(compositionFields.get(i).getText().trim());
+        }
+        return arr;
+    }
+
     private HBox buildActionButtons() {
         Button runButton = new Button("Run");
         Button resetButton = new Button("Reset");
@@ -206,7 +258,12 @@ public class CalculationSetupPanel extends VBox {
         // Reset button handler
         resetButton.setOnAction(e -> {
             temperatureField.setText("7.0");
-            compositionField.setText("0.5");
+            // Reset composition fields to equal fractions (1.0/K for each)
+            int K = compositionFields.size();
+            double equalFraction = K > 0 ? Math.round(10000.0 / K) / 10000.0 : 0.5;
+            for (TextField field : compositionFields) {
+                field.setText(String.format("%.4f", equalFraction));
+            }
             mcsSupercellSizeField.setText("4");
             mcsEquilibrationField.setText("5000");
             mcsAveragingField.setText("10000");
@@ -235,10 +292,13 @@ public class CalculationSetupPanel extends VBox {
         // Build request from UI fields
         MCSCalculationRequest request;
         try {
+            int K = selectedSystem.getNumComponents();
+            double[] compositionArray = getCompositionArray();
             request = MCSCalculationRequest.builder()
                 .systemId(selectedSystem.getId())
                 .temperature(Double.parseDouble(temperatureField.getText().trim()))
-                .composition(Double.parseDouble(compositionField.getText().trim()))
+                .compositionArray(compositionArray)
+                .numComponents(K)
                 .supercellSize(Integer.parseInt(mcsSupercellSizeField.getText().trim()))
                 .equilibrationSteps(Integer.parseInt(mcsEquilibrationField.getText().trim()))
                 .averagingSteps(Integer.parseInt(mcsAveragingField.getText().trim()))
@@ -249,7 +309,7 @@ public class CalculationSetupPanel extends VBox {
         }
 
         LOG.fine("CalculationSetupPanel.runMCSCalculation — ENTER: system=" + selectedSystem.getId()
-                + ", T=" + request.getTemperature() + " K, x=" + request.getComposition()
+                + ", T=" + request.getTemperature() + " K, K=" + request.getNumComponents()
                 + ", L=" + request.getSupercellSize()
                 + ", nEquil=" + request.getEquilibrationSteps()
                 + ", nAvg=" + request.getAveragingSteps());
@@ -290,6 +350,8 @@ public class CalculationSetupPanel extends VBox {
             selectedSystemLabel.setText("No system selected");
             selectedSystemLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #666; -fx-font-style: italic;");
         }
+        // Rebuild composition fields based on selected system's numComponents
+        rebuildCompositionFields(system);
     }
 
     /**
@@ -317,10 +379,13 @@ public class CalculationSetupPanel extends VBox {
         // Build request from UI fields
         CVMCalculationRequest request;
         try {
+            int K = selectedSystem.getNumComponents();
+            double[] compositionArray = getCompositionArray();
             request = CVMCalculationRequest.builder()
                 .systemId(selectedSystem.getId())
                 .temperature(Double.parseDouble(temperatureField.getText().trim()))
-                .composition(Double.parseDouble(compositionField.getText().trim()))
+                .compositionArray(compositionArray)
+                .numComponents(K)
                 .tolerance(Double.parseDouble(cvmToleranceField.getText().trim()))
                 .build();
         } catch (IllegalArgumentException ex) {
@@ -345,7 +410,7 @@ public class CalculationSetupPanel extends VBox {
             ResultsPanelProgressListener listener) {
 
         LOG.fine("CalculationSetupPanel.runCVMPhaseModelCalculation — ENTER: system=" + selectedSystem.getId()
-                + ", T=" + request.getTemperature() + " K, x=" + request.getComposition());
+                + ", T=" + request.getTemperature() + " K, K=" + request.getNumComponents());
 
         // Prepare CVMPhaseModel
         PreparationResult<CVMPhaseModel> result = service.prepareCVMModel(request);
