@@ -8,7 +8,8 @@ import org.ce.domain.system.SystemIdentity;
  * Context holder for a Monte Carlo Simulation (MCS) calculation.
  *
  * <p>Extends {@link AbstractCalculationContext} with MCS-specific parameters:
- * supercell size, equilibration steps, averaging steps, and random seed.</p>
+ * supercell size, equilibration steps, averaging steps, and random seed.
+ * Supports any number of components (K≥2).</p>
  */
 public class MCSCalculationContext extends AbstractCalculationContext {
 
@@ -20,15 +21,29 @@ public class MCSCalculationContext extends AbstractCalculationContext {
     private ClusCoordListResult clusterData;
     private AllClusterData allClusterData;
 
+    /**
+     * Constructor for MCS calculations (binary, ternary, or higher-order systems).
+     *
+     * @param system system identity
+     * @param temperature temperature in K
+     * @param compositionArray composition fractions for each component (sum ≈ 1.0)
+     * @param numComponents number of chemical components (≥ 2)
+     * @param supercellSize supercell dimension L
+     * @param equilibrationSteps equilibration sweeps
+     * @param averagingSteps averaging sweeps
+     * @param seed random seed
+     * @throws IllegalArgumentException if array length doesn't match numComponents
+     */
     public MCSCalculationContext(
             SystemIdentity system,
             double temperature,
-            double composition,
+            double[] compositionArray,
+            int numComponents,
             int supercellSize,
             int equilibrationSteps,
             int averagingSteps,
             long seed) {
-        super(system, temperature, composition);
+        super(system, temperature, compositionArray, numComponents);
         this.supercellSize = supercellSize;
         this.equilibrationSteps = equilibrationSteps;
         this.averagingSteps = averagingSteps;

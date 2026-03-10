@@ -28,23 +28,31 @@ public final class CVMEngine {
 
     /**
      * Runs the CVM Newton-Raphson solver on the given context.
+     * Supports binary, ternary, and higher-order systems.
      *
      * @param input CVM stage model input
      * @param eci effective cluster interactions in non-point CF basis
      * @param temperature temperature in Kelvin
-     * @param composition binary composition value
+     * @param compositionArray mole fractions for all components (sum ≈ 1.0)
+     * @param numComponents number of chemical components (≥ 2)
      * @param tolerance convergence tolerance
      * @return solver result containing equilibrium CFs and thermodynamic quantities
-     * @throws IllegalArgumentException if input is null
+     * @throws IllegalArgumentException if input is null or array length mismatches numComponents
      */
     public static CVMSolverResult solve(
             CVMModelInput input,
             double[] eci,
             double temperature,
-            double composition,
+            double[] compositionArray,
+            int numComponents,
             double tolerance) {
         if (input == null) {
             throw new IllegalArgumentException("CVMModelInput must not be null");
+        }
+        if (compositionArray.length != numComponents) {
+            throw new IllegalArgumentException(
+                    "compositionArray length (" + compositionArray.length
+                    + ") must equal numComponents (" + numComponents + ")");
         }
 
         ClusterIdentificationResult stage1 = input.getStage1();
@@ -64,17 +72,14 @@ public final class CVMEngine {
         int[][] lcv                = stage3.getLcv();
         List<List<int[]>> wcv      = stage3.getWcv();
 
-        // Convert binary composition (x_B = mole fraction of component B) to mole fractions.
-        // CVMPhaseModel convention: moleFractions = {1 - x_B, x_B}, so solver reads
-        // xB = moleFractions[1] = x_B correctly.
-        double[] moleFractions = {1.0 - composition, composition};
-        int numElements      = input.getNumComponents();
+        // Use composition array directly (supports K=2, K=3, K≥4)
+        double[] moleFractions = compositionArray.clone();
         int[][] lcf          = stage2.getLcf();
         int[][] cfBasisIndices = stage3.getCfBasisIndices();
 
         // Run Newton-Raphson solver (simple version based on proven working code)
         return NewtonRaphsonSolverSimple.solve(
-                moleFractions, numElements,
+                moleFractions, numComponents,
                 temperature, eci,
                 mhdis, kb, mh, lc,
                 cmat, lcv, wcv,

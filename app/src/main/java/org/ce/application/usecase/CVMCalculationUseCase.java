@@ -90,6 +90,7 @@ public final class CVMCalculationUseCase {
                     context.getECI(),
                     context.getTemperature(),
                     context.getComposition(),
+                    context.getNumComponents(),
                     context.getTolerance());
             long elapsedMs = System.currentTimeMillis() - startTime;
 
@@ -116,7 +117,6 @@ public final class CVMCalculationUseCase {
         progressPort.logMessage(context.getSummary());
         progressPort.logMessage("CVM parameters:");
         progressPort.logMessage("  Temperature: " + context.getTemperature() + " K");
-        progressPort.logMessage("  Composition (x): " + context.getComposition());
         progressPort.logMessage("  Tolerance: " + context.getTolerance());
         progressPort.logMessage("  Number of CFs (ncf): "
                 + context.getAllClusterData().getStage2().getNcf());

@@ -1,7 +1,19 @@
 {
   "permissions": {
     "allow": [
-      "Bash(./gradlew run)"
+      "Bash(./gradlew run)",
+      "Bash(./gradlew run --console=plain)",
+      "Bash(./gradlew run --no-configuration-cache --console=plain)",
+      "Bash(grep -r '\"\".*eV\"\"' --include=\"*.java\" app/src/main/java/org/ce/)",
+      "Bash(grep -v \"K/eV\\\\|in eV\\\\|eV for\\\\|eV$\")",
+      "Bash(./gradlew build -x test --no-configuration-cache --console=plain)",
+      "Bash(grep -n \"class.*Context\" /d/codes/ce/app/src/main/java/org/ce/infrastructure/context/*.java)",
+      "Bash(/d/codes/ce/README_TERNARY_ANALYSIS.txt:*)",
+      "Bash(ls -lh /d/codes/ce/*.md /d/codes/ce/*.txt)",
+      "Bash(./gradlew build -x test -x integrationTest)",
+      "Bash(./gradlew build -x test)",
+      "Bash(./gradlew test -x integrationTest)",
+      "Bash(./gradlew clean build -x test)"
     ]
   }
 }

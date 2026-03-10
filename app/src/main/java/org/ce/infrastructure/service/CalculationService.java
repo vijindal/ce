@@ -116,11 +116,18 @@ public class CalculationService {
         listener.logMessage("Seed: " + request.getSeed());
         listener.logMessage("Parameters validated. Loading required data...");
         
-        // 2. Create calculation context
+        // 2. Create calculation context with composition array
+        int numComponents = system.getNumComponents();
+        double[] compositionArray = new double[numComponents];
+        compositionArray[0] = 1.0 - request.getComposition();  // Species A
+        compositionArray[1] = request.getComposition();        // Species B
+        // For K ≥ 3, additional components would come from request (not yet implemented)
+
         MCSCalculationContext context = new MCSCalculationContext(
             system,
             request.getTemperature(),
-            request.getComposition(),
+            compositionArray,
+            numComponents,
             request.getSupercellSize(),
             request.getEquilibrationSteps(),
             request.getAveragingSteps(),

@@ -8,6 +8,7 @@ import org.ce.domain.model.result.CVMResult;
 
 /**
  * Infrastructure adapter bridging the application CVM port to CVMEngine.
+ * Supports binary, ternary, and higher-order systems.
  */
 public final class CVMEngineAdapter implements CVMSolverPort {
 
@@ -16,19 +17,24 @@ public final class CVMEngineAdapter implements CVMSolverPort {
             CVMModelInput modelInput,
             double[] eci,
             double temperature,
-            double composition,
+            double[] compositionArray,
+            int numComponents,
             double tolerance) {
 
         CVMSolverResult solverResult = CVMEngine.solve(
                 modelInput,
                 eci,
                 temperature,
-                composition,
+                compositionArray,
+                numComponents,
                 tolerance);
+
+        // For backward compat with result: use binary composition (x[1]) if K=2
+        double compositionScalar = (numComponents == 2) ? compositionArray[1] : Double.NaN;
 
         return CVMResult.fromSolver(
                 temperature,
-                composition,
+                compositionScalar,
                 solverResult.getEquilibriumCFs(),
                 solverResult.getGibbsEnergy(),
                 solverResult.getEnthalpy(),
@@ -36,6 +42,7 @@ public final class CVMEngineAdapter implements CVMSolverPort {
                 solverResult.getIterations(),
                 solverResult.getGradientNorm(),
                 solverResult.isConverged());
+
     }
 }
 

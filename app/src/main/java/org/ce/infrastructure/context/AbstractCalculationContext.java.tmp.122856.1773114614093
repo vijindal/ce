@@ -6,15 +6,15 @@ import org.ce.domain.system.SystemIdentity;
  * Abstract base class for calculation contexts (MCS and CVM).
  *
  * <p>Contains the common fields shared by all calculation methods:
- * system info, temperature, composition array, ECI values, and readiness state.
+ * system info, temperature, composition, ECI values, and readiness state.
  * Subclasses provide method-specific parameters and cluster data types.</p>
  *
- * <h2>Composition representation</h2>
- * <p>All systems (binary K=2, ternary K=3, or higher) use composition arrays:
+ * <h2>Composition handling</h2>
+ * <p>Supports both binary (scalar) and multi-component (array) systems:
  * <ul>
- *   <li>compositionArray: fractions for all K components, sum ≈ 1.0</li>
- *   <li>numComponents: K (number of chemical elements/species)</li>
- *   <li>Validation: {@code compositionArray.length == numComponents} (enforced)</li>
+ *   <li>For binary (K=2): use scalar {@code composition} for backward compatibility</li>
+ *   <li>For ternary+ (K≥3): use {@code compositionArray} with array values</li>
+ *   <li>Validation: {@code compositionArray.length == numComponents} (always enforced)</li>
  * </ul>
  * </p>
  */
@@ -22,6 +22,7 @@ public abstract class AbstractCalculationContext {
 
     protected final SystemIdentity system;
     protected final double temperature;
+    protected final double composition;
     protected final double[] compositionArray;
     protected final int numComponents;
 
@@ -30,11 +31,32 @@ public abstract class AbstractCalculationContext {
     protected String readinessError;
 
     /**
-     * Constructor for any system (binary, ternary, or higher-order).
+     * Constructor for binary systems (scalar composition).
+     * Backward-compatible constructor for K=2 systems.
      *
      * @param system system identity
      * @param temperature temperature in K
-     * @param compositionArray composition fractions for each component (sum ≈ 1.0)
+     * @param composition binary composition (x_B for K=2)
+     */
+    protected AbstractCalculationContext(
+            SystemIdentity system,
+            double temperature,
+            double composition) {
+        this.system = system;
+        this.temperature = temperature;
+        this.composition = composition;
+        this.compositionArray = new double[]{1.0 - composition, composition};
+        this.numComponents = 2;
+        this.isReady = false;
+    }
+
+    /**
+     * Constructor for multi-component systems (composition array).
+     * Supports ternary (K=3) and higher-order (K≥2) systems.
+     *
+     * @param system system identity
+     * @param temperature temperature in K
+     * @param compositionArray composition fractions for each component
      * @param numComponents number of chemical components (≥ 2)
      * @throws IllegalArgumentException if array length doesn't match numComponents
      */
@@ -55,6 +77,8 @@ public abstract class AbstractCalculationContext {
         this.temperature = temperature;
         this.compositionArray = compositionArray.clone();
         this.numComponents = numComponents;
+        // For backward compat: binary composition is x[1]
+        this.composition = (numComponents == 2) ? compositionArray[1] : Double.NaN;
         this.isReady = false;
     }
 
@@ -65,15 +89,27 @@ public abstract class AbstractCalculationContext {
     public SystemIdentity getSystem() { return system; }
     public double getTemperature() { return temperature; }
     /**
-     * Returns composition as array (all systems: binary, ternary, higher-order).
+     * Returns composition as scalar (binary systems only).
+     * For multi-component systems, use {@link #getCompositionArray()}.
+     */
+    public double getComposition() { return composition; }
+    /**
+     * Returns composition as array (for all systems, including multi-component).
      * @return array of length numComponents; x[c] = N_c/N for component c
      */
-    public double[] getComposition() { return compositionArray.clone(); }
+    public double[] getCompositionArray() { return compositionArray.clone(); }
     /**
      * Returns the number of chemical components.
      * @return numComponents (≥ 2)
      */
     public int getNumComponents() { return numComponents; }
+    /**
+     * Convenience method: returns x_B for binary systems (composition[1]).
+     * @return composition[1], or Double.NaN for non-binary
+     */
+    public double getCompositionBinary() {
+        return (numComponents == 2) ? compositionArray[1] : Double.NaN;
+    }
     public double[] getECI() { return eci; }
     public boolean isReady() { return isReady; }
     public String getReadinessError() { return readinessError; }
@@ -124,14 +160,7 @@ public abstract class AbstractCalculationContext {
         StringBuilder sb = new StringBuilder();
         sb.append("System: ").append(system.getName()).append("\n");
         sb.append("Temperature: ").append(temperature).append(" K\n");
-        sb.append("Composition (K=").append(numComponents).append("): [");
-        String[] labels = {"A", "B", "C", "D", "E"};
-        for (int c = 0; c < compositionArray.length; c++) {
-            if (c > 0) sb.append(", ");
-            String label = (c < labels.length) ? labels[c] : ("C" + c);
-            sb.append(label).append("=").append(String.format("%.4f", compositionArray[c]));
-        }
-        sb.append("]\n");
+        sb.append("Composition: ").append(composition).append("\n");
         sb.append(getMethodSpecificSummary());
         sb.append("ECI: ");
         if (eci == null) {

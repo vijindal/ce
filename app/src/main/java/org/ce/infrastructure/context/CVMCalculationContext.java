@@ -7,7 +7,8 @@ import org.ce.domain.system.SystemIdentity;
  * Context holder for a CVM free-energy calculation.
  *
  * <p>Extends {@link AbstractCalculationContext} with CVM-specific parameters:
- * tolerance and the pre-computed {@link AllClusterData} (Stages 1-3).</p>
+ * tolerance and the pre-computed {@link AllClusterData} (Stages 1-3).
+ * Supports any number of components (K≥2).</p>
  */
 public class CVMCalculationContext extends AbstractCalculationContext {
 
@@ -15,12 +16,23 @@ public class CVMCalculationContext extends AbstractCalculationContext {
 
     private AllClusterData allClusterData;
 
+    /**
+     * Constructor for CVM calculations (binary, ternary, or higher-order systems).
+     *
+     * @param system system identity
+     * @param temperature temperature in K
+     * @param compositionArray composition fractions for each component (sum ≈ 1.0)
+     * @param numComponents number of chemical components (≥ 2)
+     * @param tolerance Newton-Raphson convergence tolerance
+     * @throws IllegalArgumentException if array length doesn't match numComponents
+     */
     public CVMCalculationContext(
             SystemIdentity system,
             double temperature,
-            double composition,
+            double[] compositionArray,
+            int numComponents,
             double tolerance) {
-        super(system, temperature, composition);
+        super(system, temperature, compositionArray, numComponents);
         this.tolerance = tolerance;
     }
 
