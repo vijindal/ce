@@ -426,17 +426,21 @@ public class CECDatabaseDialog extends Dialog<Void> {
         tempField.setPrefWidth(100);
         tempBox.getChildren().addAll(tempLabel, tempField);
 
-        // Subsystems panel (placeholder for now)
+        // Subsystems panel with scrollable subsystem listing by order
         VBox subsystemsPanel = new VBox(8);
         subsystemsPanel.setStyle("-fx-border-color: #e0e0e0; -fx-border-width: 1; -fx-padding: 10;");
-        Label subsystemsTitle = new Label("Binary Subsystems:");
+        Label subsystemsTitle = new Label("Available Subsystems:");
         subsystemsTitle.setFont(Font.font("System", FontWeight.BOLD, 11));
-        TextArea subsystemsDisplay = new TextArea();
-        subsystemsDisplay.setEditable(false);
-        subsystemsDisplay.setPrefHeight(150);
-        subsystemsDisplay.setWrapText(true);
 
-        subsystemsPanel.getChildren().addAll(subsystemsTitle, subsystemsDisplay);
+        // Use ScrollPane for scrollable subsystem list
+        ScrollPane subsystemsScroll = new ScrollPane();
+        VBox subsystemsContent = new VBox(8);
+        subsystemsContent.setPadding(new Insets(5));
+        subsystemsScroll.setContent(subsystemsContent);
+        subsystemsScroll.setPrefHeight(200);
+        subsystemsScroll.setStyle("-fx-control-inner-background: #ffffff;");
+
+        subsystemsPanel.getChildren().addAll(subsystemsTitle, subsystemsScroll);
 
         // Buttons
         HBox actionBox = new HBox(10);
@@ -452,17 +456,57 @@ public class CECDatabaseDialog extends Dialog<Void> {
         targetCombo.setOnAction(e -> {
             SystemIdentity target = targetCombo.getValue();
             if (target != null) {
-                List<List<String>> subsystemsByOrder = CECAssemblyService
-                    .subsystemsByOrder(target.getComponents()).getOrDefault(2, new ArrayList<>());
-                StringBuilder sb = new StringBuilder();
-                sb.append("Binary subsystems for ").append(target.getName()).append(":\n");
-                for (List<String> subsys : subsystemsByOrder) {
-                    sb.append("  - ").append(CECAssemblyService.toElementString(subsys)).append("\n");
+                subsystemsContent.getChildren().clear();
+
+                // Get all subsystems by order
+                Map<Integer, List<List<String>>> subsystemsByOrder = CECAssemblyService
+                    .subsystemsByOrder(target.getComponents());
+
+                int K = target.getNumComponents();
+                for (int order = 2; order < K; order++) {
+                    List<List<String>> subsystemsAtOrder = subsystemsByOrder.getOrDefault(order, new ArrayList<>());
+                    if (subsystemsAtOrder.isEmpty()) continue;
+
+                    // Create section for this order
+                    VBox orderSection = new VBox(6);
+                    orderSection.setStyle("-fx-border-color: #d0d0d0; -fx-border-width: 0 0 1 0; -fx-padding: 5;");
+
+                    Label orderLabel = new Label("Order " + order + " Subsystems (K=" + order + "):");
+                    orderLabel.setFont(Font.font("System", FontWeight.BOLD, 10));
+
+                    VBox subsystemList = new VBox(3);
+                    subsystemList.setPadding(new Insets(5, 0, 5, 15));
+
+                    for (List<String> subsys : subsystemsAtOrder) {
+                        String subsysKey = CECAssemblyService.toElementString(subsys);
+                        HBox subsysRow = new HBox(10);
+
+                        Label subsysLabel = new Label(subsysKey);
+                        subsysLabel.setPrefWidth(100);
+
+                        // Check if CEC exists
+                        boolean cecExists = SystemDataLoader.cecExists(subsysKey, target.getStructure(),
+                            target.getPhase(), target.getModel());
+                        Label statusLabel2 = new Label(cecExists ? "✓ Found" : "✗ Missing");
+                        statusLabel2.setPrefWidth(80);
+                        if (cecExists) {
+                            statusLabel2.setStyle("-fx-text-fill: #008000;");
+                        } else {
+                            statusLabel2.setStyle("-fx-text-fill: #ff0000;");
+                        }
+
+                        subsysRow.getChildren().addAll(subsysLabel, statusLabel2);
+                        subsystemList.getChildren().add(subsysRow);
+                    }
+
+                    orderSection.getChildren().addAll(orderLabel, subsystemList);
+                    subsystemsContent.getChildren().add(orderSection);
                 }
-                subsystemsDisplay.setText(sb.toString());
-                statusLabel.setText("Ready to assemble");
+
+                statusLabel.setText("Ready to assemble (" + K + " components)");
                 statusLabel.setStyle("-fx-text-fill: #008000;");
-                LOG.fine("CECDatabaseDialog.Assembly — target system selected: " + target.getId());
+                LOG.fine("CECDatabaseDialog.Assembly — target system selected: " + target.getId()
+                    + " with K=" + K + " components");
             }
         });
 
