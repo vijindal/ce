@@ -118,10 +118,24 @@ public class CalculationService {
         
         // 2. Create calculation context with composition array
         int numComponents = system.getNumComponents();
-        double[] compositionArray = new double[numComponents];
-        compositionArray[0] = 1.0 - request.getComposition();  // Species A
-        compositionArray[1] = request.getComposition();        // Species B
-        // For K ≥ 3, additional components would come from request (not yet implemented)
+        double[] compositionArray;
+
+        // Support both array and scalar composition from request
+        if (request.getCompositionArray() != null) {
+            // Multi-component case: use array directly from request
+            compositionArray = request.getCompositionArray();
+        } else {
+            // Binary case (backward compat): convert scalar to array
+            compositionArray = new double[numComponents];
+            if (numComponents == 2) {
+                compositionArray[0] = 1.0 - request.getComposition();  // Species A
+                compositionArray[1] = request.getComposition();        // Species B
+            } else {
+                throw new IllegalArgumentException(
+                    "Cannot use scalar composition for " + numComponents +
+                    "-component system. Use compositionArray instead.");
+            }
+        }
 
         MCSCalculationContext context = new MCSCalculationContext(
             system,
@@ -257,7 +271,12 @@ public class CalculationService {
         
         listener.logMessage("System: " + system.getName());
         listener.logMessage("Temperature: " + request.getTemperature() + " K");
-        listener.logMessage("Composition: " + request.getComposition());
+        if (request.getCompositionArray() != null) {
+            listener.logMessage("Composition: " + formatCompositionArray(request.getCompositionArray()));
+            listener.logMessage("Components: " + request.getNumComponents());
+        } else {
+            listener.logMessage("Composition: " + request.getComposition() + " (scalar, K=2)");
+        }
         listener.logMessage("Tolerance: " + request.getTolerance());
         listener.logMessage("Parameters validated. Loading required data...");
         
@@ -437,6 +456,21 @@ public class CalculationService {
      * </ul>
      * In all overshoot cases the first {@code ncf} values are taken.</p>
      */
+    /**
+     * Formats a composition array for logging.
+     */
+    private String formatCompositionArray(double[] compositionArray) {
+        StringBuilder sb = new StringBuilder("[");
+        String[] labels = {"A", "B", "C", "D", "E"};
+        for (int i = 0; i < compositionArray.length; i++) {
+            if (i > 0) sb.append(", ");
+            String label = (i < labels.length) ? labels[i] : ("C" + i);
+            sb.append(label).append("=").append(String.format("%.4f", compositionArray[i]));
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
     private double[] mapCECToCvmECI(double[] cecRaw, AllClusterData allData, String modeName) {
         int ncf = allData.getStage2().getNcf();
 
