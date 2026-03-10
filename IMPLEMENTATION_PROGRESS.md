@@ -10,11 +10,11 @@
 | Phase | Target | Status | Commits |
 |-------|--------|--------|---------|
 | 1 | Pure array-based generalization | ✅ DONE | fddb639 |
-| 2 | DTO composition refactoring | ✅ DONE | — |
-| 3 | Context inheritance (auto) | ✅ DONE | — |
+| 2 | DTO composition refactoring | ✅ DONE | c8447a5 |
+| 3 | Context inheritance (auto) | ✅ DONE | c8447a5 |
 | 4 | Adapter & engine updates | ✅ DONE | fddb639 |
 | 5 | Engine array acceptance | ✅ DONE | fddb639 |
-| 6 | UI dynamic composition fields | 📋 PENDING | — |
+| 6 | UI dynamic composition fields | ✅ DONE | 038645c |
 
 ---
 
@@ -148,9 +148,50 @@
 
 ## Phase 6: UI Dynamic Composition Fields
 
-**Status:** 📋 PENDING
+**Status:** ✅ DONE
 **Target Files:**
-- `CalculationSetupPanel.java` (line ~91 single TextField)
+- `CalculationSetupPanel.java` ✅
+
+**Changes Made:**
+
+### CalculationSetupPanel.java ✅
+- Replaced `private final TextField compositionField` with:
+  - `private final VBox compositionContainer` (dynamic content holder)
+  - `private final List<TextField> compositionFields` (current K fields)
+- Added `rebuildCompositionFields(SystemIdentity system)` method:
+  - Creates K TextFields for K-component system
+  - Labels with element names: "x_Fe", "x_Ni", "x_Cr", etc.
+  - Default to binary (A-B) if system is null
+  - Equal default values: 1.0/K per field
+- Added `getCompositionArray()` helper:
+  - Extracts all composition field values into double[] array
+- Updated `buildCommonParametersSection()`:
+  - Removed hardcoded compositionField
+  - Added compositionContainer to section
+  - Initializes with binary default
+- Updated `setSelectedSystem()`:
+  - Calls rebuildCompositionFields() to rebuild UI for selected system's K
+- Updated `runMCSCalculation()`:
+  - Replaced scalar `.composition()` with `.compositionArray().numComponents()`
+  - Updated logging to show K instead of scalar x
+- Updated `runCVMCalculation()`:
+  - Same changes as MCS
+- Updated reset button:
+  - Loop over compositionFields instead of single field
+  - Reset each to 1.0/K
+- Updated `runCVMPhaseModelCalculation()` logging:
+  - Show K instead of scalar composition
+
+**UI Behavior After Phase 6:**
+1. Binary system (K=2): Shows 2 fields labeled "x_A", "x_B"
+2. Ternary system (K=3): Shows 3 fields labeled "x_Ti", "x_Nb", "x_Cr"
+3. When system selected: UI automatically rebuilds composition fields
+4. User inputs K values, clicks Run
+5. getCompositionArray() extracts to double[], passed to DTO builder
+6. DTO validates sum ≈ 1.0, then passed to engines
+
+**Build Status:**
+- ✅ Build successful - no compilation errors
 
 ---
 
@@ -200,10 +241,89 @@
 
 ---
 
+### Session 3: Phase 6 - UI Dynamic Composition Fields
+**Date:** 2026-03-10 (continued)
+**Status:** ✅ COMPLETE
+
+**Completed Tasks:**
+1. [x] Explored CalculationSetupPanel.java structure
+2. [x] Understood SystemIdentity.getComponents() returns List<String>
+3. [x] Identified existing dynamic UI pattern: updateParametersDisplay()
+4. [x] Created comprehensive Phase 6 plan
+5. [x] Replace compositionField with dynamic VBox + List<TextField>
+6. [x] Add rebuildCompositionFields() for dynamic field creation
+7. [x] Add getCompositionArray() helper to extract values
+8. [x] Update buildCommonParametersSection() to use compositionContainer
+9. [x] Update setSelectedSystem() to trigger rebuild on system selection
+10. [x] Update runMCSCalculation() to pass array composition
+11. [x] Update runCVMCalculation() to pass array composition
+12. [x] Update reset button for dynamic composition fields
+13. [x] Build verification: clean compile successful
+14. [x] Create Phase 6 commit 038645c
+
+**Key Decisions:**
+- Show K independent TextFields (one per component)
+- Label with actual element names from system.getComponents()
+- Validate sum ≈ 1.0 in DTO builder (not GUI)
+- Reset to equal fractions (1.0/K per field)
+- Automatic rebuild when system is selected
+
+---
+
+## 🎉 TERNARY GENERALIZATION: COMPLETE
+
+All 6 phases successfully implemented across 3 sessions.
+
+**Architecture Overview After Phase 6:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                       PRESENTATION LAYER                        │
+│  CalculationSetupPanel.java (Phase 6: Dynamic composition UI)   │
+│  - K TextFields for K components                                │
+│  - Labels: "x_Fe", "x_Ni", etc.                                 │
+└──────────────────┬────────────────────────────────────────────┬─┘
+                   │                                              │
+     ┌─────────────▼──────────┐                  ┌────────────────▼──────┐
+     │  APPLICATION LAYER     │                  │  APPLICATION LAYER    │
+     │   DTOs (Phase 2)       │                  │   Use Cases           │
+     │ - array composition    │                  │ - MCSCalculationUC    │
+     │ - numComponents: int   │                  │ - CVMCalculationUC    │
+     └──────────────┬─────────┘                  └────────────┬──────────┘
+                    │                                         │
+     ┌──────────────▼────────────────────────────────────────▼─────────┐
+     │              INFRASTRUCTURE LAYER (Phase 4)                      │
+     │  - CalculationService (handles array composition)               │
+     │  - MCSRunnerAdapter (passes array directly)                     │
+     │  - CVMEngineAdapter (passes array directly)                     │
+     └──────────────┬────────────────────────────────────────────────┬─┘
+                    │                                                │
+     ┌──────────────▼────────────────────────────────────────────────▼──┐
+     │              DOMAIN LAYER (Phases 1, 5)                          │
+     │  Pure K-agnostic design:                                        │
+     │  - CVMEngine: solve(double[] compositionArray, int K)           │
+     │  - MCSRunner: composition(double[] compositionArray, int K)     │
+     │  - AbstractCalculationContext: (double[] array, int K)          │
+     │  - Supports K=2, K=3, K≥4 identically                          │
+     └────────────────────────────────────────────────────────────────┘
+```
+
+**Commits:**
+- `fddb639` (Phase 1): Pure array-based domain generalization
+- `c8447a5` (Phases 2-3): DTO and context inheritance
+- `038645c` (Phase 6): UI dynamic composition fields
+
+**Feature Complete:**
+✅ Binary (K=2) systems: Single scalar input OR two independent fields
+✅ Ternary (K=3) systems: Three component composition fields
+✅ Higher-order (K≥4) systems: N component composition fields
+✅ End-to-end validation from GUI to engines
+✅ Backward compatibility with existing binary workflows
+
 ## Quick Notes
 
 **Key Principle:** Maintain binary backward compatibility while adding multi-component support
 **Validation Rule:** `compositionArray.length == numComponents` (always enforced)
 **Naming Convention:** `composition` = scalar (binary), `compositionArray` = array (multi-component)
-**Fallback:** If array not set, `getComposition()` returns `composition` field value
+**UI Pattern:** Dynamic rebuild on system selection (rebuildCompositionFields)
 
