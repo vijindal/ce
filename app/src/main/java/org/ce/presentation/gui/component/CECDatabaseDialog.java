@@ -2,6 +2,8 @@ package org.ce.presentation.gui.component;
 
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
+import javafx.scene.control.cell.TextFieldTableCell;
+import javafx.util.converter.DoubleStringConverter;
 import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -33,6 +35,11 @@ public class CECDatabaseDialog extends Dialog<Void> {
 
     private final SystemRegistry registry;
     private String workspacePath;
+
+    // Browser tab state
+    private SystemDataLoader.CECData currentCecData;
+    private SystemIdentity currentBrowserSystem;
+    private boolean editMode = false;
 
     public CECDatabaseDialog(SystemRegistry registry) {
         this.registry = registry;
@@ -166,6 +173,116 @@ public class CECDatabaseDialog extends Dialog<Void> {
             }
         });
 
+        // Edit Row button handler
+        editButton.setOnAction(e -> {
+            CecTermRow selected = cecTable.getSelectionModel().getSelectedItem();
+            if (selected == null) {
+                statusLabel.setText("Please select a row to edit");
+                statusLabel.setStyle("-fx-text-fill: #ff9900;");
+                return;
+            }
+            editMode = !editMode;
+            editButton.setText(editMode ? "Done Editing" : "Edit Row");
+            editButton.setStyle(editMode ? "-fx-border-color: #ff9900;" : "");
+
+            // Update column editability
+            aCol.setEditable(editMode);
+            bCol.setEditable(editMode);
+
+            if (editMode) {
+                statusLabel.setText("Editing mode ON - modify values and click 'Done Editing'");
+                statusLabel.setStyle("-fx-text-fill: #ff9900;");
+            } else {
+                statusLabel.setText("Editing complete");
+                statusLabel.setStyle("-fx-text-fill: #008000;");
+            }
+            LOG.fine("CECDatabaseDialog.editButton — edit mode toggled: " + editMode);
+        });
+
+        // Make a and b columns editable
+        aCol.setCellFactory(TextFieldTableCell.forTableColumn(new DoubleStringConverter()));
+        aCol.setOnEditCommit(event -> {
+            CecTermRow row = event.getRowValue();
+            Double newValue = event.getNewValue();
+            if (row != null && newValue != null && currentCecData != null && currentCecData.cecTerms != null) {
+                if (row.index < currentCecData.cecTerms.length) {
+                    currentCecData.cecTerms[row.index].a = newValue;
+                    row.a = newValue;
+                    try {
+                        double temp = Double.parseDouble(tempField.getText());
+                        row.eciAtT = newValue + currentCecData.cecTerms[row.index].b * temp;
+                    } catch (NumberFormatException ignored) {}
+                    LOG.fine("CECDatabaseDialog.aCol — updated index " + row.index + " to a=" + newValue);
+                    cecTable.refresh();
+                }
+            }
+        });
+
+        bCol.setCellFactory(TextFieldTableCell.forTableColumn(new DoubleStringConverter()));
+        bCol.setOnEditCommit(event -> {
+            CecTermRow row = event.getRowValue();
+            Double newValue = event.getNewValue();
+            if (row != null && newValue != null && currentCecData != null && currentCecData.cecTerms != null) {
+                if (row.index < currentCecData.cecTerms.length) {
+                    currentCecData.cecTerms[row.index].b = newValue;
+                    row.b = newValue;
+                    try {
+                        double temp = Double.parseDouble(tempField.getText());
+                        row.eciAtT = currentCecData.cecTerms[row.index].a + newValue * temp;
+                    } catch (NumberFormatException ignored) {}
+                    LOG.fine("CECDatabaseDialog.bCol — updated index " + row.index + " to b=" + newValue);
+                    cecTable.refresh();
+                }
+            }
+        });
+
+        cecTable.setEditable(false);  // Initially not editable
+
+        // Save button handler
+        saveButton.setOnAction(e -> {
+            if (currentCecData == null || currentBrowserSystem == null) {
+                statusLabel.setText("No CEC data loaded to save");
+                statusLabel.setStyle("-fx-text-fill: #ff0000;");
+                return;
+            }
+            try {
+                SystemDataLoader.saveCecData(currentCecData,
+                    Paths.get(System.getProperty("user.home")));
+                statusLabel.setText("Saved successfully to database");
+                statusLabel.setStyle("-fx-text-fill: #008000;");
+                editMode = false;
+                editButton.setText("Edit Row");
+                aCol.setEditable(false);
+                bCol.setEditable(false);
+                cecTable.setEditable(false);
+                LOG.fine("CECDatabaseDialog.saveButton — CEC data saved for system: " + currentBrowserSystem.getId());
+            } catch (Exception ex) {
+                statusLabel.setText("Error saving: " + ex.getMessage());
+                statusLabel.setStyle("-fx-text-fill: #ff0000;");
+                LOG.warning("CECDatabaseDialog.saveButton — error saving: " + ex.getMessage());
+            }
+        });
+
+        // Temperature change handler - recalculate ECI@T
+        tempField.setOnAction(e -> {
+            if (cecTable.getItems() != null && !cecTable.getItems().isEmpty()) {
+                double temp = 298.15;
+                try {
+                    temp = Double.parseDouble(tempField.getText());
+                } catch (NumberFormatException ignored) {}
+                final double finalTemp = temp;
+                cecTable.getItems().forEach(row -> {
+                    if (currentCecData != null && currentCecData.cecTerms != null &&
+                        row.index < currentCecData.cecTerms.length) {
+                        row.eciAtT = currentCecData.cecTerms[row.index].a +
+                                     currentCecData.cecTerms[row.index].b * finalTemp;
+                    }
+                });
+                cecTable.refresh();
+                LOG.fine("CECDatabaseDialog — recalculated ECI@T at T=" + finalTemp + "K");
+            }
+        });
+
         // Initial load
         if (!allSystems.isEmpty()) {
             loadCECData(allSystems.get(0), cecTable, statusLabel, tempField);
@@ -193,28 +310,34 @@ public class CECDatabaseDialog extends Dialog<Void> {
             elements, system.getStructure(), system.getPhase(), system.getModel());
 
         table.getItems().clear();
+        editMode = false;  // Reset edit mode when loading new system
 
         if (cecData.isPresent()) {
             SystemDataLoader.CECData data = cecData.get();
+            this.currentCecData = data;
+            this.currentBrowserSystem = system;
             double temp = 298.15;
             try {
                 temp = Double.parseDouble(tempField.getText());
             } catch (NumberFormatException ignored) {}
 
+            int cecCount = 0;
             if (data.cecTerms != null) {
                 for (int i = 0; i < data.cecTerms.length; i++) {
                     SystemDataLoader.CECTerm term = data.cecTerms[i];
                     double eciAtT = term.a + term.b * temp;
                     table.getItems().add(new CecTermRow(i, term.name, term.a, term.b, eciAtT));
                 }
+                cecCount = data.cecTerms.length;
             } else if (data.cecValues != null) {
                 for (int i = 0; i < data.cecValues.length; i++) {
                     double val = data.cecValues[i];
                     table.getItems().add(new CecTermRow(i, "ECI_" + i, val, 0.0, val));
                 }
+                cecCount = data.cecValues.length;
             }
 
-            statusLabel.setText("Loaded: " + data.cecTerms.length + " terms, Units: " + data.cecUnits);
+            statusLabel.setText("Loaded: " + cecCount + " terms, Units: " + data.cecUnits);
             statusLabel.setStyle("-fx-text-fill: #008000;");
             LOG.fine("CECDatabaseDialog.loadCECData — loaded " + table.getItems().size() + " CEC terms");
         } else {
