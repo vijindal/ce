@@ -6,18 +6,15 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
-import org.ce.domain.cvm.CVMPhaseModel;
 import org.ce.application.dto.CVMCalculationRequest;
-import org.ce.application.dto.PreparationResult;
 import org.ce.application.dto.MCSCalculationRequest;
 import org.ce.infrastructure.registry.SystemRegistry;
 import org.ce.infrastructure.service.BackgroundJobManager;
 import org.ce.application.job.CVMPhaseModelJob;
 import org.ce.application.job.MCSCalculationJob;
-import org.ce.infrastructure.service.CalculationService;
-import org.ce.infrastructure.context.MCSCalculationContext;
 import org.ce.domain.system.SystemIdentity;
 import org.ce.infrastructure.logging.LoggingConfig;
+import org.ce.infrastructure.service.DataManagementAdapter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -276,19 +273,19 @@ public class CalculationSetupPanel extends VBox {
     
     private void runMCSCalculation() {
         if (selectedSystem == null) {
-            showError("No System Selected", 
+            showError("No System Selected",
                 "Please create a system in the System Setup section first.");
             return;
         }
-        
+
         // Validate system has required data
         if (!registry.isClustersComputed(selectedSystem.getId())) {
-            showError("System Not Ready", 
+            showError("System Not Ready",
                 "The selected system has not completed cluster identification.\n" +
                 "Please wait for the identification pipeline to complete.");
             return;
         }
-        
+
         // Build request from UI fields
         MCSCalculationRequest request;
         try {
@@ -314,23 +311,13 @@ public class CalculationSetupPanel extends VBox {
                 + ", nEquil=" + request.getEquilibrationSteps()
                 + ", nAvg=" + request.getAveragingSteps());
 
-        // Create service with GUI listener
+        // Create data management port and GUI listener
+        DataManagementAdapter dataPort = new DataManagementAdapter(registry);
         ResultsPanelProgressListener listener = new ResultsPanelProgressListener(resultsPanel);
-        CalculationService service = new CalculationService(registry, listener);
-
-        // Prepare context (loads data from cache/database)
-        PreparationResult<MCSCalculationContext> result = service.prepareMCS(request);
-
-        if (result.isFailure()) {
-            LOG.warning("CalculationSetupPanel.runMCSCalculation — FAILED: " + result.getErrorMessage().orElse("Unknown error"));
-            showError("MCS Preparation Failed", result.getErrorMessage().orElse("Unknown error"));
-            return;
-        }
-
-        MCSCalculationContext context = result.getContextOrThrow();
 
         // Submit MCS job to BackgroundJobManager for managed execution
-        MCSCalculationJob job = new MCSCalculationJob(context, listener);
+        // All data loading (cluster data, CEC/ECI) happens on background thread via DataManagementPort
+        MCSCalculationJob job = new MCSCalculationJob(request, dataPort, listener);
         jobManager.submitJob(job);
         LOG.fine("CalculationSetupPanel.runMCSCalculation — EXIT: job submitted successfully, id=" + job.getId());
     }
@@ -363,14 +350,14 @@ public class CalculationSetupPanel extends VBox {
 
     private void runCVMCalculation() {
         if (selectedSystem == null) {
-            showError("No System Selected", 
+            showError("No System Selected",
                 "Please create a system in the System Setup section first.");
             return;
         }
-        
+
         // Validate system has required data
         if (!registry.isCfsComputed(selectedSystem.getId())) {
-            showError("System Not Ready", 
+            showError("System Not Ready",
                 "The selected system has not completed CF identification.\n" +
                 "Please wait for the identification pipeline to complete.");
             return;
@@ -392,43 +379,19 @@ public class CalculationSetupPanel extends VBox {
             showError("Invalid Parameter", ex.getMessage());
             return;
         }
-        
-        // Create service with GUI listener
-        ResultsPanelProgressListener listener = new ResultsPanelProgressListener(resultsPanel);
-        CalculationService service = new CalculationService(registry, listener);
-        
-        runCVMPhaseModelCalculation(request, selectedSystem, service, listener);
-    }
-    
-    /**
-     * Runs CVM using the new model-centric approach (Phase Model).
-     */
-    private void runCVMPhaseModelCalculation(
-            CVMCalculationRequest request,
-            SystemIdentity selectedSystem,
-            CalculationService service,
-            ResultsPanelProgressListener listener) {
 
-        LOG.fine("CalculationSetupPanel.runCVMPhaseModelCalculation — ENTER: system=" + selectedSystem.getId()
+        LOG.fine("CalculationSetupPanel.runCVMCalculation — ENTER: system=" + selectedSystem.getId()
                 + ", T=" + request.getTemperature() + " K, K=" + request.getNumComponents());
 
-        // Prepare CVMPhaseModel
-        PreparationResult<CVMPhaseModel> result = service.prepareCVMModel(request);
+        // Create data management port and GUI listener
+        DataManagementAdapter dataPort = new DataManagementAdapter(registry);
+        ResultsPanelProgressListener listener = new ResultsPanelProgressListener(resultsPanel);
 
-        if (result.isFailure()) {
-            LOG.warning("CalculationSetupPanel.runCVMPhaseModelCalculation — FAILED to prepare: "
-                    + result.getErrorMessage().orElse("Unknown error"));
-            showError("CVM Phase Model Preparation Failed",
-                result.getErrorMessage().orElse("Unknown error"));
-            return;
-        }
-
-        CVMPhaseModel model = result.getContextOrThrow();
-
-        // Submit CVMPhaseModelJob to BackgroundJobManager for managed execution
-        CVMPhaseModelJob job = new CVMPhaseModelJob(model, selectedSystem, listener);
+        // Submit CVM job to BackgroundJobManager for managed execution
+        // All data loading (cluster data, CEC/ECI) + first N-R minimization happens on background thread
+        CVMPhaseModelJob job = new CVMPhaseModelJob(request, dataPort, listener);
         jobManager.submitJob(job);
-        LOG.fine("CalculationSetupPanel.runCVMPhaseModelCalculation — EXIT: job submitted, id=" + job.getId());
+        LOG.fine("CalculationSetupPanel.runCVMCalculation — EXIT: job submitted, id=" + job.getId());
     }
     
     private void showError(String title, String message) {

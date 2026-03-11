@@ -1,8 +1,6 @@
 package org.ce.presentation.cli;
 
-import org.ce.domain.cvm.CVMPhaseModel;
 import org.ce.application.dto.CVMCalculationRequest;
-import org.ce.application.dto.PreparationResult;
 import org.ce.application.dto.MCSCalculationRequest;
 import org.ce.infrastructure.service.BackgroundJobManager;
 import org.ce.infrastructure.registry.ResultRepository;
@@ -10,11 +8,13 @@ import org.ce.infrastructure.registry.SystemRegistry;
 import org.ce.application.job.BackgroundJob;
 import org.ce.application.job.CFIdentificationJob;
 import org.ce.application.job.JobListener;
-import org.ce.infrastructure.service.CalculationService;
-import org.ce.presentation.gui.model.CalculationConfig;
-import org.ce.infrastructure.context.MCSCalculationContext;
+import org.ce.application.job.CVMPhaseModelJob;
+import org.ce.application.job.MCSCalculationJob;
+import org.ce.infrastructure.service.DataManagementAdapter;
 import org.ce.domain.system.SystemIdentity;
 import org.ce.domain.system.SystemStatus;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import java.nio.file.Paths;
 import java.util.Scanner;
@@ -298,14 +298,10 @@ public class CEWorkbenchCLI {
                 // Use default
             }
             
-            // Create service with console listener
-            ConsoleProgressListener listener = new ConsoleProgressListener();
-            CalculationService calcService = new CalculationService(registry, listener);
-            
             if (isMCS) {
-                runMCSCalculation(system, temperature, composition, calcService);
+                runMCSCalculation(system, temperature, composition);
             } else {
-                runCVMCalculation(system, temperature, composition, calcService);
+                runCVMCalculation(system, temperature, composition);
             }
             
         } catch (NumberFormatException e) {
@@ -313,8 +309,8 @@ public class CEWorkbenchCLI {
         }
     }
     
-    private void runMCSCalculation(SystemIdentity system, double temperature, 
-                                   double composition, CalculationService calcService) {
+    private void runMCSCalculation(SystemIdentity system, double temperature,
+                                   double composition) {
         // Get MCS-specific parameters
         System.out.print("Supercell size (L) [default 4]: ");
         int supercellSize = 4;
@@ -336,40 +332,67 @@ public class CEWorkbenchCLI {
             String input = scanner.nextLine().trim();
             if (!input.isEmpty()) averaging = Integer.parseInt(input);
         } catch (NumberFormatException e) { /* use default */ }
-        
+
         // Build request
         MCSCalculationRequest request;
         try {
+            int K = system.getNumComponents();
+            double[] compositionArray = new double[K];
+            double defaultVal = 1.0 / K;
+            for (int i = 0; i < K; i++) {
+                compositionArray[i] = defaultVal;
+            }
             request = MCSCalculationRequest.builder()
                 .systemId(system.getId())
                 .temperature(temperature)
-                .composition(composition)
+                .compositionArray(compositionArray)
+                .numComponents(K)
                 .supercellSize(supercellSize)
                 .equilibrationSteps(equilibration)
                 .averagingSteps(averaging)
                 .build();
         } catch (IllegalArgumentException ex) {
-            System.out.println("âœ— Invalid parameters: " + ex.getMessage());
+            System.out.println("✗ Invalid parameters: " + ex.getMessage());
             return;
         }
-        
+
         System.out.println("\n" + "=".repeat(60));
         System.out.println("Starting MCS Calculation");
         System.out.println("=".repeat(60));
-        
-        // Prepare and execute
-        PreparationResult<MCSCalculationContext> result = calcService.prepareMCS(request);
-        
-        if (result.isFailure()) {
-            System.out.println("\nâœ— Preparation failed: " + result.getErrorMessage().orElse("Unknown error"));
-            return;
+
+        // Create data management port and CLI listener
+        DataManagementAdapter dataPort = new DataManagementAdapter(registry);
+        ConsoleProgressListener listener = new ConsoleProgressListener();
+
+        // Submit job and wait for completion
+        MCSCalculationJob job = new MCSCalculationJob(request, dataPort, listener);
+        jobManager.submitJob(job);
+
+        // Block until job completes
+        try {
+            int maxWaitSeconds = 3600; // 1 hour timeout
+            long startTime = System.currentTimeMillis();
+            while (job.isRunning()) {
+                if (System.currentTimeMillis() - startTime > maxWaitSeconds * 1000) {
+                    System.out.println("✗ Job timeout after " + maxWaitSeconds + " seconds");
+                    return;
+                }
+                Thread.sleep(500);
+            }
+
+            if (job.isFailed()) {
+                System.out.println("\n✗ MCS Calculation failed: " + job.getErrorMessage());
+                return;
+            }
+
+            System.out.println("\n✓ MCS Calculation completed successfully!");
+        } catch (InterruptedException ex) {
+            System.out.println("✗ Interrupted while waiting for job: " + ex.getMessage());
         }
-        
-        calcService.executeMCS(result.getContextOrThrow());
     }
-    
-    private void runCVMCalculation(SystemIdentity system, double temperature, 
-                                   double composition, CalculationService calcService) {
+
+    private void runCVMCalculation(SystemIdentity system, double temperature,
+                                   double composition) {
         // Get CVM-specific parameters
         System.out.print("Tolerance [default 1e-6]: ");
         double tolerance = 1e-6;
@@ -381,44 +404,56 @@ public class CEWorkbenchCLI {
         // Build request
         CVMCalculationRequest request;
         try {
+            int K = system.getNumComponents();
+            double[] compositionArray = new double[K];
+            double defaultVal = 1.0 / K;
+            for (int i = 0; i < K; i++) {
+                compositionArray[i] = defaultVal;
+            }
             request = CVMCalculationRequest.builder()
                 .systemId(system.getId())
                 .temperature(temperature)
-                .composition(composition)
+                .compositionArray(compositionArray)
+                .numComponents(K)
                 .tolerance(tolerance)
                 .build();
         } catch (IllegalArgumentException ex) {
-            System.out.println("âœ— Invalid parameters: " + ex.getMessage());
+            System.out.println("✗ Invalid parameters: " + ex.getMessage());
             return;
         }
-        
+
         System.out.println("\n" + "=".repeat(60));
         System.out.println("Starting CVM Phase Model Calculation");
         System.out.println("=".repeat(60));
-        
-        // Prepare and execute via CVMPhaseModel only
-        PreparationResult<CVMPhaseModel> result = calcService.prepareCVMModel(request);
-        
-        if (result.isFailure()) {
-            System.out.println("\nâœ— Preparation failed: " + result.getErrorMessage().orElse("Unknown error"));
-            return;
-        }
 
+        // Create data management port and CLI listener
+        DataManagementAdapter dataPort = new DataManagementAdapter(registry);
+        ConsoleProgressListener listener = new ConsoleProgressListener();
+
+        // Submit job and wait for completion
+        CVMPhaseModelJob job = new CVMPhaseModelJob(request, dataPort, listener);
+        jobManager.submitJob(job);
+
+        // Block until job completes
         try {
-            CVMPhaseModel model = result.getContextOrThrow();
-            CVMPhaseModel.EquilibriumState state = model.getEquilibriumState();
+            int maxWaitSeconds = 3600; // 1 hour timeout
+            long startTime = System.currentTimeMillis();
+            while (job.isRunning()) {
+                if (System.currentTimeMillis() - startTime > maxWaitSeconds * 1000) {
+                    System.out.println("✗ Job timeout after " + maxWaitSeconds + " seconds");
+                    return;
+                }
+                Thread.sleep(500);
+            }
 
-            System.out.println("\n" + "-".repeat(60));
-            System.out.println("CVM Phase Model Result");
-            System.out.println("-".repeat(60));
-            System.out.printf("Gibbs Energy (G): %.8e%n", state.G);
-            System.out.printf("Enthalpy (H):     %.8e%n", state.H);
-            System.out.printf("Entropy (S):      %.8e%n", state.S);
-            System.out.printf("Iterations:       %d%n", state.iterations);
-            System.out.printf("Convergence:      %.6e%n", state.convergenceMeasure);
-            System.out.printf("Time:             %d ms%n", state.getComputationTimeMs());
-        } catch (Exception ex) {
-            System.out.println("\nâœ— CVM Phase Model query failed: " + ex.getMessage());
+            if (job.isFailed()) {
+                System.out.println("\n✗ CVM Calculation failed: " + job.getErrorMessage());
+                return;
+            }
+
+            System.out.println("\n✓ CVM Calculation completed successfully!");
+        } catch (InterruptedException ex) {
+            System.out.println("✗ Interrupted while waiting for job: " + ex.getMessage());
         }
     }
     
