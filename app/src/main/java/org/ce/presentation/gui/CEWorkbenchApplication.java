@@ -14,8 +14,8 @@ import org.ce.infrastructure.registry.ResultRepository;
 import org.ce.infrastructure.registry.SystemRegistry;
 import org.ce.infrastructure.registry.WorkspaceManager;
 import org.ce.presentation.gui.component.CVMModelInspectorDialog;
-import org.ce.presentation.gui.component.CECDatabaseDialog;
 import org.ce.presentation.gui.view.CalculationSetupPanel;
+import org.ce.presentation.gui.view.CECManagementPanel;
 import org.ce.presentation.gui.view.LogConsolePanel;
 import org.ce.presentation.gui.view.SystemRegistryPanel;
 import org.ce.presentation.gui.view.ResultsPanel;
@@ -187,12 +187,6 @@ public class CEWorkbenchApplication extends Application {
         MenuItem preferencesItem = new MenuItem("Preferences");
         editMenu.getItems().add(preferencesItem);
 
-        // Database menu
-        Menu databaseMenu = new Menu("Database");
-        MenuItem cecDatabaseItem = new MenuItem("CEC Database...");
-        cecDatabaseItem.setOnAction(e -> showCECDatabase());
-        databaseMenu.getItems().add(cecDatabaseItem);
-
         // View menu
         Menu viewMenu = new Menu("View");
         CheckMenuItem backgroundJobsItem = new CheckMenuItem("Background Jobs Panel");
@@ -214,7 +208,7 @@ public class CEWorkbenchApplication extends Application {
         MenuItem docsItem = new MenuItem("Documentation");
         helpMenu.getItems().addAll(aboutItem, new SeparatorMenuItem(), docsItem);
 
-        menuBar.getMenus().addAll(fileMenu, editMenu, databaseMenu, viewMenu, toolsMenu, helpMenu);
+        menuBar.getMenus().addAll(fileMenu, editMenu, viewMenu, toolsMenu, helpMenu);
         return menuBar;
     }
     
@@ -225,11 +219,16 @@ public class CEWorkbenchApplication extends Application {
         // Result tab
         Tab resultTab = new Tab("Result", resultsPanel);
 
+        // CEC Database tab (formerly a modal dialog, now inline)
+        CECManagementPanel cecPanel = new CECManagementPanel(systemRegistry);
+        Tab cecTab = new Tab("CEC Database", cecPanel);
+        cecTab.setClosable(false);
+
         // Log tab — captures JUL output from the org.ce hierarchy
         logConsolePanel = new LogConsolePanel(initialLogLevel);
         Tab logTab = new Tab("Log", logConsolePanel);
 
-        tabPane.getTabs().addAll(resultTab, logTab);
+        tabPane.getTabs().addAll(resultTab, cecTab, logTab);
         return tabPane;
     }
     
@@ -269,11 +268,6 @@ public class CEWorkbenchApplication extends Application {
     
     private void showCVMModelInspector() {
         CVMModelInspectorDialog dialog = new CVMModelInspectorDialog(systemRegistry);
-        dialog.showAndWait();
-    }
-
-    private void showCECDatabase() {
-        CECDatabaseDialog dialog = new CECDatabaseDialog(systemRegistry);
         dialog.showAndWait();
     }
 

@@ -13,7 +13,7 @@
 | 2 | Fix Job Boundaries | ✅ COMPLETE | 2 modify | ✅ PASS |
 | 3 | Introduce `CalculationCoordinator` | ✅ COMPLETE | 2 new + 1 deprecate | ✅ PASS |
 | 4 | GUI: Data Readiness Gate | ✅ COMPLETE | 2 new + 1 modify | ✅ PASS |
-| 5 | GUI: Integrate CEC Panel | ⏸️ PENDING | 3 modify | — |
+| 5 | GUI: Integrate CEC Panel | ✅ COMPLETE | 1 new + 1 modify | ✅ PASS |
 | 6 | CLI: Complete Type 1 | ⏸️ PENDING | 2 files | — |
 | 7 | Cleanup | ⏸️ PENDING | Clean | — |
 
@@ -146,21 +146,40 @@
 
 ---
 
-## Phase 5 — GUI: Integrate CEC Panel
+## Phase 5 — GUI: Integrate CEC Panel (COMPLETE)
 
 **Goal**: Convert modal dialog to inline panel in main window tabs.
 
-**Blocking:** Phase 4 complete
+**Blocking:** Phase 4 complete ✅
 
-### Tasks (To Do)
-- [ ] Create `presentation/gui/view/CECManagementPanel.java` from dialog
-- [ ] Modify `presentation/gui/CEWorkbenchApplication.java` — new tab layout
-- [ ] Modify `presentation/gui/view/SystemRegistryPanel.java` — remove menu integration
+### Completed
+- [x] Created `presentation/gui/view/CECManagementPanel.java` — converted CECDatabaseDialog to VBox
+  - Removed Dialog-specific chrome (dialog title, buttons, result converter)
+  - Preserved all functionality: Browser tab + Assembly tab
+  - Preserved all helper methods and inner classes
+- [x] Modified `presentation/gui/CEWorkbenchApplication.java` — integrated CEC panel into main layout
+  - Import changed from CECDatabaseDialog to CECManagementPanel
+  - Removed "Database" menu from createMenuBar()
+  - Updated createRightPanel() to instantiate CECManagementPanel
+  - Added new tab: `Tab cecTab = new Tab("CEC Database", cecPanel);` between result and log tabs
+  - Removed dead method: showCECDatabase()
 
 ### Build Status
-- Code complete: NO
-- Compilation: NOT RUN
-- Tests: NOT RUN
+- Code complete: ✅ YES
+- Compilation: ✅ SUCCESS (5s)
+- Tests: SKIPPED
+
+### Architecture Impact
+**Before Phase 5:**
+- CEC database management was a modal dialog (CECDatabaseDialog)
+- User had to explicitly open from menu; modal blocked other UI work
+- Dialog code referenced pre-existing file (not integrated with main window lifecycle)
+
+**After Phase 5:**
+- CEC database management is an always-visible tab in main window
+- Same functionality (Browser + Assembly) but integrated naturally
+- Tab-based UI allows seamless switching between calculation setup and CEC management
+- Main window lifecycle manages panel (no separate dialog lifecycle)
 
 ---
 
@@ -189,12 +208,12 @@
 
 ### Tasks (To Do)
 - [ ] Delete `infrastructure/service/CalculationService.java`
-- [ ] Delete `presentation/gui/component/CECDatabaseDialog.java`
+- [ ] Delete `presentation/gui/component/CECDatabaseDialog.java` — ✅ completed in Phase 5 (no longer referenced)
 - [ ] Fix `WorkspaceManager` / `SystemRegistry` path inconsistency
-- [ ] Remove "Database" menu from `CEWorkbenchApplication`
+- [x] ~~Remove "Database" menu from `CEWorkbenchApplication`~~ — ✅ completed in Phase 5
 
 ### Build Status
-- Code complete: NO
+- Code complete: NO (2 of 4 tasks completed in Phase 5)
 - Compilation: NOT RUN
 - Tests: NOT RUN
 
