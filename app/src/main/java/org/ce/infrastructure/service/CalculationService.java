@@ -27,18 +27,22 @@ import java.util.logging.Logger;
 
 /**
  * Presentation-layer service for MCS and CVM calculation preparation.
- * 
+ *
+ * <p><strong>DEPRECATED:</strong> This class is replaced by {@link CalculationCoordinator}
+ * in Phase 3 of the Type 1/Type 2 architectural separation. New code should use
+ * CalculationCoordinator for job submission. This class will be removed in Phase 7.</p>
+ *
  * <p><strong>Role:</strong> This service acts as a convenience faÃ§ade for the presentation
  * layer (GUI and CLI), handling infrastructure concerns like cache loading, registry lookups,
  * and ECI database access. It wraps these operations into a simple prepare-execute pattern.</p>
- * 
+ *
  * <p><strong>Architecture Position:</strong>
  * <ul>
  *   <li><strong>Above:</strong> Application use cases ({@link org.ce.application.calculation})</li>
  *   <li><strong>Below:</strong> Presentation controllers (GUI panels, CLI commands)</li>
  *   <li><strong>Coordinates:</strong> Infrastructure adapters (cache, registry, ECI loader)</li>
  * </ul>
- * 
+ *
  * <p><strong>Responsibilities:</strong>
  * <ul>
  *   <li>System lookup from {@link SystemRegistry}</li>
@@ -47,16 +51,18 @@ import java.util.logging.Logger;
  *   <li>Context/model assembly and validation</li>
  *   <li>Thin delegation to application use cases</li>
  * </ul>
- * 
- * <p><strong>Future Direction (PR-9+):</strong> This service could be eliminated
- * by moving preparation logic into infrastructure-layer factories and having GUI/CLI
- * call use cases directly. For now, it remains as a single point of orchestration
- * to avoid duplicating preparation code across presentation layers.</p>
- * 
+ *
+ * <p><strong>Replacement:</strong> Use {@link CalculationCoordinator} for new job submissions.
+ * Coordinator enforces data readiness checks before job submission and moves all data loading
+ * onto background threads (Type 1/Type 2 separation).</p>
+ *
  * @see org.ce.application.mcs.MCSCalculationUseCase
  * @see org.ce.application.cvm.CVMCalculationUseCase
+ * @see CalculationCoordinator
  * @since 2.0 (refactored from direct workbench coupling)
+ * @deprecated use {@link CalculationCoordinator} instead (Phase 3+)
  */
+@Deprecated(since = "Phase 3", forRemoval = true)
 public class CalculationService {
 
     private static final Logger LOG = LoggingConfig.getLogger(CalculationService.class);

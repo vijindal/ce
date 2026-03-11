@@ -11,7 +11,7 @@
 |-------|------|--------|-------|-------|
 | 1 | Introduce `DataManagementPort` | ✅ COMPLETE | 4 new | ✅ PASS |
 | 2 | Fix Job Boundaries | ✅ COMPLETE | 2 modify | ✅ PASS |
-| 3 | Introduce `CalculationCoordinator` | ⏸️ PENDING | 2 files | — |
+| 3 | Introduce `CalculationCoordinator` | ✅ COMPLETE | 2 new + 1 deprecate | ✅ PASS |
 | 4 | GUI: Data Readiness Gate | ⏸️ PENDING | 2 modify | — |
 | 5 | GUI: Integrate CEC Panel | ⏸️ PENDING | 3 modify | — |
 | 6 | CLI: Complete Type 1 | ⏸️ PENDING | 2 files | — |
@@ -68,20 +68,39 @@
 
 ---
 
-## Phase 3 — Introduce `CalculationCoordinator`
+## Phase 3 — Introduce `CalculationCoordinator` (COMPLETE)
 
-**Goal**: Hollow out `CalculationService`, introduce new coordinator.
+**Goal**: Hollow out `CalculationService`, introduce new coordinator for readiness checking and job submission.
 
-**Blocking:** Phase 2 complete
+**Blocking:** Phase 2 complete ✅
 
-### Tasks (To Do)
-- [ ] Create `infrastructure/service/CalculationCoordinator.java`
-- [ ] Mark `infrastructure/service/CalculationService.java` deprecated
+### Completed
+- [x] Created `application/dto/DataReadinessStatus.java` — record with cluster/cec/cfs availability flags and factory methods
+- [x] Created `infrastructure/service/CalculationCoordinator.java` — new orchestrator for job submission with readiness validation
+  - `submitMCS(request, listener)` — submits MCS job after checking clusters + CEC
+  - `submitCVM(request, listener)` — submits CVM job after checking clusters + CEC + CFs
+  - `checkMCSReadiness(systemId)` → DataReadinessStatus
+  - `checkCVMReadiness(systemId)` → DataReadinessStatus
+  - Throws IllegalStateException with detailed message if preconditions not met
+- [x] Marked `infrastructure/service/CalculationService.java` as @Deprecated with forRemoval=true and reference to CalculationCoordinator
 
 ### Build Status
-- Code complete: NO
-- Compilation: NOT RUN
-- Tests: NOT RUN
+- Code complete: ✅ YES
+- Compilation: ✅ SUCCESS (5s)
+- Tests: SKIPPED
+
+### Architecture Summary
+**CalculationCoordinator** becomes the primary job submission facade:
+- Enforces readiness preconditions before job submission
+- Provides transparent, type-safe interface for both GUI and CLI
+- Replaces the data-loading responsibilities of CalculationService
+- Eliminates duplicated preparation code in presentation controllers
+- Jobs receive request + DataManagementPort, perform all data loading on background thread
+
+**DataReadinessStatus** provides clear, actionable feedback:
+- `isReadyForMCS()` → clusters && CEC available
+- `isReadyForCVM()` → clusters && CEC && CFs available
+- Factory methods (missingClusters, missingCEC, missingCFs) for each failure case
 
 ---
 
