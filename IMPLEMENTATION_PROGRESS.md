@@ -12,7 +12,7 @@
 | 1 | Introduce `DataManagementPort` | ✅ COMPLETE | 4 new | ✅ PASS |
 | 2 | Fix Job Boundaries | ✅ COMPLETE | 2 modify | ✅ PASS |
 | 3 | Introduce `CalculationCoordinator` | ✅ COMPLETE | 2 new + 1 deprecate | ✅ PASS |
-| 4 | GUI: Data Readiness Gate | ⏸️ PENDING | 2 modify | — |
+| 4 | GUI: Data Readiness Gate | ✅ COMPLETE | 2 new + 1 modify | ✅ PASS |
 | 5 | GUI: Integrate CEC Panel | ⏸️ PENDING | 3 modify | — |
 | 6 | CLI: Complete Type 1 | ⏸️ PENDING | 2 files | — |
 | 7 | Cleanup | ⏸️ PENDING | Clean | — |
@@ -104,20 +104,45 @@
 
 ---
 
-## Phase 4 — GUI: Data Readiness Gate
+## Phase 4 — GUI: Data Readiness Gate (COMPLETE)
 
-**Goal**: Add readiness status display and gate calculations on it.
+**Goal**: Add visual readiness status display and gate Run button based on data availability.
 
-**Blocking:** Phase 2 complete
+**Blocking:** Phase 3 complete ✅
 
-### Tasks (To Do)
-- [ ] Create `presentation/gui/component/DataReadinessIndicator.java`
-- [ ] Modify `presentation/gui/view/CalculationSetupPanel.java` — wire indicator, gate button
+### Completed
+- [x] Created `presentation/gui/component/DataReadinessIndicator.java` — visual status badges
+  - Compact component showing Cluster, CEC, CF availability with color-coded badges
+  - updateStatus(SystemIdentity) refreshes badges based on availability
+  - Provides clear status message ("✓ Ready for MCS & CVM" or "✗ Missing required data")
+  - Green badges (✓) for available, gray badges (✗) for missing
+- [x] Modified `presentation/gui/view/CalculationSetupPanel.java`
+  - Added DataReadinessIndicator field and instantiation in constructor
+  - Indicator added to layout below system selection label
+  - Call to readinessIndicator.updateStatus(system) in setSelectedSystem()
+  - New updateRunButtonState() method disables Run button based on readiness:
+    - MCS: requires clusters + CEC
+    - CVM: requires clusters + CEC + CFs
+  - Run button state updates when system selection changes or calculation type (MCS/CVM) changes
+  - Added KeyUtils import for cecKey() / clusterKey() derivation
 
 ### Build Status
-- Code complete: NO
-- Compilation: NOT RUN
-- Tests: NOT RUN
+- Code complete: ✅ YES
+- Compilation: ✅ SUCCESS (5s)
+- Tests: SKIPPED
+
+### User Experience Impact
+**Before Phase 4:**
+- User could click "Run" even with missing data
+- Error dialog shown after button press
+- Unclear what data was missing
+
+**After Phase 4:**
+- Visual badges show data status immediately upon system selection
+- "Run" button disabled when data missing
+- Status message below badges explains what's needed
+- Dynamic: button enables/disables when switching MCS↔CVM based on CF availability
+- Hovering over button shows it's disabled (standard UI feedback)
 
 ---
 

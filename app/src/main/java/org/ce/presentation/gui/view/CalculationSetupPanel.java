@@ -15,6 +15,8 @@ import org.ce.application.job.MCSCalculationJob;
 import org.ce.domain.system.SystemIdentity;
 import org.ce.infrastructure.logging.LoggingConfig;
 import org.ce.infrastructure.service.DataManagementAdapter;
+import org.ce.infrastructure.registry.KeyUtils;
+import org.ce.presentation.gui.component.DataReadinessIndicator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,7 +42,8 @@ public class CalculationSetupPanel extends VBox {
     // Explicit system selection (set by SystemRegistryPanel)
     private SystemIdentity selectedSystem;
     private final Label selectedSystemLabel;
-    
+    private final DataReadinessIndicator readinessIndicator;
+
     // Common parameters
     private final TextField temperatureField;
     private final VBox compositionContainer;     // Dynamic composition fields container
@@ -53,7 +56,10 @@ public class CalculationSetupPanel extends VBox {
     
     // CVM parameters
     private final TextField cvmToleranceField;
-    
+
+    // Action button
+    private Button runButton;
+
     public CalculationSetupPanel(SystemRegistry registry, BackgroundJobManager jobManager, ResultsPanel resultsPanel) {
         this.registry = registry;
         this.jobManager = jobManager;
@@ -71,6 +77,9 @@ public class CalculationSetupPanel extends VBox {
         // Selected system display
         selectedSystemLabel = new Label("No system selected");
         selectedSystemLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #666; -fx-font-style: italic;");
+
+        // Data readiness indicator
+        readinessIndicator = new DataReadinessIndicator(new DataManagementAdapter(registry));
 
         // Calculation type toggle
         Label calcTypeLabel = new Label("Type");
@@ -106,9 +115,15 @@ public class CalculationSetupPanel extends VBox {
         parametersContainer.setPadding(new Insets(5, 0, 0, 0));
         updateParametersDisplay();
 
-        // Toggle handler to switch between MCS and CVM
-        mcsToggle.selectedProperty().addListener((obs, oldVal, newVal) -> updateParametersDisplay());
-        cvmToggle.selectedProperty().addListener((obs, oldVal, newVal) -> updateParametersDisplay());
+        // Toggle handler to switch between MCS and CVM (also update button state)
+        mcsToggle.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            updateParametersDisplay();
+            updateRunButtonState();
+        });
+        cvmToggle.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            updateParametersDisplay();
+            updateRunButtonState();
+        });
 
         // Action buttons
         HBox actionRow = buildActionButtons();
@@ -117,6 +132,7 @@ public class CalculationSetupPanel extends VBox {
         getChildren().addAll(
             title,
             selectedSystemLabel,
+            readinessIndicator,
             calcTypeRow,
             new Separator(),
             commonSection,
@@ -238,11 +254,11 @@ public class CalculationSetupPanel extends VBox {
     }
 
     private HBox buildActionButtons() {
-        Button runButton = new Button("Run");
+        runButton = new Button("Run");
         Button resetButton = new Button("Reset");
         runButton.setStyle("-fx-font-size: 10; -fx-padding: 6 20;");
         resetButton.setStyle("-fx-font-size: 10; -fx-padding: 6 20;");
-        
+
         // Run button handler - execute MCS or CVM
         runButton.setOnAction(e -> {
             if (mcsToggle.isSelected()) {
@@ -251,7 +267,7 @@ public class CalculationSetupPanel extends VBox {
                 runCVMCalculation();
             }
         });
-        
+
         // Reset button handler
         resetButton.setOnAction(e -> {
             temperatureField.setText("7.0");
@@ -266,9 +282,34 @@ public class CalculationSetupPanel extends VBox {
             mcsAveragingField.setText("10000");
             cvmToleranceField.setText("1e-6");
         });
-        
+
         HBox row = new HBox(8, runButton, resetButton);
         return row;
+    }
+
+    /**
+     * Updates the Run button enabled state based on data readiness.
+     * For MCS: requires clusters + CEC
+     * For CVM: requires clusters + CEC + CFs
+     */
+    private void updateRunButtonState() {
+        if (selectedSystem == null) {
+            runButton.setDisable(true);
+            return;
+        }
+
+        DataManagementAdapter dataPort = new DataManagementAdapter(registry);
+        boolean clustersReady = dataPort.isClustersComputed(selectedSystem.getId());
+        boolean cecReady = dataPort.isCecAvailable(KeyUtils.cecKey(selectedSystem));
+        boolean cfsReady = dataPort.isCfsComputed(selectedSystem.getId());
+
+        if (mcsToggle.isSelected()) {
+            // MCS: needs clusters + CEC
+            runButton.setDisable(!(clustersReady && cecReady));
+        } else {
+            // CVM: needs clusters + CEC + CFs
+            runButton.setDisable(!(clustersReady && cecReady && cfsReady));
+        }
     }
     
     private void runMCSCalculation() {
@@ -337,6 +378,10 @@ public class CalculationSetupPanel extends VBox {
             selectedSystemLabel.setText("No system selected");
             selectedSystemLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #666; -fx-font-style: italic;");
         }
+        // Update readiness indicator
+        readinessIndicator.updateStatus(system);
+        // Update Run button state
+        updateRunButtonState();
         // Rebuild composition fields based on selected system's numComponents
         rebuildCompositionFields(system);
     }
