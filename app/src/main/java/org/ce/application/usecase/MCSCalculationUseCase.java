@@ -7,7 +7,7 @@ import org.ce.domain.model.result.CalculationFailure;
 import org.ce.domain.model.result.CalculationResult;
 import org.ce.domain.model.result.EngineMetrics;
 import org.ce.domain.model.result.EquilibriumState;
-import org.ce.infrastructure.context.MCSCalculationContext;
+import org.ce.application.dto.MCSCalculationContext;
 import org.ce.infrastructure.logging.LoggingConfig;
 
 import java.util.concurrent.CancellationException;

@@ -1,7 +1,7 @@
 package org.ce.application.port;
 
 import org.ce.domain.model.result.EquilibriumState;
-import org.ce.infrastructure.context.MCSCalculationContext;
+import org.ce.application.dto.MCSCalculationContext;
 
 import java.util.function.BooleanSupplier;
 

@@ -7,7 +7,7 @@ import org.ce.domain.model.result.CalculationFailure;
 import org.ce.domain.model.result.CalculationResult;
 import org.ce.domain.model.result.EngineMetrics;
 import org.ce.domain.model.result.EquilibriumState;
-import org.ce.infrastructure.context.CVMCalculationContext;
+import org.ce.application.dto.CVMCalculationContext;
 
 /**
  * Application use case for CVM free-energy minimization.

@@ -1,4 +1,4 @@
-package org.ce.infrastructure.context;
+package org.ce.application.dto;
 
 import org.ce.domain.model.data.AllClusterData;
 import org.ce.domain.system.SystemIdentity;
@@ -98,4 +98,3 @@ public class CVMCalculationContext extends AbstractCalculationContext {
         return sb.toString();
     }
 }
-

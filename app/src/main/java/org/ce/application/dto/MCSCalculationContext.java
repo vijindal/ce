@@ -1,4 +1,4 @@
-package org.ce.infrastructure.context;
+package org.ce.application.dto;
 
 import org.ce.domain.identification.result.ClusCoordListResult;
 import org.ce.domain.model.data.AllClusterData;
@@ -119,5 +119,3 @@ public class MCSCalculationContext extends AbstractCalculationContext {
         return sb.toString();
     }
 }
-
-

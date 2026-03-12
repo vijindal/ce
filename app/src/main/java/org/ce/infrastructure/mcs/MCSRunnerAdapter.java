@@ -3,7 +3,7 @@ package org.ce.infrastructure.mcs;
 import org.ce.application.port.MCSProgressPort;
 import org.ce.application.port.MCSRunnerPort;
 import org.ce.domain.model.result.EquilibriumState;
-import org.ce.infrastructure.context.MCSCalculationContext;
+import org.ce.application.dto.MCSCalculationContext;
 import org.ce.domain.mcs.MCResult;
 import org.ce.domain.mcs.MCSRunner;
 
