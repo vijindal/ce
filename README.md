@@ -412,8 +412,8 @@ Reads physical problem description from files.
 | Class | Role |
 |---|---|
 | `InputLoader` | Top-level API: `parseClusterFile`, `parseSymmetryFile` |
-| `ClusterParser` | Parses `cluster/A2-T.txt` → `List<Cluster>` |
-| `SpaceGroupParser` | Parses `symmetry/A2-SG.txt` → `List<SymmetryOperation>` |
+| `ClusterParser` | Parses `cluster/A2-T.txt` → `List<Cluster>` (A2 = Pearson structural type) |
+| `SpaceGroupParser` | Parses `symmetry/A2-SG.txt` → `List<SymmetryOperation>` (A2 = Pearson structural type) |
 
 ---
 
@@ -478,18 +478,18 @@ Monte Carlo engine path.
 
 | Class | Status | Role |
 |---|---|---|
-| `EmbeddingGenerator` | Done | All cluster instances in L*L*L supercell |
+| `EmbeddingGenerator` | Done | All cluster instances in L×L×L supercell |
 | `EmbeddingData` | Done | Three views: flat, by-site, by type+site |
 | `Embedding` | Done | One cluster instance: int[] site indices |
 | `ClusterTemplate` | Done | Displacement vectors for supercell tiling |
 | `Vector3DKey` | Done | HashMap-compatible Vector3D wrapper |
-| `LatticeConfig` | Done | Flat int[] spin array, length N = 2*L^3 |
-| `LocalEnergyCalc` | Done | delta-E for site i via EmbeddingData + ECIs |
+| `LatticeConfig` | Done | Flat int[] spin array, length N = 2·L³ |
+| `LocalEnergyCalc` | Done | ΔE for site i via EmbeddingData + ECIs |
 | `ExchangeStep` | Done | Canonical Metropolis step (conserves composition) |
 | `FlipStep` | Done | Grand-canonical step (single spin flip) |
 | `MCEngine` | Done | Metropolis loop, equilibration + averaging phases |
-| `MCSampler` | Done | Running averages: CFs, E, E^2 |
-| `MCSRunner` | Done | Top-level orchestrator -> MCResult |
+| `MCSampler` | Done | Running averages: CFs, E, E² |
+| `MCSRunner` | Done | Top-level orchestrator → MCResult |
 | `MCResult` | Done | energyPerSite, heatCapacity, acceptRate |
 | `MCSUpdate` | Done | Application event model for MCS progress |
 
@@ -526,19 +526,23 @@ Package consolidation reduced 47 packages to 32 (Mar 8, 2026).
 
 ## Resource Files
 
+Crystal structures are identified by **Pearson symbols** (e.g., A2, B2, A1, L1₂, L2₁) which are **single, complete structural designations** combining lattice type and atomic ordering. A2 = disordered BCC; B2 = ordered BCC; A1 = disordered FCC. These are not separated into independent "structure" and "phase" choices:
+
 ```
 src/main/resources/
 ├── cluster/
-│   ├── A2-T.txt          BCC tetrahedron maximal cluster
-│   ├── B2-T.txt          B2 ordered-phase tetrahedron cluster
-│   └── A1-TO.txt         FCC tetrahedron-octahedron cluster
+│   ├── A2-T.txt          A2 tetrahedron maximal cluster (disordered BCC)
+│   ├── B2-T.txt          B2 tetrahedron cluster (ordered BCC)
+│   └── A1-TO.txt         A1 tetrahedron-octahedron cluster (disordered FCC)
 └── symmetry/
-    ├── A2-SG.txt         A2 (BCC) space group operations
+    ├── A2-SG.txt         A2 space group operations (disordered BCC)
     ├── A2-SG_mat.txt     A2 space group (matrix format)
-    ├── B2-SG.txt         B2 space group operations
+    ├── B2-SG.txt         B2 space group operations (ordered BCC)
     ├── B2-SG_mat.txt     B2 space group (matrix format)
-    └── A1-SG.txt         A1 (FCC) space group operations
+    └── A1-SG.txt         A1 space group operations (disordered FCC)
 ```
+
+**Nomenclature:** A2, B2, A1 are Pearson symbols from crystallography. Each is a **complete structural type** — never select "structure=BCC" independently from "phase=A2"; always work with indivisible designations like A2_T or B2_T.
 
 ---
 

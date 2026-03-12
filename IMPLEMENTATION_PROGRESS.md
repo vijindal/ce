@@ -288,7 +288,7 @@ because previous attempts patch symptoms (CEC files, cache values) without fixin
 4. **`ResultsPanel` (presentation/gui/):** Remove debug `System.out.println()` statements.
 
 5. **`Ti-Nb/cec.json`:** Fix CEC value order from `[pair1, pair2, tri, tet]` to standard
-   `[tet, tri, pair1, pair2]` matching BCC_A2_T model CF ordering.
+   `[tet, tri, pair1, pair2]` matching A2_T structural type CF ordering (A2 = Pearson symbol, T = tetrahedron model).
 
 ### Design Outcome
 - `allData.getStage2().getNcf()` is the definitive ECI length source

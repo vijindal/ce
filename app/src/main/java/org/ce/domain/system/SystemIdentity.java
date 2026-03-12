@@ -15,9 +15,11 @@ public final class SystemIdentity {
 
     private final String id;
     private final String name;
-    private final String structure;     // e.g., "BCC", "FCC"
-    private final String phase;         // e.g., "A2", "B2", "L12"
-    private final String model;         // e.g., "T" (tetrahedron), "P" (pair)
+    private final String structure;     // e.g., "BCC", "FCC" — lattice type component of Pearson symbol
+    private final String phase;         // e.g., "A2", "B2", "L12" — Pearson symbol (ordering component)
+                                        // IMPORTANT: structure + phase together form an INDIVISIBLE designation
+                                        // (e.g., BCC/A2 means "disordered BCC", not "structure" and "phase" independently)
+    private final String model;         // e.g., "T" (tetrahedron), "Q" (quadruplet) — CVM cluster model
     private final List<String> components;  // e.g., ["Fe", "Ni"]
 
     // Transformation configuration (set once during system setup)
@@ -96,6 +98,10 @@ public final class SystemIdentity {
     /**
      * Generates a system ID from components, structure, phase, and model.
      * Format: Elements_Structure_Phase_Model (e.g., "Ti-Nb_BCC_A2_T")
+     *
+     * <p><strong>IMPORTANT:</strong> Structure + Phase together form an INDIVISIBLE structural designation.
+     * For example, BCC/A2 = "disordered BCC" (Pearson symbol A2), not separate "structure=BCC" and "phase=A2" choices.
+     * Always use complete designations like A2_T or B2_T; never combine unrelated structure/phase/model combinations.</p>
      */
     public static String generateSystemId(String elements, String structure, String phase, String model) {
         return elements.replace(",", "-").replace(" ", "") + "_" + structure + "_" + phase + "_" + model;
