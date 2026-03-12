@@ -378,6 +378,29 @@ Retire `CVMResult` and `MCSResult` as the adapter output types.
 
 ---
 
+## Phase 9 — Unified CVM/MCS Pipeline: Step 4 — MCSPhaseModel (Mar 12, 2026)
+
+### Goal
+Create `MCSPhaseModel` as the MCS domain analog of `CVMPhaseModel` — same conceptual API,
+different internal engine. Closes the [ARCHITECTURAL] gap: MCS now has a proper phase model.
+
+### Changes
+- `domain/mcs/MCSPhaseModel.java` — **new** class mirroring CVMPhaseModel pattern:
+  - Immutable: `AllClusterData`, `double[] ncfEci`, `numComponents`
+  - Mutable: `temperature`, `moleFractions`, `supercellSize`, `nEquil`, `nAvg`, `seed`
+  - Cached: `EquilibriumState cachedState` (null when dirty)
+  - Lazy: `ensureRun()` — only re-runs MC if parameters changed
+  - Factory: `MCSPhaseModel.create(allData, eci, K, T, xFrac)` — runs first simulation
+  - Public: `getEquilibriumState()`, `minimize(T, xFrac)`, `minimizeBinary(T, xB)`
+  - Delegates to `MCSRunner.Builder` internally
+
+### Result
+- Build: ✅ Clean compilation (no errors)
+- Tests: ✅ All 104 tests pass
+- CVM and MCS now both have proper domain phase models
+
+---
+
 ## Notes
 
 - All work tracked as phases; each phase must pass clean compilation before proceeding

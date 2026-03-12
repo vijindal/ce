@@ -1,7 +1,7 @@
 # CE Workbench - Project Status
 
-**Last Updated:** March 12, 2026 (evening)
-**Version:** 0.3.10
+**Last Updated:** March 12, 2026 (late evening)
+**Version:** 0.3.11
 **Compilation:** ✅ Successful (clean, no warnings)
 **Tests:** ✅ All 104 tests pass (CVM binary/ternary, CEC assembly, architecture)
 **GUI Status:** ✅ Fully Functional
@@ -14,6 +14,7 @@
 **Unified Pipeline Phase 9.1:** ✅ hmixPerSite propagated through MCS pipeline (data loss bug fixed)
 **Unified Pipeline Phase 9.2:** ✅ EquilibriumState + EngineMetrics types created; ThermodynamicResult expanded
 **Unified Pipeline Phase 9.3:** ✅ Both ports/adapters/use cases migrated to return EquilibriumState
+**Unified Pipeline Phase 9.4:** ✅ MCSPhaseModel created — mirrors CVMPhaseModel pattern (lazy run, cached state)
 
 ---
 
