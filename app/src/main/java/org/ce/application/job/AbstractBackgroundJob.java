@@ -34,7 +34,7 @@ public abstract class AbstractBackgroundJob implements BackgroundJob {
     public AbstractBackgroundJob(String id, String name, SystemIdentity system) {
         this.id = Objects.requireNonNull(id, "id");
         this.name = Objects.requireNonNull(name, "name");
-        this.system = Objects.requireNonNull(system, "system");
+        this.system = system;  // Nullable: jobs may load system dynamically in run()
     }
     
     @Override
