@@ -8,7 +8,6 @@ import org.ce.domain.cvm.CVMModelInput;
 import org.ce.domain.model.data.AllClusterData;
 import org.ce.domain.system.SystemIdentity;
 import org.ce.infrastructure.cvm.CVMPhaseModelExecutor;
-import org.ce.infrastructure.data.ECIMapper;
 import org.ce.infrastructure.logging.LoggingConfig;
 import org.ce.infrastructure.registry.KeyUtils;
 
@@ -123,9 +122,6 @@ public class CVMPhaseModelJob extends AbstractBackgroundJob {
                 return;
             }
 
-            // Map ncf-length ECI to CVM format (strip point/empty if needed)
-            double[] cvmEci = ECIMapper.mapCECToCvmECI(nciEciOpt.get(), allData);
-
             // ========== PHASE 3: Create CVMPhaseModel (First Minimization) ==========
             setStatusMessage("Creating CVM Phase Model (first minimization)...");
             setProgress(30);
@@ -147,7 +143,7 @@ public class CVMPhaseModelJob extends AbstractBackgroundJob {
             // CVMPhaseModel.create() expects scalar composition for binary systems
             // For multi-component, we'll use the first composition value (simplified)
             double scalarComposition = composition[0];
-            model = CVMPhaseModel.create(cvmInput, cvmEci, request.getTemperature(),
+            model = CVMPhaseModel.create(cvmInput, nciEciOpt.get(), request.getTemperature(),
                 scalarComposition);
 
             if (model.getGradientNorm() > request.getTolerance() * 10) {

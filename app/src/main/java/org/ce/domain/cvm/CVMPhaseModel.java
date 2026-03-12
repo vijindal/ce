@@ -202,12 +202,14 @@ public class CVMPhaseModel {
      * @throws IllegalArgumentException if length mismatch
      */
     public void setECI(double[] newECI) throws IllegalArgumentException {
-        if (newECI == null || newECI.length != this.ncf) {
+        if (newECI == null || newECI.length < this.ncf) {
             throw new IllegalArgumentException(
-                "ECI length mismatch: got " + (newECI == null ? 0 : newECI.length) +
-                ", expected " + this.ncf);
+                "ECI too short: got " + (newECI == null ? 0 : newECI.length) +
+                ", expected >= " + this.ncf);
         }
-        this.eci = newECI.clone();
+        // Accept ncf+1 or ncf+2 arrays (raw CEC with trailing point/empty cluster terms)
+        // by trimming to ncf. This avoids an infrastructure dependency in the job layer.
+        this.eci = Arrays.copyOf(newECI, this.ncf);
         invalidateMinimization();
     }
 
