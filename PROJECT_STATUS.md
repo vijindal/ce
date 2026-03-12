@@ -1,7 +1,7 @@
 # CE Workbench - Project Status
 
-**Last Updated:** March 12, 2026 (afternoon)
-**Version:** 0.3.9
+**Last Updated:** March 12, 2026 (evening)
+**Version:** 0.3.10
 **Compilation:** ✅ Successful (clean, no warnings)
 **Tests:** ✅ All 104 tests pass (CVM binary/ternary, CEC assembly, architecture)
 **GUI Status:** ✅ Fully Functional
@@ -11,6 +11,7 @@
 **CVM Expression Audit (G, Gu, Guu):** ✅ Fixed — unified evaluation path + iteration diagnostics
 **JUL Logging:** ✅ Complete — all three calculation types instrumented
 **ECI Standardization:** ✅ Phase 8 Complete — MCS & CVM both use ncf-length ECIs, no expansion needed
+**Unified Pipeline Phase 9.1:** ✅ hmixPerSite propagated through MCS pipeline (data loss bug fixed)
 
 ---
 

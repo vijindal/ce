@@ -310,9 +310,30 @@ because previous attempts patch symptoms (CEC files, cache values) without fixin
 
 ---
 
+---
+
+## Phase 9 — Unified CVM/MCS Pipeline: Step 1 — Fix hmixPerSite Data Loss (Mar 12, 2026)
+
+### Goal
+Propagate `hmixPerSite` (mixing enthalpy from CF formula) from `MCResult` through to `MCSResult`.
+Previously computed correctly in the domain but silently dropped at the adapter boundary.
+
+### Changes
+- `domain/model/result/MCSResult.java` — added `hmixPerSite` record component after `energyPerSite`;
+  updated `fromEngine()` factory signature (11 params); updated `summary()` to show Hmix/site
+- `infrastructure/mcs/MCSRunnerAdapter.java` — pass `mcResult.getHmixPerSite()` to `fromEngine()`
+
+### Result
+- Build: ✅ Clean compilation (no errors)
+- Tests: ✅ All 104 tests pass
+- `MCSResult.hmixPerSite` now carries `Σ hmixCoeff[t]·⟨u_t⟩` — same CE formula as CVM enthalpy
+
+---
+
 ## Notes
 
 - All work tracked as phases; each phase must pass clean compilation before proceeding
 - ThreadVerification: add `assert !Platform.isFxApplicationThread()` in job run() methods post-Phase 2
 - ECILoader.loadOrInputECI() callsite must be removed from background paths (high priority in Phase 2)
 - Phase 8 resolves the persistent ECI length mismatch by treating ncf as the canonical length source
+- Phase 9+ implements the unified CVM/MCS pipeline vision (see CLAUDE_SESSION_HANDOFF.md)

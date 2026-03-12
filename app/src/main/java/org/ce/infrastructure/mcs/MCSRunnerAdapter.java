@@ -72,6 +72,7 @@ public final class MCSRunnerAdapter implements MCSRunnerPort {
                 mcResult.getComposition(),
                 mcResult.getAvgCFs(),
                 mcResult.getEnergyPerSite(),
+                mcResult.getHmixPerSite(),
                 mcResult.getHeatCapacityPerSite(),
                 mcResult.getAcceptRate(),
                 mcResult.getNEquilSweeps(),
