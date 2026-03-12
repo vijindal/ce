@@ -260,8 +260,59 @@ All deprecated code from Type 1/2 separation has been removed. Application build
 
 ---
 
+## Phase 8 — ECI Standardization: ncf-length throughout MCS (Mar 12, 2026 — COMPLETE)
+
+**Goal:** Use `allData.getStage2().getNcf()` as single source of truth for ECI length. Both CVM
+and MCS use ncf-length arrays; MCS engine is safe to use ncf by skipping sub-pair cluster
+embeddings (which have ECI=0 always in canonical ensemble).
+
+### Root Cause
+The "ECI length (4) does not match cluster type count (6)" error persisted across sessions
+because previous attempts patch symptoms (CEC files, cache values) without fixing code:
+1. `MCSCalculationJob` expanded ncf→tc using WRONG tc source (`stage1.getTc()` = 5)
+2. `MCSCalculationContext` validated against `disClusterData.getTc()` = 6 → mismatch
+3. `EmbeddingGenerator` generated embeddings for ALL cluster types (indices 0–5) including
+   point/empty, but ncf-length ECI arrays (4 elements) crashed `LocalEnergyCalc` on access to `eci[4]`, `eci[5]`
+
+### Fixes Applied
+1. **`EmbeddingGenerator.buildTemplates()` (domain/mcs/):** Skip sub-pair clusters (size < 2).
+   Point (size=1) and empty (size=0) clusters have ECI=0 always (constants in canonical ensemble).
+   Effect: Embedding type indices are all < ncf, ncf-length ECI is safe.
+
+2. **`MCSCalculationContext.getClusterTypeCount()` (infrastructure/context/):** Return ncf from
+   Stage 2, not tc from disClusterData. ECI arrays are ncf-length; validation target must match.
+
+3. **`MCSCalculationJob` (application/job/, line 135):** Remove expansion. Pass ncf-length ECI
+   directly since EmbeddingGenerator now skips sub-pair types.
+
+4. **`ResultsPanel` (presentation/gui/):** Remove debug `System.out.println()` statements.
+
+5. **`Ti-Nb/cec.json`:** Fix CEC value order from `[pair1, pair2, tri, tet]` to standard
+   `[tet, tri, pair1, pair2]` matching BCC_A2_T model CF ordering.
+
+### Design Outcome
+- `allData.getStage2().getNcf()` is the definitive ECI length source
+- Both CVM and MCS use ncf-length ECI from database (no expansion)
+- Architecturally clean: no workarounds, no bounds guards in `LocalEnergyCalc`
+- CVM path unchanged; MCS path simplified
+
+### Testing
+- Build: ✅ Clean compilation (no errors/warnings)
+- Tests: ✅ All 104 tests pass (including CVM binary/ternary, architecture checks)
+- Verification: 5 files modified (1 commit), all changes architectural
+
+### Files Modified
+- `domain/mcs/EmbeddingGenerator.java` — skip sub-pair clusters
+- `infrastructure/context/MCSCalculationContext.java` — validate against ncf
+- `application/job/MCSCalculationJob.java` — remove expansion
+- `presentation/gui/view/ResultsPanel.java` — remove debug logging
+- `app/src/main/resources/data/systems/Ti-Nb/cec.json` — fix CEC order
+
+---
+
 ## Notes
 
 - All work tracked as phases; each phase must pass clean compilation before proceeding
 - ThreadVerification: add `assert !Platform.isFxApplicationThread()` in job run() methods post-Phase 2
 - ECILoader.loadOrInputECI() callsite must be removed from background paths (high priority in Phase 2)
+- Phase 8 resolves the persistent ECI length mismatch by treating ncf as the canonical length source

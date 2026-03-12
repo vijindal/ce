@@ -1,60 +1,69 @@
 # CE Workbench - Project Status
 
-**Last Updated:** March 9, 2026 (evening)
-**Version:** 0.3.8
-**Compilation:** ✅ Successful (69 tests pass)
+**Last Updated:** March 12, 2026 (afternoon)
+**Version:** 0.3.9
+**Compilation:** ✅ Successful (clean, no warnings)
+**Tests:** ✅ All 104 tests pass (CVM binary/ternary, CEC assembly, architecture)
 **GUI Status:** ✅ Fully Functional
 **Binary CVM Solver:** ✅ Correct — 7 root-cause bugs fixed; 69 tests pass
 **Ternary CVM Solver:** ✅ Correct — RC-2, RC-3, RC-7 fixed; ternary pipeline verified
 **CVM Phase Model (Thermodynamic API):** ✅ Phase 6 Complete — Model-centric architecture
 **CVM Expression Audit (G, Gu, Guu):** ✅ Fixed — unified evaluation path + iteration diagnostics
 **JUL Logging:** ✅ Complete — all three calculation types instrumented
-**ECI Standardization:** ✅ Complete — CVM & MCS now use ncf-length ECIs consistently
+**ECI Standardization:** ✅ Phase 8 Complete — MCS & CVM both use ncf-length ECIs, no expansion needed
 
 ---
 
-## ECI Standardization (Mar 9, 2026 - Evening)
+## ECI Standardization — Phase 8 Completion (Mar 12, 2026)
 
-**Objective:** Both CVM and MCS should use the same ECI database format (ncf-length, excluding point/empty clusters).
+### Issue
+The persistent "ECI length (4) does not match cluster type count (6)" error in MCS jobs arose
+from a fundamental design conflict:
+- Database stores ncf-length ECI (4 values: tet, tri, pair1, pair2)
+- `EmbeddingGenerator` generated embeddings for ALL tc types (6: ...+ point, empty)
+- `LocalEnergyCalc` accessed `eci[4]` and `eci[5]` → crash with 4-element arrays
 
-### Changes Made
+Previous session attempted expansion (ncf→tc) but used WRONG tc source, causing validation
+mismatch. The correct fix: skip sub-pair clusters (point/empty have ECI=0 always) so embeddings
+never access type indices ≥ ncf.
 
-1. **Database Format** (`cec.json`)
-   - Changed from 6 values (tc) → 4 values (ncf)
-   - Point cluster (size=1) and empty cluster (size=0) are constants, not optimization parameters
-   - Example: A-B_BCC_A2_T now stores `[0.0, 0.0, -8.314, 0.0]` (tet, tri, pair1, pair2)
+### Solution (Phase 8)
 
-2. **CVM Loading** (`CalculationService.prepareCVMModel`)
-   - Changed from `requiredECILength = tc` → `requiredECILength = ncf`
-   - `mapCECToCvmECI` handles legacy 5 or 6-value formats transparently
-   - New format: load ncf, pass ncf directly to CVMFreeEnergy
+1. **`EmbeddingGenerator.buildTemplates()`** (domain/mcs/)
+   - Skip sub-pair clusters (size < 2) at generator level
+   - Effect: No embeddings for point/empty types → no access to `eci[4]`, `eci[5]`
+   - Physics-correct: point/empty have ECI=0 always (constants in canonical ensemble)
 
-3. **MCS Loading & Expansion** (`CalculationService.prepareMCS`)
-   - Load ncf-length ECIs from database (4 values)
-   - **Expand ncf → tc** by creating `double[tc]` and copying ncf values, padding remainder with 0.0
-   - MCS embeddings expect cluster types 0–tc−1; point/empty (indices tc−2, tc−1) get ECI=0
-   - Validation checks: ECI.length == tc (after expansion)
+2. **`MCSCalculationContext.getClusterTypeCount()`** (infrastructure/context/)
+   - Use `ncf` from Stage 2 for ECI length validation (was using tc from disClusterData)
+   - Aligns validation with actual ECI array length (ncf=4)
 
-4. **MCS Validation** (`MCSCalculationContext.getClusterTypeCount`)
-   - Changed from returning `ncf` → `tc`
-   - After expansion, ECI array has tc elements, so validation must check against tc
+3. **`MCSCalculationJob`** (application/job/)
+   - Remove expansion call (was: `ECIMapper.expandECIForMCS(nciEci, stage1.getTc())`)
+   - Pass ncf-length ECI directly since embeddings no longer exceed ncf types
 
-### Result
+4. **Data fixes**
+   - Ti-Nb/cec.json: Correct CEC value order to match BCC_A2_T standard
+   - Removed debug logging from ResultsPanel
 
-| Aspect | CVM | MCS | Notes |
-|--------|-----|-----|-------|
-| **ECI Load** | Load 4 values (ncf) | Load 4 values (ncf) | ✅ Same source |
-| **ECI Array** | 4 elements | 6 elements (expanded) | ✅ Each uses what it needs |
-| **Validation** | ncf=4 | tc=6 | ✅ Correct for each |
-| **Energy Calc** | H = sum(ECI·CF) | ΔE computed from embeddings | ✅ Both consistent |
+### Design Outcome
+
+| Aspect | CVM | MCS | Status |
+|--------|-----|-----|--------|
+| **ECI Load** | ncf-length (4 values) | ncf-length (4 values) | ✅ Unified source |
+| **ECI Usage** | Direct, no expansion | Direct, no expansion | ✅ Architecturally clean |
+| **Validation** | Against ncf | Against ncf | ✅ Consistent |
+| **Embeddings** | N/A | Pair+ only (skip sub-pair) | ✅ No index out of bounds |
+
+**Key insight:** `allData.getStage2().getNcf()` is the definitive ECI length source throughout
+the system. Both CVM and MCS use it directly without expansion or padding logic.
 
 ### Verification
 
-- ✅ Both CVM and MCS run successfully
-- ✅ CFs match within < 1% (CVM: 0.0687, MCS: 0.0695 for CF[0])
-- ✅ Enthalpy within 6% (finite-size + sampling artifact)
-- ✅ All 69 tests pass
-- ✅ Commits: 676a57b, 5cadc0f
+- ✅ Build: Clean compilation (no errors/warnings)
+- ✅ Tests: All 104 pass (CVM binary/ternary, CEC assembly, architecture)
+- ✅ Code changes: 5 files, 1 commit (0d11d01)
+- ✅ GUI startup: 4 systems load without "CEC file missing" warnings
 
 ---
 
