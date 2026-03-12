@@ -1,9 +1,9 @@
 # CE Workbench - Project Status
 
-**Last Updated:** March 12, 2026 (late evening)
-**Version:** 0.3.11
+**Last Updated:** March 12, 2026 (night)
+**Version:** 0.3.15
 **Compilation:** ✅ Successful (clean, no warnings)
-**Tests:** ✅ All 104 tests pass (CVM binary/ternary, CEC assembly, architecture)
+**Tests:** ✅ All 94 tests pass (CVM binary/ternary, CEC assembly, architecture)
 **GUI Status:** ✅ Fully Functional
 **Binary CVM Solver:** ✅ Correct — 7 root-cause bugs fixed; 69 tests pass
 **Ternary CVM Solver:** ✅ Correct — RC-2, RC-3, RC-7 fixed; ternary pipeline verified
@@ -15,6 +15,10 @@
 **Unified Pipeline Phase 9.2:** ✅ EquilibriumState + EngineMetrics types created; ThermodynamicResult expanded
 **Unified Pipeline Phase 9.3:** ✅ Both ports/adapters/use cases migrated to return EquilibriumState
 **Unified Pipeline Phase 9.4:** ✅ MCSPhaseModel created — mirrors CVMPhaseModel pattern (lazy run, cached state)
+**Unified Pipeline Phase 9.5:** ✅ ECIMapper call removed from job — CVMPhaseModel.setECI() accepts ncf+ arrays
+**Unified Pipeline Phase 9.6:** ✅ ThermodynamicCalculationRequest base DTO extracted — DTO duplication eliminated
+**Unified Pipeline Phase 9.7:** ✅ AbstractThermodynamicJob extracted — data-loading phases deduped across both jobs
+**Unified Pipeline Phase 9.8:** ✅ Context classes moved to application/dto — layer violation resolved
 
 ---
 

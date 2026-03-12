@@ -408,3 +408,64 @@ different internal engine. Closes the [ARCHITECTURAL] gap: MCS now has a proper 
 - ECILoader.loadOrInputECI() callsite must be removed from background paths (high priority in Phase 2)
 - Phase 8 resolves the persistent ECI length mismatch by treating ncf as the canonical length source
 - Phase 9+ implements the unified CVM/MCS pipeline vision (see CLAUDE_SESSION_HANDOFF.md)
+
+---
+
+## Phase 9.5 — Move ECIMapper call into CVMPhaseModel (Mar 12, 2026)
+
+**Goal**: Remove infrastructure import from application job layer by internalizing ECI trim logic.
+
+### Changes
+- `domain/cvm/CVMPhaseModel.java` — `setECI()` now accepts arrays of length `>= ncf`, trims to ncf via `Arrays.copyOf`. Removes need for explicit ECIMapper call in callers.
+- `application/job/CVMPhaseModelJob.java` — removed `ECIMapper.mapCECToCvmECI()` call and import; passes raw `nciEciOpt.get()` directly (mirrors MCS path).
+
+### Result
+- Build: ✅ Clean compilation
+- Tests: ✅ All 94 tests pass
+
+---
+
+## Phase 9.6 — Extract ThermodynamicCalculationRequest Base DTO (Mar 12, 2026)
+
+**Goal**: Eliminate ~60 lines of verbatim duplication in CVM and MCS request DTOs.
+
+### Changes
+- `application/dto/ThermodynamicCalculationRequest.java` — NEW abstract base with shared fields (`systemId`, `temperature`, `composition`, `compositionArray`, `numComponents`) + `validateCommon()` + `AbstractBuilder<B>`.
+- `application/dto/CVMCalculationRequest.java` — extends base; keeps only `tolerance` + builder setter.
+- `application/dto/MCSCalculationRequest.java` — extends base; keeps only `supercellSize`, `equilibrationSteps`, `averagingSteps`, `seed`.
+
+### Result
+- Build: ✅ Clean compilation
+- Tests: ✅ All 94 tests pass
+
+---
+
+## Phase 9.7 — Extract AbstractThermodynamicJob (Mar 12, 2026)
+
+**Goal**: Eliminate duplicated Phases 1+2 (system load → cluster data → ECI) from both jobs.
+
+### Changes
+- `application/job/AbstractThermodynamicJob.java` — NEW extends `AbstractBackgroundJob`. Provides `loadSystemData(request)` returning `ThermodynamicJobData(system, clusterData, ncfEci)`.
+- `application/job/CVMPhaseModelJob.java` — extends `AbstractThermodynamicJob`; Phases 1+2 reduced to one `loadSystemData()` call.
+- `application/job/MCSCalculationJob.java` — same; ~45 lines of duplication removed.
+
+### Result
+- Build: ✅ Clean compilation
+- Tests: ✅ All 94 tests pass
+
+---
+
+## Phase 9.8 — Fix Calculation Context Layer Violation (Mar 12, 2026)
+
+**Goal**: Move `AbstractCalculationContext`, `CVMCalculationContext`, `MCSCalculationContext` from `infrastructure/context/` to `application/dto/` where they belong.
+
+### Changes
+- `application/dto/AbstractCalculationContext.java` — NEW (moved from `infrastructure/context/`)
+- `application/dto/CVMCalculationContext.java` — NEW (moved)
+- `application/dto/MCSCalculationContext.java` — NEW (moved)
+- Old infrastructure files deleted.
+- Imports updated in: `MCSCalculationUseCase`, `CVMCalculationUseCase`, `MCSRunnerPort`, `MCSCalculationJob`, `MCSRunnerAdapter`.
+
+### Result
+- Build: ✅ Clean compilation
+- Tests: ✅ All 94 tests pass
