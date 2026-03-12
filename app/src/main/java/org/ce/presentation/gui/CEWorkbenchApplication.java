@@ -106,21 +106,38 @@ public class CEWorkbenchApplication extends Application {
     private void loadAlloySystemsFromFilesystem() {
         try {
             // Determine the absolute path to systems directory
+            // Try multiple strategies, in order of preference:
+
+            // Strategy 1: Relative to current working directory
             Path systemsDir = Paths.get("app/src/main/resources/data/systems");
+            if (Files.exists(systemsDir)) {
+                int loaded = systemRegistry.loadSystemsFromFilesystem(systemsDir);
+                LOG.info("Loaded " + loaded + " alloy systems from filesystem");
+                return;
+            }
 
-            // Try to resolve relative to current working directory
-            if (!Files.exists(systemsDir)) {
-                // If running from JAR, try classpath resource approach
-                String classesPath = CEWorkbenchApplication.class.getProtectionDomain()
-                    .getCodeSource().getLocation().getPath();
-                Path basePath = Paths.get(classesPath).getParent();
-                systemsDir = basePath.resolve("app/src/main/resources/data/systems");
+            // Strategy 2: From classpath location (when running from IDE/gradle)
+            String urlPath = CEWorkbenchApplication.class.getProtectionDomain()
+                .getCodeSource().getLocation().getPath();
 
-                // If still not found, try from parent directory
-                if (!Files.exists(systemsDir)) {
-                    systemsDir = Paths.get(System.getProperty("user.dir"))
-                        .resolve("app/src/main/resources/data/systems");
+            // Fix Windows path: URL returns /C:/... but Paths.get() needs C:/...
+            String classesPath = urlPath;
+            if (classesPath.startsWith("/") && classesPath.length() > 2 &&
+                Character.isLetter(classesPath.charAt(1)) && classesPath.charAt(2) == ':') {
+                classesPath = classesPath.substring(1);
+            }
+
+            // Navigate from build output up to project root
+            // classesPath is like C:/Users/admin/codes/ce/app/build/classes/java/main/
+            // We need to find the project root by walking up and checking for build.gradle
+            Path current = Paths.get(classesPath);
+            for (int i = 0; i < 10 && current != null; i++) {
+                Path candidate = current.resolve("app/src/main/resources/data/systems");
+                if (Files.exists(candidate)) {
+                    systemsDir = candidate;
+                    break;
                 }
+                current = current.getParent();
             }
 
             if (!Files.exists(systemsDir)) {
