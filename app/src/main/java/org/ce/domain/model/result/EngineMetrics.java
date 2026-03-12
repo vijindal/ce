@@ -29,12 +29,24 @@ public sealed interface EngineMetrics
      * @param converged     whether the N-R solver converged within tolerance
      * @param iterations    number of N-R iterations performed
      * @param gradientNorm  ‖∇G‖ at the final iteration (convergence measure)
+     * @param gradient      ∇G at equilibrium (dG/du for each non-point CF); may be empty array
+     * @param hessian       ∇²G at equilibrium (d²G/du_i du_j); may be empty array for stability analysis
      */
     record CvmMetrics(
             boolean converged,
             int iterations,
-            double gradientNorm
-    ) implements EngineMetrics {}
+            double gradientNorm,
+            double[] gradient,
+            double[][] hessian
+    ) implements EngineMetrics {
+
+        /**
+         * Compact constructor for backward compatibility (no gradient/hessian).
+         */
+        public CvmMetrics(boolean converged, int iterations, double gradientNorm) {
+            this(converged, iterations, gradientNorm, new double[0], new double[0][]);
+        }
+    }
 
     /**
      * Diagnostics for a Metropolis Monte Carlo simulation.

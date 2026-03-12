@@ -182,10 +182,13 @@ public class CVMPhaseModelExamples {
         double[] fractions = {0.5, 0.3, 0.2};  // x_A, x_B, x_C (sum = 1.0)
         model.setMoleFractions(fractions);
 
-        CVMPhaseModel.EquilibriumState state = model.getEquilibriumState();
+        var state = model.getEquilibriumState();
         System.out.println("Composition: " + state);
-        System.out.println("G = " + state.G + " J/mol");
-        System.out.println("Convergence: " + String.format("%.2e", state.convergenceMeasure));
+        state.gibbsEnergy().ifPresent(G ->
+                System.out.println("G = " + G + " J/mol"));
+        if (state.metrics() instanceof org.ce.domain.model.result.EngineMetrics.CvmMetrics m) {
+            System.out.println("Convergence: " + String.format("%.2e", m.gradientNorm()));
+        }
     }
 
     /**

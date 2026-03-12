@@ -138,20 +138,35 @@ public record EquilibriumState(
     // -------------------------------------------------------------------------
 
     /**
-     * Factory for CVM results.
+     * Factory for CVM results (with full diagnostics).
      */
     public static EquilibriumState fromCvm(
             double temperature, double[] compositionArray, double[] correlationFunctions,
             double enthalpy, double gibbsEnergy, double entropy,
-            boolean converged, int iterations, double gradientNorm) {
+            boolean converged, int iterations, double gradientNorm,
+            double[] gradient, double[][] hessian) {
         return new EquilibriumState(
                 temperature, compositionArray, correlationFunctions,
                 enthalpy,
                 OptionalDouble.of(gibbsEnergy),
                 OptionalDouble.of(entropy),
                 OptionalDouble.empty(),
-                new EngineMetrics.CvmMetrics(converged, iterations, gradientNorm),
+                new EngineMetrics.CvmMetrics(converged, iterations, gradientNorm,
+                        gradient, hessian),
                 Instant.now());
+    }
+
+    /**
+     * Factory for CVM results (without gradient/hessian — backward compat).
+     */
+    public static EquilibriumState fromCvm(
+            double temperature, double[] compositionArray, double[] correlationFunctions,
+            double enthalpy, double gibbsEnergy, double entropy,
+            boolean converged, int iterations, double gradientNorm) {
+        return fromCvm(temperature, compositionArray, correlationFunctions,
+                enthalpy, gibbsEnergy, entropy,
+                converged, iterations, gradientNorm,
+                new double[0], new double[0][]);
     }
 
     /**

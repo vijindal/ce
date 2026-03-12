@@ -2,6 +2,8 @@ package org.ce.domain.cvm;
 
 import org.ce.domain.identification.cluster.CFIdentificationResult;
 import org.ce.domain.identification.cluster.ClusterIdentificationResult;
+import org.ce.domain.model.result.EngineMetrics;
+import org.ce.domain.model.result.EquilibriumState;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -622,22 +624,25 @@ public class CVMPhaseModel {
     }
 
     /**
-     * Full equilibrium state bundle.
+     * Returns the unified domain {@link EquilibriumState} at current equilibrium.
+     *
+     * <p>CVM-specific diagnostics (gradient ∇G and Hessian ∇²G) are stored in
+     * {@link EngineMetrics.CvmMetrics} and accessible via pattern matching.</p>
      */
     public EquilibriumState getEquilibriumState() throws Exception {
         ensureMinimized();
-        return new EquilibriumState(
+        return EquilibriumState.fromCvm(
             temperature,
             moleFractions.clone(),
             equilibriumCFs.clone(),
-            equilibrium.G,
             equilibrium.H,
+            equilibrium.G,
             equilibrium.S,
-            equilibrium.Gcu.clone(),
-            copyMatrix(equilibrium.Gcuu),
+            lastIterations > 0 && lastGradientNorm < tolerance,
             lastIterations,
             lastGradientNorm,
-            lastMinimizationTimeNanos
+            equilibrium.Gcu.clone(),
+            copyMatrix(equilibrium.Gcuu)
         );
     }
 
@@ -736,65 +741,6 @@ public class CVMPhaseModel {
         return copy;
     }
 
-    // =========================================================================
-    // IMMUTABLE RESULT CLASS
-    // =========================================================================
-
-    /**
-     * Bundles all equilibrium properties at a given state.
-     */
-    public static final class EquilibriumState {
-        public final double temperature;
-        public final double[] moleFractions;
-        public final double[] correlationFunctions;  // [ncf] non-point CFs
-        public final double G;    // Gibbs energy
-        public final double H;    // Enthalpy
-        public final double S;    // Entropy
-        public final double[] gradientG;
-        public final double[][] hessianG;
-        public final int iterations;
-        public final double convergenceMeasure;
-        public final long computationTimeNanos;
-
-        public EquilibriumState(
-                double temperature,
-                double[] moleFractions,
-                double[] correlationFunctions,
-                double G, double H, double S,
-                double[] gradientG,
-                double[][] hessianG,
-                int iterations,
-                double convergenceMeasure,
-                long computationTimeNanos) {
-            this.temperature = temperature;
-            this.moleFractions = moleFractions;
-            this.correlationFunctions = correlationFunctions;
-            this.G = G;
-            this.H = H;
-            this.S = S;
-            this.gradientG = gradientG;
-            this.hessianG = hessianG;
-            this.iterations = iterations;
-            this.convergenceMeasure = convergenceMeasure;
-            this.computationTimeNanos = computationTimeNanos;
-        }
-
-        public long getComputationTimeMs() {
-            return computationTimeNanos / 1_000_000;
-        }
-
-        @Override
-        public String toString() {
-            return String.format(
-                "EquilibriumState(T=%.1f K, x=%s, G=%.6e, H=%.6e, S=%.6e, iters=%d, converged=%.2e)",
-                temperature,
-                Arrays.toString(moleFractions),
-                G, H, S,
-                iterations,
-                convergenceMeasure
-            );
-        }
-    }
 }
 
 
