@@ -172,9 +172,6 @@ public class ResultsPanel extends VBox {
     
     private void updateMCSDataUI(MCSUpdate update) {
         mcsDataPointCount++;
-        if (mcsDataPointCount % 50 == 0) {
-            System.out.println("[DEBUG] ResultsPanel.updateMCSData: step=" + update.getStep() + ", E=" + update.getE_total());
-        }
 
         // Sample chart updates every 10 sweeps to avoid expensive redraws
         if (update.getStep() % 10 == 0) {
@@ -209,7 +206,6 @@ public class ResultsPanel extends VBox {
      * Initialize MCS monitoring for a new run.
      */
     public void initializeMCS(int eqSteps, int avgSteps, long seed) {
-        System.out.println("[DEBUG] ResultsPanel.initializeMCS called: eqSteps=" + eqSteps + ", avgSteps=" + avgSteps + ", seed=" + seed);
         Platform.runLater(() -> {
             energySeries.getData().clear();
             outputArea.clear();

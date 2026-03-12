@@ -192,6 +192,13 @@ public class EmbeddingGenerator {
         for (int t = 0; t < orbitList.size(); t++) {
             List<Cluster> orbit = orbitList.get(t);
 
+            // Skip sub-pair clusters (size < 2): point and empty.
+            // Their ECI values are always 0 in the canonical ensemble (constants that cancel in ΔE).
+            // Skipping them ensures type indices in embeddings are < ncf, allowing ncf-length ECI arrays
+            // to be used safely without expanding to tc (see MCSCalculationJob).
+            int clusterSize = orbit.isEmpty() ? 0 : orbit.get(0).getAllSites().size();
+            if (clusterSize < 2) continue;
+
             for (int o = 0; o < orbit.size(); o++) {
                 List<Site> sites = orbit.get(o).getAllSites();
 

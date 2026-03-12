@@ -1,17 +1,21 @@
 {
+  "cecKey": "Ti-Nb_BCC_A2_T",
   "elements": "Ti-Nb",
+  "structure": "BCC",
+  "phase": "A2",
+  "model": "T",
   "cecValues": [
-    -390.0,
-    -260.0,
     0.0,
-    0.0
+    0.0,
+    -390.0,
+    -260.0
   ],
   "cecUnits": "J/mol",
   "cecDescription": [
-    "1-neighbor pair (E21)",
-    "II-neighbor pair (E22)",
-    "Triangle (E3PQ)",
-    "Tetrahedron (4-body)"
+    "Tetrahedron (4-body)",
+    "Triangle (3-body)",
+    "1-neighbor pair (rc=2)",
+    "II-neighbor pair (rc=2)"
   ],
   "reference": "Optimized CECs from Nb-Ti phase diagram fitting",
   "notes": "BCC phase parameters, applicable to BCC_A2 with any CVM model"

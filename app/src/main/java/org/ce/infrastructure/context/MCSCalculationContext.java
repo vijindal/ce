@@ -91,9 +91,11 @@ public class MCSCalculationContext extends AbstractCalculationContext {
 
     @Override
     protected int getClusterTypeCount() {
-        // For MCS, ECI is expanded to tc (total cluster types including point/empty).
-        // Validation must check ECI length against tc, not ncf.
-        return (clusterData != null) ? clusterData.getTc() : 0;
+        // ECI arrays are ncf-length (non-point cluster functions only).
+        // Point and empty clusters are constants with ECI=0 (canonical ensemble) and are not
+        // generated as embeddings in EmbeddingGenerator. Use ncf from Stage 2 as validation target.
+        return (allClusterData != null && allClusterData.getStage2() != null)
+            ? allClusterData.getStage2().getNcf() : 0;
     }
 
     @Override

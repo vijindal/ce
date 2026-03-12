@@ -131,8 +131,9 @@ public class MCSCalculationJob extends AbstractBackgroundJob {
                 return;
             }
 
-            // Expand from ncf to tc length (zero-pad point/empty clusters)
-            double[] tcEci = ECIMapper.expandECIForMCS(nciEciOpt.get(), allData.getStage1().getTc());
+            // Use ncf-length ECI directly. EmbeddingGenerator skips sub-pair clusters (point/empty)
+            // so embedding type indices are all < ncf. No expansion needed.
+            double[] nciEci = nciEciOpt.get();
 
             // ========== PHASE 3: Build Context ==========
             setStatusMessage("Building MCS context...");
@@ -155,7 +156,7 @@ public class MCSCalculationJob extends AbstractBackgroundJob {
             );
             context.setAllClusterData(allData);
             context.setClusterData(allData.getStage1().getDisClusterData());
-            context.setECI(tcEci);
+            context.setECI(nciEci);
 
             if (!context.isReady()) {
                 markFailed("MCS context validation failed: " + context.getReadinessError());
