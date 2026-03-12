@@ -80,6 +80,11 @@ public record MCSResult(
     }
 
     @Override
+    public double enthalpyOfMixing() {
+        return hmixPerSite;
+    }
+
+    @Override
     public String summary() {
         return String.format("""
                 MCS Result

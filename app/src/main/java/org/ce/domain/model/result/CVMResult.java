@@ -66,6 +66,11 @@ public record CVMResult(
     }
 
     @Override
+    public double enthalpyOfMixing() {
+        return enthalpy;
+    }
+
+    @Override
     public String summary() {
         return String.format("""
                 CVM Result [%s]

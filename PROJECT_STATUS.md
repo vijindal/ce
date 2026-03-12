@@ -12,6 +12,7 @@
 **JUL Logging:** ✅ Complete — all three calculation types instrumented
 **ECI Standardization:** ✅ Phase 8 Complete — MCS & CVM both use ncf-length ECIs, no expansion needed
 **Unified Pipeline Phase 9.1:** ✅ hmixPerSite propagated through MCS pipeline (data loss bug fixed)
+**Unified Pipeline Phase 9.2:** ✅ EquilibriumState + EngineMetrics types created; ThermodynamicResult expanded
 
 ---
 

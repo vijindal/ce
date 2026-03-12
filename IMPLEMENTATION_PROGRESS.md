@@ -330,6 +330,29 @@ Previously computed correctly in the domain but silently dropped at the adapter 
 
 ---
 
+## Phase 9 — Unified CVM/MCS Pipeline: Step 2 — EquilibriumState + EngineMetrics (Mar 12, 2026)
+
+### Goal
+Introduce the unified `EquilibriumState` result type and `EngineMetrics` sealed interface.
+Expand `ThermodynamicResult` with `enthalpyOfMixing()` and `compositionArray()`.
+
+### Changes
+- `domain/model/result/EngineMetrics.java` — **new** sealed interface with `CvmMetrics` and `McsMetrics` records
+- `domain/model/result/EquilibriumState.java` — **new** record implementing `ThermodynamicResult`;
+  carries T, x[], CFs, enthalpy, gibbsEnergy?, entropy?, heatCapacity?, EngineMetrics, timestamp;
+  static factories `fromCvm(...)` and `fromMcs(...)`
+- `domain/model/result/ThermodynamicResult.java` — add `EquilibriumState` to `permits`;
+  add abstract `enthalpyOfMixing()`; add default `compositionArray()`
+- `domain/model/result/CVMResult.java` — implement `enthalpyOfMixing()` returning `enthalpy`
+- `domain/model/result/MCSResult.java` — implement `enthalpyOfMixing()` returning `hmixPerSite`
+
+### Result
+- Build: ✅ Clean compilation (no errors)
+- Tests: ✅ All 104 tests pass
+- `EquilibriumState` is additive — no existing consumers broken; `CVMResult`/`MCSResult` remain
+
+---
+
 ## Notes
 
 - All work tracked as phases; each phase must pass clean compilation before proceeding
