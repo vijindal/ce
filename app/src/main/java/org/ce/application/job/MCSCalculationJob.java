@@ -4,20 +4,15 @@ import org.ce.application.dto.MCSCalculationRequest;
 import org.ce.application.port.DataManagementPort;
 import org.ce.application.port.MCSRunnerPort;
 import org.ce.application.usecase.MCSCalculationUseCase;
-import org.ce.domain.model.data.AllClusterData;
 import org.ce.domain.model.result.CalculationFailure;
 import org.ce.domain.model.result.CalculationResult;
 import org.ce.domain.model.result.EquilibriumState;
 import org.ce.application.port.CalculationProgressListener;
-import org.ce.domain.system.SystemIdentity;
 import org.ce.infrastructure.context.MCSCalculationContext;
-import org.ce.infrastructure.data.ECIMapper;
 import org.ce.infrastructure.logging.LoggingConfig;
 import org.ce.infrastructure.mcs.MCSRunnerAdapter;
-import org.ce.infrastructure.registry.KeyUtils;
 import org.ce.infrastructure.service.MCSProgressListenerAdapter;
 
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.logging.Level;
@@ -30,8 +25,8 @@ import java.util.logging.Logger;
  *
  * This job encapsulates the full MCS pipeline including data loading:
  * <ol>
- *   <li>Load cluster identification data from cache</li>
- *   <li>Load CEC/ECI from database</li>
+ *   <li>Load cluster identification data from cache (via base class)</li>
+ *   <li>Load CEC/ECI from database (via base class)</li>
  *   <li>Build MCSCalculationContext</li>
  *   <li>Run MCS simulation via {@link MCSCalculationUseCase}</li>
  * </ol>
@@ -42,12 +37,11 @@ import java.util.logging.Logger;
  *
  * <p>Supports cancellation and pause at MC sweep boundaries.</p>
  */
-public class MCSCalculationJob extends AbstractBackgroundJob {
+public class MCSCalculationJob extends AbstractThermodynamicJob {
 
     private static final Logger LOG = LoggingConfig.getLogger(MCSCalculationJob.class);
 
     private final MCSCalculationRequest request;
-    private final DataManagementPort dataPort;
     private final CalculationProgressListener externalListener;
     private CalculationResult result;
     private MCSCalculationContext context;
@@ -71,10 +65,9 @@ public class MCSCalculationJob extends AbstractBackgroundJob {
             "mcs-" + request.getSystemId() + "-" + UUID.randomUUID(),
             "MCS: " + request.getSystemId() +
                 " (T=" + request.getTemperature() + "K)",
-            null // System will be loaded in run()
+            dataPort
         );
         this.request = request;
-        this.dataPort = dataPort;
         this.externalListener = externalListener;
     }
 
@@ -87,53 +80,9 @@ public class MCSCalculationJob extends AbstractBackgroundJob {
         try {
             running = true;
 
-            // ========== PHASE 1: Load System & Cluster Data ==========
-            setStatusMessage("Loading system metadata...");
-            setProgress(5);
-            if (shouldStop()) return;
-
-            SystemIdentity system = dataPort.getSystem(request.getSystemId());
-            if (system == null) {
-                markFailed("System not found: " + request.getSystemId());
-                return;
-            }
-
-            setStatusMessage("Loading cluster data...");
-            setProgress(10);
-            if (shouldStop()) return;
-
-            String clusterKey = KeyUtils.clusterKey(system);
-            Optional<AllClusterData> allDataOpt = dataPort.loadClusterData(clusterKey);
-            if (allDataOpt.isEmpty()) {
-                markFailed("Cluster data not found for key: " + clusterKey);
-                return;
-            }
-            AllClusterData allData = allDataOpt.get();
-
-            // ========== PHASE 2: Load CEC/ECI ==========
-            setStatusMessage("Loading CEC/ECI database...");
-            setProgress(20);
-            if (shouldStop()) return;
-
-            String cecKey = KeyUtils.cecKey(system);
-
-            Optional<double[]> nciEciOpt = dataPort.loadECI(
-                String.join("-", system.getComponents()),
-                system.getStructure(),
-                system.getPhase(),
-                system.getModel(),
-                request.getTemperature(),
-                allData.getStage2().getNcf()  // Require ncf-length
-            );
-            if (nciEciOpt.isEmpty()) {
-                markFailed("CEC not found for key: " + cecKey
-                    + ". Use Data > CEC Database to add it.");
-                return;
-            }
-
-            // Use ncf-length ECI directly. EmbeddingGenerator skips sub-pair clusters (point/empty)
-            // so embedding type indices are all < ncf. No expansion needed.
-            double[] nciEci = nciEciOpt.get();
+            // ========== PHASES 1+2: Load System, Cluster Data, ECI ==========
+            ThermodynamicJobData jobData = loadSystemData(request);
+            if (jobData == null) return; // markFailed already called
 
             // ========== PHASE 3: Build Context ==========
             setStatusMessage("Building MCS context...");
@@ -145,18 +94,18 @@ public class MCSCalculationJob extends AbstractBackgroundJob {
                     : new double[] { request.getComposition(), 1.0 - request.getComposition() };
 
             context = new MCSCalculationContext(
-                system,
+                jobData.system(),
                 request.getTemperature(),
                 composition,
-                system.getNumComponents(),
+                jobData.system().getNumComponents(),
                 request.getSupercellSize(),
                 request.getEquilibrationSteps(),
                 request.getAveragingSteps(),
                 request.getSeed()
             );
-            context.setAllClusterData(allData);
-            context.setClusterData(allData.getStage1().getDisClusterData());
-            context.setECI(nciEci);
+            context.setAllClusterData(jobData.clusterData());
+            context.setClusterData(jobData.clusterData().getStage1().getDisClusterData());
+            context.setECI(jobData.ncfEci());
 
             if (!context.isReady()) {
                 markFailed("MCS context validation failed: " + context.getReadinessError());
@@ -223,4 +172,3 @@ public class MCSCalculationJob extends AbstractBackgroundJob {
         return name + " [" + getProgress() + "%]";
     }
 }
-

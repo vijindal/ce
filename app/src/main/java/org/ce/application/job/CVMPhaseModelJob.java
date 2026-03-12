@@ -5,13 +5,9 @@ import org.ce.application.port.CalculationProgressListener;
 import org.ce.application.port.DataManagementPort;
 import org.ce.domain.cvm.CVMPhaseModel;
 import org.ce.domain.cvm.CVMModelInput;
-import org.ce.domain.model.data.AllClusterData;
-import org.ce.domain.system.SystemIdentity;
 import org.ce.infrastructure.cvm.CVMPhaseModelExecutor;
 import org.ce.infrastructure.logging.LoggingConfig;
-import org.ce.infrastructure.registry.KeyUtils;
 
-import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -23,8 +19,8 @@ import java.util.logging.Logger;
  *
  * This job encapsulates the full CVM pipeline including data loading:
  * <ol>
- *   <li>Load cluster identification data from cache</li>
- *   <li>Load CEC/ECI from database</li>
+ *   <li>Load cluster identification data from cache (via base class)</li>
+ *   <li>Load CEC/ECI from database (via base class)</li>
  *   <li>Create CVMPhaseModel (first Newton-Raphson minimization)</li>
  *   <li>Initialize model and report completion</li>
  * </ol>
@@ -36,12 +32,11 @@ import java.util.logging.Logger;
  * <p>After completion, the model is ready for parameter scanning and external
  * queries via the GUI.</p>
  */
-public class CVMPhaseModelJob extends AbstractBackgroundJob {
+public class CVMPhaseModelJob extends AbstractThermodynamicJob {
 
     private static final Logger LOG = LoggingConfig.getLogger(CVMPhaseModelJob.class);
 
     private final CVMCalculationRequest request;
-    private final DataManagementPort dataPort;
     private final CalculationProgressListener externalListener;
     private CVMPhaseModel model;
 
@@ -64,10 +59,9 @@ public class CVMPhaseModelJob extends AbstractBackgroundJob {
             "cvm-" + request.getSystemId() + "-" + UUID.randomUUID(),
             "CVM: " + request.getSystemId() +
                 " (T=" + request.getTemperature() + "K)",
-            null // System will be loaded in run()
+            dataPort
         );
         this.request = request;
-        this.dataPort = dataPort;
         this.externalListener = externalListener;
     }
 
@@ -80,47 +74,9 @@ public class CVMPhaseModelJob extends AbstractBackgroundJob {
         try {
             running = true;
 
-            // ========== PHASE 1: Load System & Cluster Data ==========
-            setStatusMessage("Loading system metadata...");
-            setProgress(5);
-            if (shouldStop()) return;
-
-            SystemIdentity system = dataPort.getSystem(request.getSystemId());
-            if (system == null) {
-                markFailed("System not found: " + request.getSystemId());
-                return;
-            }
-
-            setStatusMessage("Loading cluster data...");
-            setProgress(10);
-            if (shouldStop()) return;
-
-            String clusterKey = KeyUtils.clusterKey(system);
-            Optional<AllClusterData> allDataOpt = dataPort.loadClusterData(clusterKey);
-            if (allDataOpt.isEmpty()) {
-                markFailed("Cluster data not found for key: " + clusterKey);
-                return;
-            }
-            AllClusterData allData = allDataOpt.get();
-
-            // ========== PHASE 2: Load CEC/ECI ==========
-            setStatusMessage("Loading CEC/ECI database...");
-            setProgress(20);
-            if (shouldStop()) return;
-
-            Optional<double[]> nciEciOpt = dataPort.loadECI(
-                String.join("-", system.getComponents()),
-                system.getStructure(),
-                system.getPhase(),
-                system.getModel(),
-                request.getTemperature(),
-                allData.getStage2().getNcf()  // Require ncf-length
-            );
-            if (nciEciOpt.isEmpty()) {
-                markFailed("CEC not found for key: " + KeyUtils.cecKey(system)
-                    + ". Use Data > CEC Database to add it.");
-                return;
-            }
+            // ========== PHASES 1+2: Load System, Cluster Data, ECI ==========
+            ThermodynamicJobData jobData = loadSystemData(request);
+            if (jobData == null) return; // markFailed already called
 
             // ========== PHASE 3: Create CVMPhaseModel (First Minimization) ==========
             setStatusMessage("Creating CVM Phase Model (first minimization)...");
@@ -132,19 +88,18 @@ public class CVMPhaseModelJob extends AbstractBackgroundJob {
                     : new double[] { request.getComposition(), 1.0 - request.getComposition() };
 
             CVMModelInput cvmInput = new CVMModelInput(
-                system.getId(),
-                system.getName(),
-                system.getNumComponents(),
-                allData.getStage1(),
-                allData.getStage2(),
-                allData.getStage3()
+                jobData.system().getId(),
+                jobData.system().getName(),
+                jobData.system().getNumComponents(),
+                jobData.clusterData().getStage1(),
+                jobData.clusterData().getStage2(),
+                jobData.clusterData().getStage3()
             );
 
             // CVMPhaseModel.create() expects scalar composition for binary systems
-            // For multi-component, we'll use the first composition value (simplified)
             double scalarComposition = composition[0];
-            model = CVMPhaseModel.create(cvmInput, nciEciOpt.get(), request.getTemperature(),
-                scalarComposition);
+            model = CVMPhaseModel.create(cvmInput, jobData.ncfEci(),
+                request.getTemperature(), scalarComposition);
 
             if (model.getGradientNorm() > request.getTolerance() * 10) {
                 LOG.warning("CVMPhaseModelJob.run — WARNING — First minimization has high gradient norm: "
@@ -219,4 +174,3 @@ public class CVMPhaseModelJob extends AbstractBackgroundJob {
         return name + " [" + getProgress() + "%]";
     }
 }
-
