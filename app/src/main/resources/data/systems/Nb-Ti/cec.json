@@ -1,20 +1,25 @@
 {
-  "cecKey": "Nb-Ti_BCC_A2_T",
+  "cecKey": "Nb-Ti",
   "elements": "Nb-Ti",
   "structure": "BCC",
   "phase": "A2",
   "model": "T",
   "numComponents": 2,
-  "temperatureDependent": false,
-  "tc": 5,
-  "cecTerms": [
-    { "name": "J0 (empty)",          "a": 0.0,    "b": 0.0 },
-    { "name": "J1 (point)",          "a": 0.0,    "b": 0.0 },
-    { "name": "E21 (I-neighbor pair)","a": -390.0, "b": 0.0 },
-    { "name": "E22 (II-neighbor pair)","a": -260.0,"b": 0.0 },
-    { "name": "E3PQ (triangle)",     "a": 0.0,    "b": 0.0 }
+  "cecValuesLength": 4,
+  "cecValues": [
+    0.0,
+    0.0,
+    -390.0,
+    -260.0
   ],
-  "cecUnits": "J/mol",
-  "reference": "Optimized CECs from Nb-Ti BCC phase diagram fitting",
-  "notes": "Tetrahedron term not listed in source — set to 0. tc=5 for BCC_A2_T."
+  "units": "J/mol",
+  "description": [
+    "Tetrahedron 4-body (rc=4, mult=6) = 0.0",
+    "Triangle (rc=3, mult=12) = 0.0",
+    "1-neighbor pair (rc=2, mult=4) = -390.0",
+    "II-neighbor pair (rc=2, mult=3) = -260.0"
+  ],
+  "reference": "Optimized from Nb-Ti BCC phase diagram fitting",
+  "timestamp": "2026-02-27T17:00:00Z",
+  "notes": "4 cluster functions (ncf=4) from BCC_A2_T model. Point cluster and empty/reference cluster omitted (non-optimization variables)."
 }
