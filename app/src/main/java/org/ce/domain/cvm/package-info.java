@@ -29,10 +29,10 @@
  *   <li>{@code SubstituteRulesBuilder}â€” product of site-operators â†’ CF symbol lookup</li>
  *   <li>{@code CMatrixBuilder}        â€” core C-matrix computation (genCV)</li>
  *   <li>{@code CMatrixResult}         â€” immutable carrier: cmat, lcv, wcv</li>
- *   <li>{@code LinearAlgebraUtils}    â€” Gaussian elimination with partial pivoting</li>
+ *   <li>{@code LinearAlgebra}         â€” Gaussian elimination with partial pivoting</li>
  *   <li>{@code ClusterVariableEvaluator} â€” cv = cmat Â· uList</li>
  *   <li>{@code CVMFreeEnergy}         â€” H, S, G with gradient and Hessian</li>
- *   <li>{@code NewtonRaphsonSolver}   â€” NR iteration: Î´u = solve(Gcuu, âˆ’Gcu)</li>
+ *   <li>{@code NewtonRaphsonSolverSimple} â€” NR iteration: Î´u = solve(Gcuu, âˆ’Gcu)</li>
  *   <li>{@code CVMSolverResult}       â€” equilibrium CFs, free energy, Hmix, Smix</li>
  *   <li>{@code CVMEngine}             â€” top-level orchestrator</li>
  * </ul>

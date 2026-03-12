@@ -9,7 +9,7 @@ import java.util.logging.Logger;
  * Newton-Raphson solver for CVM free-energy minimization.
  *
  * <p>Based on proven working implementation with simple 4-loop structure.
- * Minimizes G(u) = H(u) - TÂ·S(u) over non-point correlation functions.</p>
+ * Minimizes G(u) = H(u) - T·S(u) over non-point correlation functions.</p>
  *
  * <p>Key features:</p>
  * <ul>
@@ -181,7 +181,7 @@ public final class NewtonRaphsonSolverSimple {
 
         // Initialize CFs at random state
         double[] u = getURand(data);
-        
+
         // Compute initial CVs
         double[][][] cv = updateCV(data, u);
 
@@ -211,15 +211,8 @@ public final class NewtonRaphsonSolverSimple {
             }
             gradNorm = Math.sqrt(gradNorm);
 
-                trace.add(new CVMSolverResult.IterationSnapshot(
-                    iter,
-                    G,
-                    H,
-                    S,
-                    gradNorm,
-                    u.clone(),
-                    Gu.clone()
-                ));
+            trace.add(new CVMSolverResult.IterationSnapshot(
+                    iter, G, H, S, gradNorm, u.clone(), Gu.clone()));
 
             if (LOG.isLoggable(Level.FINEST) && (iter == 1 || iter % 20 == 0 || gradNorm < 1e-6)) {
                 LOG.finest(String.format("NewtonRaphsonSolverSimple — iter %3d: G=%.8e H=%.8e S=%.8e ||Gu||=%.8e",
@@ -232,12 +225,12 @@ public final class NewtonRaphsonSolverSimple {
                 return new CVMSolverResult(u, G, H, S, iter, gradNorm, true, trace);
             }
 
-            // Solve Guu Â· du = -Gu using Gaussian elimination
+            // Solve Guu · du = -Gu using Gaussian elimination
             double[] du;
             try {
                 double[] negGu = new double[ncf];
                 for (int i = 0; i < ncf; i++) negGu[i] = -Gu[i];
-                du = LinearAlgebraUtils.solve(Guu, negGu);
+                du = LinearAlgebra.solve(Guu, negGu);
             } catch (IllegalArgumentException e) {
                 LOG.warning("NewtonRaphsonSolverSimple — SINGULAR HESSIAN at iter=" + iter + ": " + e.getMessage());
                 return new CVMSolverResult(u, G, H, S, iter, gradNorm, false, trace);
@@ -245,7 +238,7 @@ public final class NewtonRaphsonSolverSimple {
 
             // Step limiting to keep CVs positive
             double stpmax = stpmx(data, u, du, cv);
-            
+
             // Update CFs
             for (int i = 0; i < ncf; i++) {
                 u[i] += stpmax * du[i];
@@ -327,163 +320,16 @@ public final class NewtonRaphsonSolverSimple {
     }
 
     // =========================================================================
-    // Enthalpy calculations
-    // =========================================================================
-
-    /**
-     * H = Î£_t msdis[t] Â· Î£_icf eci[icf] Â· u[icf]
-     */
-    private static double calHu(CVMData data, double[] u) {
-        double H = 0.0;
-        int cfOffset = 0;
-        for (int itc = 0; itc < data.tcdis - 1; itc++) { // exclude point cluster
-            double msd = data.msdis.get(itc);
-            int nCFs = countCFsForType(data, itc);
-            for (int i = 0; i < nCFs; i++) {
-                int icf = cfOffset + i;
-                if (icf < data.ncf) {
-                    H += msd * data.eci[icf] * u[icf];
-                }
-            }
-            cfOffset += nCFs;
-        }
-        return H;
-    }
-
-    /**
-     * Hcu[icf] = msdis[t] Â· eci[icf]
-     */
-    private static double[] calHcu(CVMData data) {
-        double[] Hcu = new double[data.ncf];
-        int cfOffset = 0;
-        for (int itc = 0; itc < data.tcdis - 1; itc++) {
-            double msd = data.msdis.get(itc);
-            int nCFs = countCFsForType(data, itc);
-            for (int i = 0; i < nCFs; i++) {
-                int icf = cfOffset + i;
-                if (icf < data.ncf) {
-                    Hcu[icf] = msd * data.eci[icf];
-                }
-            }
-            cfOffset += nCFs;
-        }
-        return Hcu;
-    }
-
-    // =========================================================================
-    // Entropy calculations (proven 4-loop structure)
-    // =========================================================================
-
-    /**
-     * S = -R Ã— Î£_t msdis[t] Ã— kb[t] Ã— Î£_j m[t][j] Ã— Î£_v wcv[v] Ã— cv[v] Ã— ln(cv[v])
-     */
-    private static double calSu(CVMData data, double[][][] cv) {
-        double S = 0.0;
-        for (int itc = 0; itc < data.tcdis; itc++) {
-            double kbVal = data.kb[itc];
-            double msdVal = data.msdis.get(itc);
-            for (int inc = 0; inc < data.lc[itc]; inc++) {
-                double mVal = data.m[itc][inc];
-                int[] w = data.wcv.get(itc).get(inc);
-                int nv = data.lcv[itc][inc];
-                for (int incv = 0; incv < nv; incv++) {
-                    double cvVal = cv[itc][inc][incv];
-                    if (cvVal > CV_MIN) {
-                        S -= R * msdVal * kbVal * mVal * w[incv] * cvVal * Math.log(cvVal);
-                    }
-                }
-            }
-        }
-        return S;
-    }
-
-    /**
-     * Scu[icf] = -R Ã— Î£_t msdis[t] Ã— kb[t] Ã— Î£_j m[t][j] Ã— Î£_v wcv[v] Ã— cmat[v][icf] Ã— ln(cv[v])
-     */
-    private static double[] calScu(CVMData data, double[][][] cv) {
-        int ncf = data.ncf;
-        double[] Scu = new double[ncf];
-
-        for (int itc = 0; itc < data.tcdis; itc++) {
-            double kbVal = data.kb[itc];
-            double msdVal = data.msdis.get(itc);
-            for (int inc = 0; inc < data.lc[itc]; inc++) {
-                double mVal = data.m[itc][inc];
-                double[][] cm = data.cmat.get(itc).get(inc);
-                int[] w = data.wcv.get(itc).get(inc);
-                int nv = data.lcv[itc][inc];
-
-                for (int incv = 0; incv < nv; incv++) {
-                    double cvVal = cv[itc][inc][incv];
-                    double logCv = (cvVal > CV_MIN) ? Math.log(cvVal) : Math.log(CV_MIN);
-                    double prefix = R * msdVal * kbVal * mVal * w[incv];
-
-                    for (int icf = 0; icf < ncf; icf++) {
-                        double cVal = cm[incv][icf];
-                        if (cVal != 0.0) {
-                            Scu[icf] -= prefix * cVal * logCv;
-                        }
-                    }
-                }
-            }
-        }
-        return Scu;
-    }
-
-    /**
-     * Scuu[icf1][icf2] = -R Ã— Î£_t msdis[t] Ã— kb[t] Ã— Î£_j m[t][j] Ã— Î£_v wcv[v] Ã— cmat[v][icf1] Ã— cmat[v][icf2] / cv[v]
-     */
-    private static double[][] calScuu(CVMData data, double[][][] cv) {
-        int ncf = data.ncf;
-        double[][] Scuu = new double[ncf][ncf];
-
-        for (int itc = 0; itc < data.tcdis; itc++) {
-            double kbVal = data.kb[itc];
-            double msdVal = data.msdis.get(itc);
-            for (int inc = 0; inc < data.lc[itc]; inc++) {
-                double mVal = data.m[itc][inc];
-                double[][] cm = data.cmat.get(itc).get(inc);
-                int[] w = data.wcv.get(itc).get(inc);
-                int nv = data.lcv[itc][inc];
-
-                for (int incv = 0; incv < nv; incv++) {
-                    double cvVal = cv[itc][inc][incv];
-                    double invCv = (cvVal > CV_MIN) ? 1.0 / cvVal : 1.0 / CV_MIN;
-                    double prefix = R * msdVal * kbVal * mVal * w[incv];
-
-                    for (int icf1 = 0; icf1 < ncf; icf1++) {
-                        double c1 = cm[incv][icf1];
-                        if (c1 == 0.0) continue;
-                        for (int icf2 = icf1; icf2 < ncf; icf2++) {
-                            double c2 = cm[incv][icf2];
-                            if (c2 == 0.0) continue;
-                            double val = -prefix * c1 * c2 * invCv;
-                            Scuu[icf1][icf2] += val;
-                            if (icf1 != icf2) {
-                                Scuu[icf2][icf1] += val;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return Scuu;
-    }
-
-    // =========================================================================
     // CV calculation
     // =========================================================================
 
     /**
-     * CV[t][j][v] = Î£_icf cmat[v][icf] Ã— u[icf] + cmat[v][tcf] (constant term)
+     * CV[t][j][v] = Σ_icf cmat[v][icf] × u[icf] + cmat[v][tcf] (constant term)
      */
     private static double[][][] updateCV(CVMData data, double[] u) {
         double[][][] cv = new double[data.tcdis][][];
 
         // Build full CF vector (non-point + point CFs).
-        // Delegates to ClusterVariableEvaluator which correctly handles K≥3
-        // by deriving each point CF from the multi-component R-matrix basis.
-        // (The old binary-only formula pointCF = 2·xB − 1 was wrong for K≥3.)
         double[] uFull = ClusterVariableEvaluator.buildFullCFVector(
                 u, data.moleFractions, data.numElements, data.cfBasisIndices, data.ncf, data.tcf);
 
@@ -512,11 +358,6 @@ public final class NewtonRaphsonSolverSimple {
 
     /**
      * Returns random-state (disordered) CF values for all non-point CFs.
-     *
-     * <p>Delegates to {@link ClusterVariableEvaluator#computeRandomCFs} which
-     * correctly handles K≥3 systems using the multi-component R-matrix basis.
-     * (The old binary-only formula {@code u[icf] = (2·xB − 1)^rank} was wrong
-     * for K≥3 because it used only the mole fraction of component B.)</p>
      */
     private static double[] getURand(CVMData data) {
         return ClusterVariableEvaluator.computeRandomCFs(
@@ -530,10 +371,10 @@ public final class NewtonRaphsonSolverSimple {
     /**
      * Find maximum step size that keeps all CVs positive.
      *
-     * <p>For each CV: cv_new = cv_old + stpmax Ã— Î"cv
-     * where Î"cv = Î£_icf cmat[v][icf] Ã— du[icf]</p>
+     * <p>For each CV: cv_new = cv_old + stpmax × Δcv
+     * where Δcv = Σ_icf cmat[v][icf] × du[icf]</p>
      *
-     * <p>If Î"cv < 0, max step = -cv_old / Î"cv (but slightly smaller)</p>
+     * <p>If Δcv < 0, max step = -cv_old / Δcv (but slightly smaller)</p>
      */
     private static double stpmx(CVMData data, double[] u, double[] du, double[][][] cv) {
         double stpmax = 1.0;
@@ -578,10 +419,6 @@ public final class NewtonRaphsonSolverSimple {
      * For binary: each type has 1 CF.
      */
     private static int countCFsForType(CVMData data, int typeIdx) {
-        // In the current structure, CFs are indexed sequentially
-        // For simplicity, assume 1 CF per ordered cluster group
-        // This matches binary case; for multi-component, adjust based on lcf
         return data.lc[typeIdx];
     }
 }
-
