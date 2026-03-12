@@ -1,6 +1,6 @@
 package org.ce.application.port;
 
-import org.ce.domain.model.result.MCSResult;
+import org.ce.domain.model.result.EquilibriumState;
 import org.ce.infrastructure.context.MCSCalculationContext;
 
 import java.util.function.BooleanSupplier;
@@ -14,9 +14,9 @@ import java.util.function.BooleanSupplier;
 public interface MCSRunnerPort {
 
     /**
-     * Runs MCS and returns the mapped domain result.
+     * Runs MCS and returns the equilibrium state.
      */
-    MCSResult run(
+    EquilibriumState run(
             MCSCalculationContext context,
             MCSProgressPort progressPort,
             BooleanSupplier cancellationCheck);

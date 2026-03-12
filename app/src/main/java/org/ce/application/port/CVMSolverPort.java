@@ -1,7 +1,7 @@
 package org.ce.application.port;
 
 import org.ce.domain.cvm.CVMModelInput;
-import org.ce.domain.model.result.CVMResult;
+import org.ce.domain.model.result.EquilibriumState;
 
 /**
  * Application port for CVM free-energy minimization.
@@ -12,17 +12,17 @@ import org.ce.domain.model.result.CVMResult;
 public interface CVMSolverPort {
 
     /**
-     * Runs the CVM solver and returns a domain result.
+     * Runs the CVM solver and returns the equilibrium state.
      *
      * @param modelInput cluster topology and symmetry data
-     * @param eci effective cluster interactions
+     * @param eci effective cluster interactions (ncf-length)
      * @param temperature temperature in K
      * @param compositionArray mole fractions for all components (sum ≈ 1.0)
      * @param numComponents number of chemical components
      * @param tolerance Newton-Raphson convergence tolerance
-     * @return CVM calculation result
+     * @return unified equilibrium state with CvmMetrics diagnostics
      */
-    CVMResult solve(
+    EquilibriumState solve(
             CVMModelInput modelInput,
             double[] eci,
             double temperature,

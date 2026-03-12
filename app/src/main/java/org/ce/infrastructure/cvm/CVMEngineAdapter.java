@@ -4,7 +4,7 @@ import org.ce.application.port.CVMSolverPort;
 import org.ce.domain.cvm.CVMEngine;
 import org.ce.domain.cvm.CVMSolverResult;
 import org.ce.domain.cvm.CVMModelInput;
-import org.ce.domain.model.result.CVMResult;
+import org.ce.domain.model.result.EquilibriumState;
 
 /**
  * Infrastructure adapter bridging the application CVM port to CVMEngine.
@@ -13,7 +13,7 @@ import org.ce.domain.model.result.CVMResult;
 public final class CVMEngineAdapter implements CVMSolverPort {
 
     @Override
-    public CVMResult solve(
+    public EquilibriumState solve(
             CVMModelInput modelInput,
             double[] eci,
             double temperature,
@@ -29,20 +29,15 @@ public final class CVMEngineAdapter implements CVMSolverPort {
                 numComponents,
                 tolerance);
 
-        // For backward compat with result: use binary composition (x[1]) if K=2
-        double compositionScalar = (numComponents == 2) ? compositionArray[1] : Double.NaN;
-
-        return CVMResult.fromSolver(
+        return EquilibriumState.fromCvm(
                 temperature,
-                compositionScalar,
+                compositionArray,
                 solverResult.getEquilibriumCFs(),
-                solverResult.getGibbsEnergy(),
                 solverResult.getEnthalpy(),
+                solverResult.getGibbsEnergy(),
                 solverResult.getEntropy(),
+                solverResult.isConverged(),
                 solverResult.getIterations(),
-                solverResult.getGradientNorm(),
-                solverResult.isConverged());
-
+                solverResult.getGradientNorm());
     }
 }
-

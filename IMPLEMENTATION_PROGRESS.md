@@ -353,6 +353,31 @@ Expand `ThermodynamicResult` with `enthalpyOfMixing()` and `compositionArray()`.
 
 ---
 
+## Phase 9 — Unified CVM/MCS Pipeline: Step 3 — Migrate Ports & Adapters to EquilibriumState (Mar 12, 2026)
+
+### Goal
+Make `EquilibriumState` the canonical runtime return type for both engines.
+Retire `CVMResult` and `MCSResult` as the adapter output types.
+
+### Changes
+- `EngineMetrics.McsMetrics` — added `energyPerSite` field (incremental MCEngine tracking)
+- `EquilibriumState.fromMcs()` — added `energyPerSite` parameter
+- `CVMSolverPort` — return type `CVMResult` → `EquilibriumState`
+- `MCSRunnerPort` — return type `MCSResult` → `EquilibriumState`
+- `CVMEngineAdapter` — build `EquilibriumState.fromCvm(...)` directly
+- `MCSRunnerAdapter` — build `EquilibriumState.fromMcs(...)` directly (passes energyPerSite)
+- `CVMCalculationUseCase` — work with `EquilibriumState`; access CvmMetrics via pattern match
+- `MCSCalculationUseCase` — work with `EquilibriumState`; access McsMetrics via pattern match
+- `MCSCalculationJob` — `instanceof MCSResult` → `instanceof EquilibriumState`
+
+### Result
+- Build: ✅ Clean compilation (no errors)
+- Tests: ✅ All 104 tests pass
+- Both pipelines now produce `EquilibriumState` at the application layer boundary
+- `CVMResult`/`MCSResult` remain as domain-layer records (used by tests, CVMPhaseModel internals)
+
+---
+
 ## Notes
 
 - All work tracked as phases; each phase must pass clean compilation before proceeding

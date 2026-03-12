@@ -2,7 +2,7 @@ package org.ce.infrastructure.mcs;
 
 import org.ce.application.port.MCSProgressPort;
 import org.ce.application.port.MCSRunnerPort;
-import org.ce.domain.model.result.MCSResult;
+import org.ce.domain.model.result.EquilibriumState;
 import org.ce.infrastructure.context.MCSCalculationContext;
 import org.ce.domain.mcs.MCResult;
 import org.ce.domain.mcs.MCSRunner;
@@ -19,13 +19,13 @@ public final class MCSRunnerAdapter implements MCSRunnerPort {
     private static final Logger LOG = LoggingConfig.getLogger(MCSRunnerAdapter.class);
 
     /**
-     * Gas constant R = 8.314 J/(molÂ·K) for correct Boltzmann statistics
+     * Gas constant R = 8.314 J/(mol·K) for correct Boltzmann statistics
      * when ECI units are in J/mol.
      */
     private static final double GAS_CONSTANT = 8.314;
 
     @Override
-    public MCSResult run(
+    public EquilibriumState run(
             MCSCalculationContext context,
             MCSProgressPort progressPort,
             BooleanSupplier cancellationCheck) {
@@ -35,6 +35,7 @@ public final class MCSRunnerAdapter implements MCSRunnerPort {
                 + ", L=" + context.getSupercellSize()
                 + ", nEquil=" + context.getEquilibrationSteps()
                 + ", nAvg=" + context.getAveragingSteps());
+
         MCSRunner.Builder builder = MCSRunner.builder()
                 .clusterData(context.getClusterData())
                 .eci(context.getECI())
@@ -67,20 +68,23 @@ public final class MCSRunnerAdapter implements MCSRunnerPort {
         }
 
         MCResult mcResult = builder.build().run();
-        MCSResult result = MCSResult.fromEngine(
+        EquilibriumState result = EquilibriumState.fromMcs(
                 mcResult.getTemperature(),
                 mcResult.getComposition(),
                 mcResult.getAvgCFs(),
-                mcResult.getEnergyPerSite(),
                 mcResult.getHmixPerSite(),
                 mcResult.getHeatCapacityPerSite(),
                 mcResult.getAcceptRate(),
                 mcResult.getNEquilSweeps(),
                 mcResult.getNAvgSweeps(),
                 mcResult.getSupercellSize(),
-                mcResult.getNSites());
-        LOG.fine("MCSRunnerAdapter.run — EXIT: MCSResult — acceptRate=" + String.format("%.3f", result.acceptRate()) + ", nSites=" + mcResult.getNSites());
+                mcResult.getNSites(),
+                mcResult.getEnergyPerSite());
+
+        LOG.fine("MCSRunnerAdapter.run — EXIT: acceptRate="
+                + String.format("%.3f", mcResult.getAcceptRate())
+                + ", nSites=" + mcResult.getNSites()
+                + ", Hmix/site=" + String.format("%.6f", mcResult.getHmixPerSite()));
         return result;
     }
 }
-

@@ -125,9 +125,9 @@ public record EquilibriumState(
                     "  NR: %s (%d iters, ‖∇G‖=%.2e)%n",
                     m.converged() ? "CONVERGED" : "NOT CONVERGED", m.iterations(), m.gradientNorm()));
             case EngineMetrics.McsMetrics m -> sb.append(String.format(
-                    "  MC: accept=%.1f%%, equil=%d, avg=%d, L=%d (%d sites)%n",
+                    "  MC: accept=%.1f%%, equil=%d, avg=%d, L=%d (%d sites), <E>/site=%.6e%n",
                     m.acceptRate() * 100, m.nEquilSweeps(), m.nAvgSweeps(),
-                    m.supercellSize(), m.nSites()));
+                    m.supercellSize(), m.nSites(), m.energyPerSite()));
         }
         sb.append("═══════════════════════════════════════════");
         return sb.toString();
@@ -156,19 +156,22 @@ public record EquilibriumState(
 
     /**
      * Factory for MCS results.
+     *
+     * @param energyPerSite total energy per site from incremental MCEngine tracking (J/mol)
      */
     public static EquilibriumState fromMcs(
             double temperature, double[] compositionArray, double[] correlationFunctions,
             double enthalpy, double heatCapacity,
             double acceptRate, long nEquilSweeps, long nAvgSweeps,
-            int supercellSize, int nSites) {
+            int supercellSize, int nSites, double energyPerSite) {
         return new EquilibriumState(
                 temperature, compositionArray, correlationFunctions,
                 enthalpy,
                 OptionalDouble.empty(),
                 OptionalDouble.empty(),
                 OptionalDouble.of(heatCapacity),
-                new EngineMetrics.McsMetrics(acceptRate, nEquilSweeps, nAvgSweeps, supercellSize, nSites),
+                new EngineMetrics.McsMetrics(acceptRate, nEquilSweeps, nAvgSweeps,
+                        supercellSize, nSites, energyPerSite),
                 Instant.now());
     }
 }

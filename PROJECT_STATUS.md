@@ -13,6 +13,7 @@
 **ECI Standardization:** ✅ Phase 8 Complete — MCS & CVM both use ncf-length ECIs, no expansion needed
 **Unified Pipeline Phase 9.1:** ✅ hmixPerSite propagated through MCS pipeline (data loss bug fixed)
 **Unified Pipeline Phase 9.2:** ✅ EquilibriumState + EngineMetrics types created; ThermodynamicResult expanded
+**Unified Pipeline Phase 9.3:** ✅ Both ports/adapters/use cases migrated to return EquilibriumState
 
 ---
 

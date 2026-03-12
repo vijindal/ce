@@ -44,12 +44,14 @@ public sealed interface EngineMetrics
      * @param nAvgSweeps    number of averaging sweeps performed
      * @param supercellSize supercell dimension L (N = 2·L³ for BCC)
      * @param nSites        total number of lattice sites in the supercell
+     * @param energyPerSite total energy per site (J/mol) from incremental MCEngine tracking
      */
     record McsMetrics(
             double acceptRate,
             long nEquilSweeps,
             long nAvgSweeps,
             int supercellSize,
-            int nSites
+            int nSites,
+            double energyPerSite
     ) implements EngineMetrics {}
 }

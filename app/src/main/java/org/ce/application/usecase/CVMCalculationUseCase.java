@@ -3,9 +3,10 @@ package org.ce.application.usecase;
 import org.ce.application.port.CalculationProgressPort;
 import org.ce.application.port.CVMSolverPort;
 import org.ce.domain.cvm.CVMModelInput;
-import org.ce.domain.model.result.CVMResult;
 import org.ce.domain.model.result.CalculationFailure;
 import org.ce.domain.model.result.CalculationResult;
+import org.ce.domain.model.result.EngineMetrics;
+import org.ce.domain.model.result.EquilibriumState;
 import org.ce.infrastructure.context.CVMCalculationContext;
 
 /**
@@ -19,26 +20,11 @@ import org.ce.infrastructure.context.CVMCalculationContext;
  * <ul>
  *   <li>Validate calculation context readiness</li>
  *   <li>Report progress through {@link CalculationProgressPort}</li>
- *   <li>Delegate to {@link CVMEngine} for numerical computation</li>
+ *   <li>Delegate to {@link CVMSolverPort} for numerical computation</li>
  *   <li>Translate engine results into domain {@link CalculationResult}</li>
  * </ul>
  *
- * <h2>Usage</h2>
- * <pre>{@code
- * CVMCalculationUseCase useCase = new CVMCalculationUseCase(progressPort);
- * CalculationResult result = useCase.execute(context);
- * switch (result) {
- *     case CVMResult success -> handleSuccess(success);
- *     case CalculationFailure fail -> handleFailure(fail);
- *     default -> throw new IllegalStateException("Unexpected result type");
- * }
- * }</pre>
- *
- * @author CVM Project
- * @version 1.0
  * @since Phase 3 - Application Layer
- * @see CVMEngine
- * @see CVMCalculationContext
  */
 public final class CVMCalculationUseCase {
 
@@ -47,11 +33,6 @@ public final class CVMCalculationUseCase {
     private final CalculationProgressPort progressPort;
     private final CVMSolverPort solverPort;
 
-    /**
-     * Constructs the use case with a progress port.
-     *
-     * @param progressPort port for reporting progress (never null)
-     */
     public CVMCalculationUseCase(
             CalculationProgressPort progressPort,
             CVMSolverPort solverPort) {
@@ -68,12 +49,12 @@ public final class CVMCalculationUseCase {
      * Executes CVM free-energy minimization.
      *
      * @param context prepared calculation context with cluster data and ECI
-     * @return CVMResult on success, CalculationFailure on error
+     * @return EquilibriumState on success, CalculationFailure on error
      */
     public CalculationResult execute(CVMCalculationContext context) {
         if (!context.isReady()) {
             String error = "CVM context not ready: " + context.getReadinessError();
-            progressPort.logMessage("âš  " + error);
+            progressPort.logMessage("\u26a0 " + error);
             return CalculationFailure.of(error, METHOD_NAME);
         }
 
@@ -85,7 +66,7 @@ public final class CVMCalculationUseCase {
             progressPort.reportProgress(0.3);
 
             long startTime = System.currentTimeMillis();
-                CVMResult solverResult = solverPort.solve(
+            EquilibriumState solverResult = solverPort.solve(
                     toModelInput(context),
                     context.getECI(),
                     context.getTemperature(),
@@ -127,44 +108,49 @@ public final class CVMCalculationUseCase {
     }
 
     private void logResults(CVMCalculationContext context,
-                            CVMResult result,
+                            EquilibriumState result,
                             long elapsedMs) {
         progressPort.logMessage("\n" + "-".repeat(60));
-        if (result.converged()) {
-            progressPort.logMessage("CVM Calculation Complete - CONVERGED");
+
+        if (result.metrics() instanceof EngineMetrics.CvmMetrics m) {
+            progressPort.logMessage("CVM Calculation Complete - "
+                    + (m.converged() ? "CONVERGED" : "DID NOT CONVERGE"));
+            progressPort.logMessage("-".repeat(60));
+            progressPort.logMessage("Execution time: " + elapsedMs + " ms");
+            progressPort.logMessage("Iterations: " + m.iterations());
+            progressPort.logMessage("Final gradient norm: "
+                    + String.format("%.6e", m.gradientNorm()));
         } else {
-            progressPort.logMessage("CVM Calculation Complete - DID NOT CONVERGE");
+            progressPort.logMessage("CVM Calculation Complete");
+            progressPort.logMessage("-".repeat(60));
+            progressPort.logMessage("Execution time: " + elapsedMs + " ms");
         }
-        progressPort.logMessage("-".repeat(60));
-        progressPort.logMessage("Execution time: " + elapsedMs + " ms");
-        progressPort.logMessage("Iterations: " + result.iterations());
-        progressPort.logMessage("Final gradient norm: "
-            + String.format("%.6e", result.gradientNorm()));
 
         progressPort.logMessage("\nThermodynamic Results:");
-        progressPort.logMessage("  Gibbs Energy (G): "
-            + String.format("%.8e", result.gibbsEnergy()));
+        result.gibbsEnergy().ifPresent(G ->
+                progressPort.logMessage("  Gibbs Energy (G): " + String.format("%.8e", G)));
         progressPort.logMessage("  Enthalpy (H):     "
-            + String.format("%.8e", result.enthalpy()));
-        progressPort.logMessage("  Entropy (S):      "
-            + String.format("%.8e", result.entropy()));
-        progressPort.logMessage("  -TÂ·S:             "
-            + String.format("%.8e", -context.getTemperature() * result.entropy()));
+                + String.format("%.8e", result.enthalpy()));
+        result.entropy().ifPresent(S -> {
+            progressPort.logMessage("  Entropy (S):      " + String.format("%.8e", S));
+            progressPort.logMessage("  -T\u00b7S:             "
+                    + String.format("%.8e", -context.getTemperature() * S));
+        });
 
         progressPort.logMessage("\nEquilibrium Correlation Functions:");
-        double[] eqCFs = result.equilibriumCFs();
-        for (int i = 0; i < Math.min(5, eqCFs.length); i++) {
-            progressPort.logMessage("  CF[" + i + "]: "
-                    + String.format("%.10f", eqCFs[i]));
+        double[] cfs = result.correlationFunctions();
+        for (int i = 0; i < Math.min(5, cfs.length); i++) {
+            progressPort.logMessage("  CF[" + i + "]: " + String.format("%.10f", cfs[i]));
         }
-        if (eqCFs.length > 5) {
-            progressPort.logMessage("  ... (" + (eqCFs.length - 5) + " more CFs)");
+        if (cfs.length > 5) {
+            progressPort.logMessage("  ... (" + (cfs.length - 5) + " more CFs)");
         }
 
-        if (result.converged()) {
-            progressPort.logMessage("\nâœ“ CVM calculation succeeded");
+        boolean converged = result.metrics() instanceof EngineMetrics.CvmMetrics m && m.converged();
+        if (converged) {
+            progressPort.logMessage("\n\u2713 CVM calculation succeeded");
         } else {
-            progressPort.logMessage("\nâš  CVM calculation finished but did not converge to tolerance");
+            progressPort.logMessage("\n\u26a0 CVM calculation finished but did not converge to tolerance");
         }
         progressPort.logMessage("=".repeat(60));
     }
@@ -189,4 +175,3 @@ public final class CVMCalculationUseCase {
                 context.getAllClusterData().getStage3());
     }
 }
-

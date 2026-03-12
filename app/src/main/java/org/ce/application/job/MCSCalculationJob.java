@@ -7,7 +7,7 @@ import org.ce.application.usecase.MCSCalculationUseCase;
 import org.ce.domain.model.data.AllClusterData;
 import org.ce.domain.model.result.CalculationFailure;
 import org.ce.domain.model.result.CalculationResult;
-import org.ce.domain.model.result.MCSResult;
+import org.ce.domain.model.result.EquilibriumState;
 import org.ce.application.port.CalculationProgressListener;
 import org.ce.domain.system.SystemIdentity;
 import org.ce.infrastructure.context.MCSCalculationContext;
@@ -177,7 +177,7 @@ public class MCSCalculationJob extends AbstractBackgroundJob {
             if (shouldStop()) return;
 
             // ========== PHASE 5: Handle Result ==========
-            if (result instanceof MCSResult) {
+            if (result instanceof EquilibriumState) {
                 setProgress(100);
                 setStatusMessage("MCS calculation completed");
                 LOG.info("MCSCalculationJob.run — EXIT: COMPLETED");
