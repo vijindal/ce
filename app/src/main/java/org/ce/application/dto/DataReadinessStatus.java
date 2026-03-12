@@ -68,4 +68,11 @@ public record DataReadinessStatus(
             "Run the full identification pipeline first."
         );
     }
+
+    /**
+     * Factory for custom readiness state.
+     */
+    public static DataReadinessStatus of(boolean cluster, boolean cec, boolean cfs, String msg) {
+        return new DataReadinessStatus(cluster, cec, cfs, msg);
+    }
 }
