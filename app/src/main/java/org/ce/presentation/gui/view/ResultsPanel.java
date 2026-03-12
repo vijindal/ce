@@ -172,17 +172,20 @@ public class ResultsPanel extends VBox {
     
     private void updateMCSDataUI(MCSUpdate update) {
         mcsDataPointCount++;
-        
+        if (mcsDataPointCount % 50 == 0) {
+            System.out.println("[DEBUG] ResultsPanel.updateMCSData: step=" + update.getStep() + ", E=" + update.getE_total());
+        }
+
         // Sample chart updates every 10 sweeps to avoid expensive redraws
         if (update.getStep() % 10 == 0) {
             energySeries.getData().add(new XYChart.Data<>(update.getStep(), update.getE_total()));
-            
+
             // Aggressive pruning: keep only recent 300 points (avoids ~10k point redraws)
             if (energySeries.getData().size() > 300) {
                 energySeries.getData().remove(0, 50);
             }
         }
-        
+
         // Sampled text output every 50 sweeps (not every update)
         if (update.getStep() % 50 == 0) {
             String output = String.format(
@@ -196,7 +199,7 @@ public class ResultsPanel extends VBox {
                 update.getElapsedMs()
             );
             outputArea.appendText(output);
-            
+
             // Auto-scroll to bottom
             Platform.runLater(() -> outputArea.setScrollTop(Double.MAX_VALUE));
         }
@@ -206,13 +209,14 @@ public class ResultsPanel extends VBox {
      * Initialize MCS monitoring for a new run.
      */
     public void initializeMCS(int eqSteps, int avgSteps, long seed) {
+        System.out.println("[DEBUG] ResultsPanel.initializeMCS called: eqSteps=" + eqSteps + ", avgSteps=" + avgSteps + ", seed=" + seed);
         Platform.runLater(() -> {
             energySeries.getData().clear();
             outputArea.clear();
             mcsDataPointCount = 0;
             isPaused = false;
             updateButtonStates();
-            
+
             appendText(String.format(
                 "=== MCS Simulation Started ===\n" +
                 "Seed: %d\n" +
