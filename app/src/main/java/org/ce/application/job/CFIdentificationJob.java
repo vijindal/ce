@@ -1,7 +1,8 @@
 package org.ce.application.job;
 
-import org.ce.application.usecase.CVMConfiguration;
-import org.ce.application.usecase.CVMPipeline;
+import org.ce.application.port.IdentificationProgressListener;
+import org.ce.application.pipeline.IdentificationRequest;
+import org.ce.application.pipeline.IdentificationPipeline;
 import org.ce.domain.cvm.CMatrixResult;
 import org.ce.domain.model.data.AllClusterData;
 import org.ce.infrastructure.registry.SystemRegistry;
@@ -44,6 +45,7 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
     private final Vector3D translationVector;
     private final int numComponents;
     private final SystemRegistry registry;  // For thread-safe status updates
+    private final IdentificationProgressListener progressListener; // Optional; may be null
     
     public CFIdentificationJob(
             SystemIdentity system,
@@ -56,6 +58,24 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
             double[][] transformationMatrix,
             Vector3D translationVector,
             int numComponents) {
+        this(system, registry, clusterKey, disorderedClusterFile, orderedClusterFile,
+             disorderedSymmetryGroup, orderedSymmetryGroup, transformationMatrix,
+             translationVector, numComponents, null);
+    }
+
+    /** Full constructor including an optional {@link IdentificationProgressListener}. */
+    public CFIdentificationJob(
+            SystemIdentity system,
+            SystemRegistry registry,
+            String clusterKey,
+            String disorderedClusterFile,
+            String orderedClusterFile,
+            String disorderedSymmetryGroup,
+            String orderedSymmetryGroup,
+            double[][] transformationMatrix,
+            Vector3D translationVector,
+            int numComponents,
+            IdentificationProgressListener progressListener) {
         
         super(
             "cf-" + system.getId() + "-" + UUID.randomUUID(),
@@ -72,6 +92,7 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
         this.transformationMatrix = transformationMatrix;
         this.translationVector = translationVector;
         this.numComponents = numComponents;
+        this.progressListener = progressListener;
     }
     
     @Override
@@ -89,7 +110,7 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
             if (shouldStop()) return;
             
             // Build configuration
-            CVMConfiguration config = CVMConfiguration.builder()
+            IdentificationRequest config = IdentificationRequest.builder()
                 .disorderedClusterFile(disorderedClusterFile)
                 .orderedClusterFile(orderedClusterFile)
                 .disorderedSymmetryGroup(disorderedSymmetryGroup)
@@ -103,14 +124,15 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
             
             if (shouldStop()) return;
             
+            fireStageStarted(1, "Cluster identification");
             setStatusMessage("Running identification pipeline (Stages 1-3)...");
             setProgress(30);
-            
+
             if (shouldStop()) return;
-            
+
             // ===== Run complete pipeline: Stages 1-3 in one call =====
             // No duplicate file parsing - all done inside CVMPipeline.identify()
-            this.allData = CVMPipeline.identify(config);
+            this.allData = IdentificationPipeline.identify(config);
             
             // Update with system ID (not available to CVMPipeline)
             this.allData = new AllClusterData(
@@ -121,6 +143,14 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
                 allData.getStage3(),
                 allData.getComputationTimeMs()
             );
+
+            // Fire per-stage completion callbacks with summary info
+            fireStageCompleted(1, "Stage 1: tcdis=" + allData.getStage1().getTcdis());
+            fireStageStarted(2, "CF identification");
+            fireStageCompleted(2, "Stage 2: ncf=" + allData.getStage2().getNcf()
+                    + ", tcf=" + allData.getStage2().getTcf());
+            fireStageStarted(3, "C-matrix construction");
+            fireStageCompleted(3, "Stage 3: C-matrix built");
             
             setProgress(90);
             
@@ -161,11 +191,14 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
                     + ", ncf=" + allData.getStage2().getNcf()
                     + ", elapsed=" + (System.currentTimeMillis() - jStart) + " ms");
             markCompleted();
+            firePipelineCompleted(allData);
             
         } catch (Exception e) {
             LOG.log(Level.WARNING, "CFIdentificationJob.run — EXCEPTION in identification pipeline: "
                     + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
-            markFailed("Identification pipeline failed: " + e.getMessage());
+            String errMsg = "Identification pipeline failed: " + e.getMessage();
+            markFailed(errMsg);
+            firePipelineFailed(errMsg);
         } finally {
             running = false;
         }
@@ -201,6 +234,38 @@ public class CFIdentificationJob extends AbstractBackgroundJob {
     @Override
     public String toString() {
         return name + " [" + getProgress() + "%]";
+    }
+
+    // -----------------------------------------------------------------------
+    // Listener fire helpers — guarded against null listener
+    // -----------------------------------------------------------------------
+
+    private void fireStageStarted(int stage, String description) {
+        if (progressListener != null) {
+            try { progressListener.onStageStarted(stage, description); }
+            catch (Exception ex) { LOG.warning("IdentificationProgressListener.onStageStarted threw: " + ex.getMessage()); }
+        }
+    }
+
+    private void fireStageCompleted(int stage, String summary) {
+        if (progressListener != null) {
+            try { progressListener.onStageCompleted(stage, summary); }
+            catch (Exception ex) { LOG.warning("IdentificationProgressListener.onStageCompleted threw: " + ex.getMessage()); }
+        }
+    }
+
+    private void firePipelineCompleted(AllClusterData result) {
+        if (progressListener != null) {
+            try { progressListener.onPipelineCompleted(result); }
+            catch (Exception ex) { LOG.warning("IdentificationProgressListener.onPipelineCompleted threw: " + ex.getMessage()); }
+        }
+    }
+
+    private void firePipelineFailed(String errorMessage) {
+        if (progressListener != null) {
+            try { progressListener.onPipelineFailed(errorMessage); }
+            catch (Exception ex) { LOG.warning("IdentificationProgressListener.onPipelineFailed threw: " + ex.getMessage()); }
+        }
     }
 }
 

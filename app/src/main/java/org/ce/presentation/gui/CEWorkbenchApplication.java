@@ -9,7 +9,10 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.ce.infrastructure.service.BackgroundJobManager;
+import org.ce.infrastructure.service.CECManagementCoordinator;
+import org.ce.infrastructure.service.IdentificationCoordinator;
 import org.ce.infrastructure.data.SystemDataLoader;
+import org.ce.application.service.CECManagementService;
 import org.ce.infrastructure.registry.ResultRepository;
 import org.ce.infrastructure.registry.SystemRegistry;
 import org.ce.infrastructure.registry.WorkspaceManager;
@@ -40,6 +43,10 @@ public class CEWorkbenchApplication extends Application {
     private SystemRegistry systemRegistry;
     private ResultRepository resultRepository;
     private BackgroundJobManager jobManager;
+    private WorkspaceManager workspace;
+    private IdentificationCoordinator identificationCoordinator;
+    private CECManagementCoordinator cecManagementCoordinator;
+    private CECManagementService cecManagementService;
     private SystemRegistryPanel registryPanel;
     private ResultsPanel resultsPanel;
     private LogConsolePanel logConsolePanel;
@@ -81,7 +88,7 @@ public class CEWorkbenchApplication extends Application {
         Path userHome = Paths.get(System.getProperty("user.home"));
 
         // Single workspace manager — owns all persistent path resolution
-        WorkspaceManager workspace = new WorkspaceManager(userHome);
+        workspace = new WorkspaceManager(userHome);
 
         // Configure SystemDataLoader's workspace root so user CECs are found/saved correctly
         SystemDataLoader.setWorkspaceRoot(workspace.getRoot());
@@ -92,6 +99,11 @@ public class CEWorkbenchApplication extends Application {
 
         // Initialize job manager with 2 concurrent jobs
         jobManager = new BackgroundJobManager(2);
+
+        // Application-layer service and infrastructure coordinators (Type 1 architecture)
+        cecManagementService     = new CECManagementService(workspace);
+        identificationCoordinator = new IdentificationCoordinator(jobManager, systemRegistry);
+        cecManagementCoordinator  = new CECManagementCoordinator(jobManager, cecManagementService);
 
         // Auto-discover and register alloy systems from the filesystem
         loadAlloySystemsFromFilesystem();
@@ -170,7 +182,7 @@ public class CEWorkbenchApplication extends Application {
         resultsPanel = new ResultsPanel();
         
         // Left panel: System registry + calculation setup
-        registryPanel = new SystemRegistryPanel(systemRegistry, jobManager, resultsPanel);
+        registryPanel = new SystemRegistryPanel(systemRegistry, jobManager, resultsPanel, identificationCoordinator);
         mainSplitter.getItems().add(registryPanel);
         
         // Right panel: Single Results tab
@@ -237,7 +249,7 @@ public class CEWorkbenchApplication extends Application {
         Tab resultTab = new Tab("Result", resultsPanel);
 
         // CEC Database tab (formerly a modal dialog, now inline)
-        CECManagementPanel cecPanel = new CECManagementPanel(systemRegistry);
+        CECManagementPanel cecPanel = new CECManagementPanel(systemRegistry, cecManagementService, cecManagementCoordinator);
         Tab cecTab = new Tab("CEC Database", cecPanel);
         cecTab.setClosable(false);
 
@@ -303,4 +315,3 @@ public class CEWorkbenchApplication extends Application {
         launch(args);
     }
 }
-
