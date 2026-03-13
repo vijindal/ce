@@ -1,13 +1,9 @@
 package org.ce.infrastructure.context;
 
-import org.ce.application.usecase.CVMCalculationUseCase;
-import org.ce.application.usecase.MCSCalculationUseCase;
 import org.ce.application.port.CalculationProgressPort;
 import org.ce.domain.port.ClusterDataRepository;
 import org.ce.domain.port.ECIRepository;
 import org.ce.domain.port.SystemRepository;
-import org.ce.infrastructure.cvm.CVMEngineAdapter;
-import org.ce.infrastructure.mcs.MCSRunnerAdapter;
 import org.ce.infrastructure.persistence.ClusterDataRepositoryAdapter;
 import org.ce.infrastructure.persistence.ECIRepositoryAdapter;
 import org.ce.infrastructure.persistence.SystemRepositoryAdapter;
@@ -39,9 +35,9 @@ import org.ce.domain.system.SystemIdentity;
  * // Create context with required registry
  * ApplicationContext ctx = ApplicationContext.create(systemRegistry);
  *
- * // Get typed components
- * CVMCalculationUseCase cvmUseCase = ctx.cvmCalculationUseCase(progressPort);
- * MCSCalculationUseCase mcsUseCase = ctx.mcsCalculationUseCase(progressPort);
+ * // Access repositories
+ * ClusterDataRepository<AllClusterData> repo = ctx.clusterDataRepository();
+ * ECIRepository eciRepo = ctx.eciRepository();
  * }</pre>
  *
  * @author CVM Project
@@ -128,30 +124,6 @@ public final class ApplicationContext {
     }
 
     // -------------------------------------------------------------------------
-    // Use Case Factories
-    // -------------------------------------------------------------------------
-
-    /**
-     * Creates a CVM calculation use case with the given progress port.
-     *
-     * @param progressPort port for progress reporting (may be null for NO_OP)
-     * @return configured use case
-     */
-    public CVMCalculationUseCase cvmCalculationUseCase(CalculationProgressPort progressPort) {
-        return new CVMCalculationUseCase(progressPort, new CVMEngineAdapter());
-    }
-
-    /**
-     * Creates an MCS calculation use case with the given progress port.
-     *
-     * @param progressPort port for progress reporting (may be null for NO_OP)
-     * @return configured use case
-     */
-    public MCSCalculationUseCase mcsCalculationUseCase(CalculationProgressPort progressPort) {
-        return new MCSCalculationUseCase(progressPort, new MCSRunnerAdapter());
-    }
-
-    // -------------------------------------------------------------------------
     // Direct Infrastructure Access (for legacy code migration)
     // -------------------------------------------------------------------------
 
@@ -165,4 +137,3 @@ public final class ApplicationContext {
         return systemRegistry;
     }
 }
-

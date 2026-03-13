@@ -74,7 +74,7 @@ public final class MCSCalculationRequest extends ThermodynamicCalculationRequest
         }
 
         private void validate() {
-            validateCommon(systemId, temperature, compositionArray, composition, numComponents);
+            validateCommon(systemId, temperature, compositionArray, numComponents);
             if (supercellSize < 1) {
                 throw new IllegalArgumentException("Supercell size must be >= 1");
             }
@@ -100,7 +100,7 @@ public final class MCSCalculationRequest extends ThermodynamicCalculationRequest
             }
             sb.append("], numComponents=").append(numComponents);
         } else {
-            sb.append(", composition=").append(composition);
+            sb.append(", composition=").append(java.util.Arrays.toString(compositionArray));
             sb.append(", numComponents=").append(numComponents);
         }
         sb.append(", supercellSize=").append(supercellSize);

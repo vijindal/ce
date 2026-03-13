@@ -2,11 +2,13 @@ package org.ce.infrastructure.cvm;
 
 import org.ce.domain.cvm.CVMPhaseModel;
 import org.ce.domain.cvm.CVMModelInput;
+import org.ce.domain.model.result.EngineMetrics;
+import org.ce.domain.model.result.EquilibriumState;
 
 /**
  * Example usage patterns for CVMPhaseModel.
  *
- * <p>Demonstrates how to use the new model-centric API for:
+ * <p>Demonstrates how to use the model-centric API for:
  * <ul>
  *   <li>Single point calculations</li>
  *   <li>Temperature scanning</li>
@@ -38,7 +40,7 @@ public class CVMPhaseModelExamples {
         System.out.println("=== Equilibrium Properties at T=1000K, x=0.5 ===");
         System.out.println("G = " + model.getEquilibriumG() + " J/mol");
         System.out.println("H = " + model.getEquilibriumH() + " J/mol");
-        System.out.println("S = " + model.getEquilibriumS() + " J/(molÂ·K)");
+        System.out.println("S = " + model.getEquilibriumS() + " J/(mol·K)");
 
         // Query microstate (uses cached results)
         System.out.println("\nCluster Variables (CVs):");
@@ -72,7 +74,7 @@ public class CVMPhaseModelExamples {
         CVMPhaseModel model = CVMPhaseModel.create(input, eci, 300.0, 0.5);
 
         System.out.println("=== Temperature Scan: x = 0.5 ===");
-        System.out.println("T(K)      G(J/mol)       H(J/mol)       S(J/(molÂ·K))");
+        System.out.println("T(K)      G(J/mol)       H(J/mol)       S(J/(mol·K))");
         System.out.println("-".repeat(70));
 
         // Scan from 300 to 1500 K
@@ -101,7 +103,7 @@ public class CVMPhaseModelExamples {
         CVMPhaseModel model = CVMPhaseModel.create(input, eci, 800.0, 0.0);
 
         System.out.println("=== Composition Scan: T = 800 K ===");
-        System.out.println("x      G(J/mol)       Stable   ||âˆ‡G||");
+        System.out.println("x      G(J/mol)       Stable   ||∇G||");
         System.out.println("-".repeat(50));
 
         for (double x = 0.0; x <= 1.0; x += 0.1) {
@@ -182,11 +184,11 @@ public class CVMPhaseModelExamples {
         double[] fractions = {0.5, 0.3, 0.2};  // x_A, x_B, x_C (sum = 1.0)
         model.setMoleFractions(fractions);
 
-        var state = model.getEquilibriumState();
+        EquilibriumState state = model.getEquilibriumState();
         System.out.println("Composition: " + state);
         state.gibbsEnergy().ifPresent(G ->
                 System.out.println("G = " + G + " J/mol"));
-        if (state.metrics() instanceof org.ce.domain.model.result.EngineMetrics.CvmMetrics m) {
+        if (state.metrics() instanceof EngineMetrics.CvmMetrics m) {
             System.out.println("Convergence: " + String.format("%.2e", m.gradientNorm()));
         }
     }
@@ -204,20 +206,21 @@ public class CVMPhaseModelExamples {
         System.out.println("=== Effect of CEC variation ===");
         System.out.println("Base case G = " + model.getEquilibriumG());
 
-        // Vary first CEC by Â±10%
+        // Vary first CEC by ±10%
         double[] eciVaried = eciBase.clone();
         for (double perturbation : new double[]{-0.1, -0.05, 0, 0.05, 0.1}) {
             eciVaried[0] = eciBase[0] * (1.0 + perturbation);
             model.setECI(eciVaried);
 
             double G = model.getEquilibriumG();
-            System.out.printf("ECI[0] Ã— %.2f: G = %.3e%n", 1.0 + perturbation, G);
+            System.out.printf("ECI[0] × %.2f: G = %.3e%n", 1.0 + perturbation, G);
         }
     }
 
     /**
      * Example 7: Complete thermodynamic state export.
      * Bundle all properties for external analysis or storage.
+     * Uses the unified EquilibriumState record API.
      */
     public static void example_FullStateExport() throws Exception {
         CVMModelInput input = null;
@@ -225,23 +228,30 @@ public class CVMPhaseModelExamples {
 
         CVMPhaseModel model = CVMPhaseModel.create(input, eci, 600.0, 0.5);
 
-        // Get complete equilibrium state
-        CVMPhaseModel.EquilibriumState state = model.getEquilibriumState();
+        // Get complete equilibrium state (unified domain record)
+        EquilibriumState state = model.getEquilibriumState();
+
+        // Extract CVM diagnostics via pattern match
+        EngineMetrics.CvmMetrics cvm = (EngineMetrics.CvmMetrics) state.metrics();
 
         System.out.println("=== Complete Equilibrium State ===");
-        System.out.println("Temperature: " + state.temperature + " K");
-        System.out.println("Composition: " + java.util.Arrays.toString(state.moleFractions));
+        System.out.println("Temperature: " + state.temperature() + " K");
+        System.out.println("Composition: " + java.util.Arrays.toString(state.compositionArray()));
         System.out.println("\nThermodynamics:");
-        System.out.println("  G = " + String.format("%.6e", state.G) + " J/mol");
-        System.out.println("  H = " + String.format("%.6e", state.H) + " J/mol");
-        System.out.println("  S = " + String.format("%.6f", state.S) + " J/(molÂ·K)");
+        state.gibbsEnergy().ifPresent(G ->
+                System.out.println("  G = " + String.format("%.6e", G) + " J/mol"));
+        System.out.println("  H = " + String.format("%.6e", state.enthalpy()) + " J/mol");
+        state.entropy().ifPresent(S ->
+                System.out.println("  S = " + String.format("%.6f", S) + " J/(mol·K)"));
         System.out.println("\nConvergence:");
-        System.out.println("  Iterations: " + state.iterations);
-        System.out.println("  ||âˆ‡G||: " + String.format("%.2e", state.convergenceMeasure));
-        System.out.println("  Time (ms): " + state.getComputationTimeMs());
-        System.out.println("\nCorrelation Functions (first 5): ");
-        for (int i = 0; i < Math.min(5, state.correlationFunctions.length); i++) {
-            System.out.println("  u[" + i + "] = " + state.correlationFunctions[i]);
+        System.out.println("  Converged:  " + cvm.converged());
+        System.out.println("  Iterations: " + cvm.iterations());
+        System.out.println("  ||∇G||:     " + String.format("%.2e", cvm.gradientNorm()));
+        System.out.println("  Timestamp:  " + state.timestamp());
+        System.out.println("\nCorrelation Functions (first 5):");
+        double[] cfs = state.correlationFunctions();
+        for (int i = 0; i < Math.min(5, cfs.length); i++) {
+            System.out.println("  u[" + i + "] = " + cfs[i]);
         }
     }
 
@@ -263,7 +273,7 @@ public class CVMPhaseModelExamples {
         }
 
         System.out.println("=== Batch Processing: " + temperatures.length
-            + " temps Ã— " + compositions.length + " compositions ===");
+            + " temps × " + compositions.length + " compositions ===");
 
         long startTime = System.currentTimeMillis();
         int count = 0;
@@ -335,8 +345,6 @@ public class CVMPhaseModelExamples {
         }
     }
 
-    // Note: These examples assume a prepared CVMModelInput and ECI array
-    // In practice, these would be loaded via CalculationService.prepareCVMModel()
-    // and CalculationService.loadECI() methods
+    // Note: These examples assume a prepared CVMModelInput and ECI array.
+    // In practice these would be loaded via DataManagementPort.
 }
-

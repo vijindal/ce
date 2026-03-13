@@ -25,14 +25,23 @@ public sealed interface ThermodynamicResult extends CalculationResult
     double temperature();
 
     /**
-     * Returns the composition (mole fraction of component B for binary).
+     * Returns the B-component mole fraction (x[1]) for binary systems.
+     *
+     * <p>Prefer {@link #compositionArray()} for generality across all K.</p>
+     *
+     * @deprecated Use {@link #compositionArray()} which works for any number of components
      */
+    @Deprecated
     double composition();
 
     /**
-     * Returns the composition as a full array x[c] for each component.
+     * Returns the full mole-fraction array x[0..K-1] for all components.
      *
-     * <p>Default implementation returns {@code [1-x_B, x_B]} for binary systems.
+     * <p>This is the canonical composition accessor — use it in all new code.
+     * Works uniformly for binary, ternary, and any higher-order system.</p>
+     *
+     * <p>The default implementation constructs {@code [1-x_B, x_B]} from the
+     * deprecated scalar {@link #composition()} for legacy subtypes.
      * {@link EquilibriumState} overrides this with the actual stored array.</p>
      */
     default double[] compositionArray() {

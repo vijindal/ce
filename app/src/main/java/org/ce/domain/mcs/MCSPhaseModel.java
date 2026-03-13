@@ -168,16 +168,16 @@ public class MCSPhaseModel {
     }
 
     /**
-     * Sets composition for binary systems (K=2) using B-fraction shorthand.
-     * Invalidates cached result — next query re-runs.
+     * Sets composition for binary systems using the B-fraction shorthand.
+     * Builds {@code [1-xB, xB]} and calls {@link #setMoleFractions(double[])}.
+     *
+     * <p>For new code prefer {@link #setMoleFractions(double[])} — it works for any K.</p>
      *
      * @param xB mole fraction of component B in [0, 1]
+     * @deprecated Use {@link #setMoleFractions(double[])} for generality
      */
+    @Deprecated
     public void setCompositionBinary(double xB) {
-        if (numComponents != 2) {
-            throw new IllegalArgumentException(
-                    "setCompositionBinary is only valid for K=2, this model has K=" + numComponents);
-        }
         setMoleFractions(new double[]{1.0 - xB, xB});
     }
 
@@ -243,11 +243,14 @@ public class MCSPhaseModel {
 
     /**
      * Convenience for binary systems: set T and x_B, then return equilibrium state.
+     *
+     * <p>For new code prefer {@link #minimize(double, double[])} — it works for any K.</p>
+     *
+     * @deprecated Use {@link #minimize(double, double[])} for generality
      */
+    @Deprecated
     public EquilibriumState minimizeBinary(double T, double xB) {
-        setTemperature(T);
-        setCompositionBinary(xB);
-        return getEquilibriumState();
+        return minimize(T, new double[]{1.0 - xB, xB});
     }
 
     // =========================================================================

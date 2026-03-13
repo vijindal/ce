@@ -1,126 +1,108 @@
+# Claude Session Handoff — Unified CVM/MCS Pipeline Refactor
+**Last Updated:** Mar 13, 2026
+**Sessions completed:** Architecture review → Phase 10.1 → Phase 10.2
+**Next Session Should Start:** Phase 10.3
+
 ---
-# Claude Session Handoff — CVM/MCS Refactor
 
-## What was accomplished in the prior Claude session
+## Current Build Status
 
-A deep architectural review was conducted across the full CVM and MCS
-pipelines. The reviewer had access to the src zip (partial — application
-and domain/cvm only) plus the README, PROJECT_STATUS, and
-ARCHITECTURAL_CONTRACT files.
+**BUILD: PASSING** (verify with `./gradlew build` after applying Phase 10.2 file)
+**Tests:** 104/104 (verify after Phase 10.2)
+**App:** Launches and runs normally
 
-## The Unified Vision (agreed and documented)
+---
 
-Both CVM and MCS are equilibrium engines sharing identical inputs and
-outputs. They differ only in their internal equilibrium engine.
+## Phase Status
 
-    INPUTS:  AllClusterData + ECI (ncf-length) + T + x[]
-    ENGINE:  CVM → Newton-Raphson  |  MCS → Metropolis MC
-    OUTPUTS: EquilibriumState (shared type)
-               - correlationFunctions[]
-               - gibbsEnergy, enthalpy, entropy, heatCapacity
-               - EngineMetrics (engine-specific diagnostics)
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 10.1 | Fix CVMPhaseModelExecutor/Examples (D5) — restore build | ✅ DONE |
+| 10.2 | Wire MCSPhaseModel into MCSCalculationJob (D1, D2) | ✅ DONE |
+| 10.3 | Fix ternary composition in CVMPhaseModelJob (D6) | ⬜ NEXT |
+| 10.4 | Clean up orphaned CVMCalculationUseCase (D3) | ⬜ OPEN |
+| 10.5 | Retire AbstractCalculationContext DTOs (D4, D7) | ⬜ OPEN |
+| 10.6 | Add CVM cancellation (D8) | ⬜ OPEN |
 
-## Departures from the vision identified in the code review
+---
 
-1. [ARCHITECTURAL] No MCSPhaseModel domain object exists.
-   MCSCalculationContext (infrastructure) is a mutable data bag,
-   not a model. CVMPhaseModel is the correct pattern to follow.
+## What Changed in Phase 10.2
 
-2. [HIGH] CVMResult and MCSResult have incompatible fields and names.
-   Both should be replaced by a shared EquilibriumState type.
-   CVMResult fields: converged, iterations, gradientNorm,
-                     gibbsEnergy, enthalpy, entropy, equilibriumCFs
-   MCSResult fields: correlationFunctions, energyPerSite,
-                     heatCapacityPerSite, acceptRate
-   Neither contains all the fields the unified model needs.
+MCSCalculationJob.java rewritten to use MCSPhaseModel directly, mirroring CVMPhaseModelJob:
+- REMOVED: MCSCalculationContext, MCSCalculationUseCase, MCSRunnerAdapter, MCSProgressListenerAdapter
+- ADDED: MCSPhaseModel model field, getModel() method
+- Phase 4 now calls model.getEquilibriumState() — MC runs inside MCSPhaseModel
+- Engine params applied via check-before-set setters to avoid redundant re-run
+- getContext() removed (no callers). getResult() now returns EquilibriumState directly.
 
-3. [MEDIUM] CVMCalculationRequest and MCSCalculationRequest duplicate
-   identical composition validation logic (systemId, temperature,
-   composition, compositionArray, numComponents fields + validation).
-   Should share a ThermodynamicRequest abstract base class.
+Callers (CalculationSetupPanel, CEWorkbenchCLI, CalculationCoordinator) needed NO changes —
+they only ever used job status methods (isFailed, getErrorMessage, isCompleted).
 
-4. [MEDIUM] ECIMapper is called in CVMPhaseModelJob (job layer).
-   ECI format mapping belongs inside CVMPhaseModel constructor —
-   invisible to callers. Both models should accept raw nciEci.
-   NOTE: Phase 8 already removed ECIMapper from MCSCalculationJob.
+Dead code after Phase 10.2 (to be deleted in Phase 10.5):
+MCSRunnerAdapter, MCSCalculationUseCase, MCSRunnerPort, MCSCalculationContext
 
-5. [MEDIUM] CVMPhaseModelJob and MCSCalculationJob duplicate Phases
-   1+2 (getSystem → loadClusterData → loadECI). Should be extracted
-   into AbstractThermodynamicJob.
+---
 
-6. [LOW] CVMPhaseModel calls CVMFreeEnergy.evaluate() twice after
-   the NR solver — once for G/H/S (already in CVMSolverResult),
-   once for gradient/Hessian (needed for stability). Minor
-   inefficiency; the second call is legitimate.
+## Phase 10.3 — Exact Plan (NEXT)
 
-7. [LOW] MCS does not expose enthalpy or entropy as first-class
-   outputs. MCSResult has energyPerSite but not G explicitly.
-   Under the unified model both should appear in EquilibriumState.
+**Goal:** Stop collapsing ternary composition to scalar in CVMPhaseModelJob. Departure D6.
+**File:** application/job/CVMPhaseModelJob.java
 
-## Key facts learned (to avoid re-investigation)
+The bug (around line 100):
+```java
+double scalarComposition = composition[0];   // silently drops x[1], x[2] for K>=3
+model = CVMPhaseModel.create(cvmInput, jobData.ncfEci(),
+    request.getTemperature(), scalarComposition);
+```
 
-- Build: Gradle, Java 25. Command: ./gradlew build
-- Tests: 104 passing. Do NOT break these.
-- Architecture tests: ArchitectureBoundaryTest.java enforces
-  layer boundaries. Every change must pass it.
-- ECI: Both CVM and MCS now use ncf-length ECI directly (Phase 8).
-  No expansion or mapping between them.
-- CVMEngine: Was actively used (RC-6 was fixed there). Not dead code.
-  Re-examine before deleting.
-- NewtonRaphsonSolverSimple: Already implemented and working.
-  Issues 3a/3b from original review are already resolved.
-- ARCHITECTURAL_CONTRACT.md: Already strict. Application layer
-  must NOT import infrastructure (Rule B).
-- MCSCalculationContext lives in infrastructure/context/ — this
-  violates Rule B (application ports reference it). Moving it
-  to application/dto is the correct fix.
-- domain/model/result/ has 6 result files — need to read these
-  before proposing new result types.
+The fix — pass the full array:
+```java
+model = CVMPhaseModel.create(cvmInput, jobData.ncfEci(),
+    request.getTemperature(), composition);
+```
 
-## What the next Claude session should do first
+BEFORE WRITING THE FIX: Read CVMPhaseModel.java to verify the double[] overload of create()
+exists. If it doesn't, add it. The scalar overload calls setComposition(x[0]) internally;
+the array overload should call setMoleFractions(composition).
 
-1. Read ALL governance files: README, PROJECT_STATUS,
-   ARCHITECTURAL_CONTRACT, MEMORY (if exists),
-   IMPLEMENTATION_PROGRESS (if exists), this file.
+Tests: CVMTernaryIntegrationTest must pass. All 104 green.
+Commit: "fix: pass full composition array to CVMPhaseModel.create — fixes ternary CVM (D6)"
 
-2. Read the actual current source files the prior session
-   could NOT see:
-   - domain/model/result/  (all files — what result types exist?)
-   - domain/mcs/MCSPhaseModel.java  (does it exist?)
-   - infrastructure/context/MCSCalculationContext.java
-   - infrastructure/service/CalculationService.java
-   - infrastructure/mcs/  (all files)
-   - application/port/  (all 5 files)
-   - domain/cvm/CVMPhaseModel.java  (inner EquilibriumState class)
+---
 
-3. Do a gap analysis: for each departure listed above, check
-   whether it is already resolved in the current code.
+## Key Facts — Do Not Re-Investigate
 
-4. Only then propose implementation steps.
+- ECI: Always ncf-length. Never tc-length. Never padded.
+- EquilibriumState is a Java record. All access via methods (no fields).
+  gibbsEnergy() and entropy() are OptionalDouble — empty for MCS (physics boundary)
+  heatCapacity() is OptionalDouble — empty for CVM
+  metrics() casts to EngineMetrics.CvmMetrics or EngineMetrics.McsMetrics
+- MCSPhaseModel.create() runs the first simulation automatically with defaults (L=4, nEquil=5000, nAvg=10000)
+- ArchitectureBoundaryTest does NOT catch app->infrastructure imports (known gap)
 
-## Prompts already drafted and ready to use
+---
 
-The following prompts were drafted and are correct given the
-architectural vision. They need gap-analysis validation before
-running (step 3 above may show some are already done):
+## Files Changed This Refactor
 
-- Prompt 0:  Populate governance files with unified vision
-- Prompt 4:  Create EquilibriumState + EngineMetrics
-- Prompt 5:  Create ThermodynamicRequest base class
-- Prompt 6:  CVM model alignment (ECIMapper into constructor)
-- Prompt 7:  Create MCSPhaseModel
-- Prompt 8:  Move MCSCalculationContext, retire MCSResult
-- Prompt 9:  AbstractThermodynamicJob
-- Prompt 10: Retire CalculationProgressListener
-- Prompt 11: Final dead code sweep
+| File | Phase | What changed |
+|------|-------|--------------|
+| infrastructure/cvm/CVMPhaseModelExecutor.java | 10.1 | Record API accessors |
+| infrastructure/cvm/CVMPhaseModelExamples.java | 10.1 | Record API accessors |
+| application/job/MCSCalculationJob.java | 10.2 | Full rewrite — uses MCSPhaseModel |
 
-Ask the new Claude session to draft each prompt fully
-before running it, confirming against actual current code.
+---
 
-## How to resume with a new Claude instance
+## How to Start the Next Claude Session
 
-Say: "I am resuming a CVM/MCS Java refactor. Read
-CLAUDE_SESSION_HANDOFF.md, all governance files, and the
-source files listed in the handoff under 'What the next
-Claude session should do first'. Then tell me what you
-found and what gaps remain before we start any prompts."
+Upload the project zip and paste:
+
+```
+Continuing CE thermodynamics workbench refactor.
+Read in order: REFACTOR_PLAN.md, CLAUDE_SESSION_HANDOFF.md, ARCHITECTURE_CONTRACT.md
+
+Build: PASSING. Tests: 104/104.
+Completed: Phase 10.1 (CVMPhaseModelExecutor fix) and Phase 10.2 (MCSPhaseModel wiring).
+Starting: Phase 10.3 — fix ternary composition in CVMPhaseModelJob (D6).
+
+Please read CVMPhaseModelJob.java and CVMPhaseModel.java before proposing changes.
+```

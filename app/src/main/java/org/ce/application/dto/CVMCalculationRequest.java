@@ -42,7 +42,7 @@ public final class CVMCalculationRequest extends ThermodynamicCalculationRequest
         }
 
         private void validate() {
-            validateCommon(systemId, temperature, compositionArray, composition, numComponents);
+            validateCommon(systemId, temperature, compositionArray, numComponents);
             if (tolerance <= 0) {
                 throw new IllegalArgumentException("Tolerance must be positive");
             }
@@ -62,7 +62,7 @@ public final class CVMCalculationRequest extends ThermodynamicCalculationRequest
             }
             sb.append("], numComponents=").append(numComponents);
         } else {
-            sb.append(", composition=").append(composition);
+            sb.append(", composition=").append(java.util.Arrays.toString(compositionArray));
             sb.append(", numComponents=").append(numComponents);
         }
         sb.append(", tolerance=").append(tolerance);

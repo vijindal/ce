@@ -39,7 +39,18 @@
       "Bash(./gradlew test --tests \"*CECAssembly*\")",
       "Bash(./gradlew test --tests \"*SystemDiscovery*\")",
       "Bash(./gradlew test)",
-      "Bash(./gradlew clean compileJava test)"
+      "Bash(./gradlew clean compileJava test)",
+      "Bash(./gradlew clean:*)",
+      "Bash(./gradlew test:*)",
+      "Bash(cd /d d:codesce)",
+      "Bash(./gradlew compileJava -x test --no-configuration-cache)",
+      "Bash(./gradlew build:*)",
+      "Bash(git reset:*)",
+      "Bash(git add:*)",
+      "Bash(CEC Database to add it.\":*)",
+      "Bash(mvn clean:*)",
+      "Bash(./mvnw clean:*)",
+      "Bash(ls -la d:/codes/ce/gradlew*)"
     ]
   }
 }

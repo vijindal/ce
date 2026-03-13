@@ -112,11 +112,11 @@ public record EquilibriumState(
                 EquilibriumState [%s]
                 ═══════════════════════════════════════════
                   Temperature:   %.1f K
-                  Composition:   %.4f (x_B)
+                  Composition:   %s
                   Enthalpy:      %.6e J/mol
                 """,
                 metrics.getClass().getSimpleName().replace("Metrics", ""),
-                temperature, composition(), enthalpy));
+                temperature, formatComposition(compositionArray), enthalpy));
         gibbsEnergy.ifPresent(G -> sb.append(String.format("  Gibbs Energy:  %.6e J/mol%n", G)));
         entropy.ifPresent(S -> sb.append(String.format("  Entropy:       %.6e J/(mol·K)%n", S)));
         heatCapacity.ifPresent(Cv -> sb.append(String.format("  Cv/site:       %.6e J/(mol·K)%n", Cv)));
@@ -140,6 +140,19 @@ public record EquilibriumState(
     /**
      * Factory for CVM results (with full diagnostics).
      */
+    /** Formats composition array: "x[0]=0.30  x[1]=0.70" etc. */
+    private static String formatComposition(double[] x) {
+        if (x.length == 2) {
+            return String.format("x[0]=%.4f  x[1]=%.4f", x[0], x[1]);
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < x.length; i++) {
+            if (i > 0) sb.append("  ");
+            sb.append(String.format("x[%d]=%.4f", i, x[i]));
+        }
+        return sb.toString();
+    }
+
     public static EquilibriumState fromCvm(
             double temperature, double[] compositionArray, double[] correlationFunctions,
             double enthalpy, double gibbsEnergy, double entropy,

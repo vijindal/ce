@@ -83,9 +83,9 @@ public class CVMPhaseModelJob extends AbstractThermodynamicJob {
             setProgress(30);
             if (shouldStop()) return;
 
-            double[] composition = request.getCompositionArray() != null
-                    ? request.getCompositionArray()
-                    : new double[] { request.getComposition(), 1.0 - request.getComposition() };
+            // compositionArray is always non-null — resolved in request constructor.
+            // Works uniformly for binary, ternary, and any K-component system.
+            double[] composition = request.getCompositionArray();
 
             CVMModelInput cvmInput = new CVMModelInput(
                 jobData.system().getId(),
@@ -96,10 +96,9 @@ public class CVMPhaseModelJob extends AbstractThermodynamicJob {
                 jobData.clusterData().getStage3()
             );
 
-            // CVMPhaseModel.create() expects scalar composition for binary systems
-            double scalarComposition = composition[0];
+            // Pass full composition array — supports binary and multi-component systems.
             model = CVMPhaseModel.create(cvmInput, jobData.ncfEci(),
-                request.getTemperature(), scalarComposition);
+                request.getTemperature(), composition);
 
             if (model.getGradientNorm() > request.getTolerance() * 10) {
                 LOG.warning("CVMPhaseModelJob.run — WARNING — First minimization has high gradient norm: "

@@ -125,28 +125,54 @@ public class CVMPhaseModel {
      * @throws IllegalArgumentException if input is invalid or parameters invalid
      * @throws Exception if first minimization fails
      */
+    /**
+     * Creates a CVM phase model for any K-component system.
+     *
+     * <p>This is the canonical factory method. Pass the full mole-fraction
+     * array {@code x[0..K-1]} — works for binary, ternary, and any K.</p>
+     *
+     * @param input         CVMModelInput carrying cluster topology data
+     * @param eci           ncf-length effective cluster interactions (J/mol)
+     * @param temperature   initial temperature in Kelvin
+     * @param moleFractions mole fractions x[0..K-1]; must sum to 1.0
+     * @return CVMPhaseModel with first N-R minimization complete
+     * @throws Exception if minimization fails or input is invalid
+     */
     public static CVMPhaseModel create(
             CVMModelInput input,
             double[] eci,
             double temperature,
-            double composition) throws Exception {
+            double[] moleFractions) throws Exception {
 
         if (input == null) {
             throw new IllegalArgumentException("CVMModelInput must not be null");
         }
 
-        // Create model (private constructor)
         CVMPhaseModel model = new CVMPhaseModel(input);
-
-        // Set initial parameters (triggers validation)
         model.setECI(eci);
         model.setTemperature(temperature);
-        model.setComposition(composition);
-
-        // First minimization
+        model.setMoleFractions(moleFractions);   // validates length and sum-to-1
         model.ensureMinimized();
-
         return model;
+    }
+
+    /**
+     * Creates a CVM phase model using the binary B-fraction shorthand (K=2 only).
+     *
+     * <p>Convenience for callers that have a scalar x_B. Delegates to
+     * {@link #create(CVMModelInput, double[], double, double[])} via
+     * {@code [1-xB, xB]}. For K &ge; 3 use the array overload directly.</p>
+     *
+     * @deprecated Use {@link #create(CVMModelInput, double[], double, double[])} for all K
+     */
+    @Deprecated
+    public static CVMPhaseModel create(
+            CVMModelInput input,
+            double[] eci,
+            double temperature,
+            double xB) throws Exception {
+
+        return create(input, eci, temperature, new double[]{1.0 - xB, xB});
     }
 
     // =========================================================================
@@ -243,6 +269,10 @@ public class CVMPhaseModel {
      * @param x_B mole fraction of component B in [0,1]
      * @throws IllegalArgumentException if composition invalid or numComponents > 2
      */
+    /**
+     * @deprecated Use {@link #setMoleFractions(double[])} for all K
+     */
+    @Deprecated
     public void setComposition(double x_B) throws IllegalArgumentException {
         if (x_B < 0 || x_B > 1) {
             throw new IllegalArgumentException("Composition must be in [0,1]: " + x_B);
@@ -742,5 +772,3 @@ public class CVMPhaseModel {
     }
 
 }
-
-

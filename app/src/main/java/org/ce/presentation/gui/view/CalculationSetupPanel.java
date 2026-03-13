@@ -100,9 +100,9 @@ public class CalculationSetupPanel extends VBox {
         compositionContainer = new VBox(4);
         
         // Initialize MCS parameters
-        mcsSupercellSizeField = new TextField("4");
-        mcsEquilibrationField = new TextField("5000");
-        mcsAveragingField = new TextField("10000");
+        mcsSupercellSizeField = new TextField("8");
+        mcsEquilibrationField = new TextField("500");
+        mcsAveragingField = new TextField("1000");
         
         // Initialize CVM parameters
         cvmToleranceField = new TextField("1e-6");
