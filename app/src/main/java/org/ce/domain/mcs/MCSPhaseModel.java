@@ -1,5 +1,6 @@
 package org.ce.domain.mcs;
 
+import java.util.function.Consumer;
 import org.ce.domain.model.data.AllClusterData;
 import org.ce.domain.model.result.EngineMetrics;
 import org.ce.domain.model.result.EquilibriumState;
@@ -82,6 +83,7 @@ public class MCSPhaseModel {
     private int nEquil = 5000;              // equilibration sweeps
     private int nAvg = 10000;               // averaging sweeps
     private long seed;                      // random seed for reproducibility
+    private Consumer<MCSUpdate> updateListener = null;  // optional live-update callback
 
     // =========================================================================
     // CACHED: Equilibrium results — null when dirty
@@ -123,6 +125,51 @@ public class MCSPhaseModel {
 
         // First run
         model.ensureRun();
+        return model;
+    }
+
+    /**
+     * Builds an MCS phase model with all engine parameters set but WITHOUT running
+     * the simulation. The caller must call {@link #getEquilibriumState()} (or wire
+     * an update listener first) to trigger the first run.
+     *
+     * <p>Use this in preference to {@link #create} when the caller needs to attach
+     * an update listener before the simulation starts, or wants to avoid the
+     * redundant first run that {@code create} performs with default engine parameters.</p>
+     *
+     * @param allData          pre-computed cluster data (Stages 1-3)
+     * @param ncfEci           ncf-length effective cluster interactions (J/mol)
+     * @param numComponents    number of chemical components (K ≥ 2)
+     * @param temperature      initial temperature in Kelvin
+     * @param moleFractions    initial composition fractions (length == numComponents)
+     * @param supercellSize    supercell edge length L (N = 2·L³ for BCC)
+     * @param equilibrationSweeps  number of equilibration MC sweeps
+     * @param averagingSweeps  number of averaging MC sweeps
+     * @param seed             random seed for reproducibility
+     * @return MCSPhaseModel ready to run — simulation NOT yet started
+     */
+    public static MCSPhaseModel buildOnly(
+            AllClusterData allData,
+            double[] ncfEci,
+            int numComponents,
+            double temperature,
+            double[] moleFractions,
+            int supercellSize,
+            int equilibrationSweeps,
+            int averagingSweeps,
+            long seed) {
+
+        if (allData == null) throw new IllegalArgumentException("allData must not be null");
+        if (ncfEci == null)  throw new IllegalArgumentException("ncfEci must not be null");
+
+        MCSPhaseModel model = new MCSPhaseModel(allData, ncfEci, numComponents);
+        model.temperature   = temperature;
+        model.moleFractions = moleFractions.clone();
+        model.supercellSize = supercellSize;
+        model.nEquil        = equilibrationSweeps;
+        model.nAvg          = averagingSweeps;
+        model.seed          = seed;
+        // isDirty already true — first call to getEquilibriumState() will run
         return model;
     }
 
@@ -168,16 +215,16 @@ public class MCSPhaseModel {
     }
 
     /**
-     * Sets composition for binary systems using the B-fraction shorthand.
-     * Builds {@code [1-xB, xB]} and calls {@link #setMoleFractions(double[])}.
-     *
-     * <p>For new code prefer {@link #setMoleFractions(double[])} — it works for any K.</p>
+     * Sets composition for binary systems (K=2) using B-fraction shorthand.
+     * Invalidates cached result — next query re-runs.
      *
      * @param xB mole fraction of component B in [0, 1]
-     * @deprecated Use {@link #setMoleFractions(double[])} for generality
      */
-    @Deprecated
     public void setCompositionBinary(double xB) {
+        if (numComponents != 2) {
+            throw new IllegalArgumentException(
+                    "setCompositionBinary is only valid for K=2, this model has K=" + numComponents);
+        }
         setMoleFractions(new double[]{1.0 - xB, xB});
     }
 
@@ -212,6 +259,15 @@ public class MCSPhaseModel {
      * Sets random seed for the next run. Invalidates cache.
      * Use to get a different stochastic trajectory at the same state point.
      */
+    /**
+     * Sets an optional live-update callback, fired after each MC sweep.
+     * Connects to {@link MCSRunner.Builder#updateListener}. Pass {@code null} to disable.
+     * Does not invalidate cached state — takes effect on the next simulation run.
+     */
+    public void setUpdateListener(Consumer<MCSUpdate> listener) {
+        this.updateListener = listener;
+    }
+
     public void setSeed(long seed) {
         this.seed = seed;
         invalidate();
@@ -243,14 +299,11 @@ public class MCSPhaseModel {
 
     /**
      * Convenience for binary systems: set T and x_B, then return equilibrium state.
-     *
-     * <p>For new code prefer {@link #minimize(double, double[])} — it works for any K.</p>
-     *
-     * @deprecated Use {@link #minimize(double, double[])} for generality
      */
-    @Deprecated
     public EquilibriumState minimizeBinary(double T, double xB) {
-        return minimize(T, new double[]{1.0 - xB, xB});
+        setTemperature(T);
+        setCompositionBinary(xB);
+        return getEquilibriumState();
     }
 
     // =========================================================================
@@ -274,7 +327,7 @@ public class MCSPhaseModel {
                 + ", nEquil=" + nEquil + ", nAvg=" + nAvg);
 
         long startNs = System.nanoTime();
-        MCResult mcResult = MCSRunner.builder()
+        MCSRunner.Builder runnerBuilder = MCSRunner.builder()
                 .clusterData(allData.getStage1().getDisClusterData())
                 .eci(ncfEci)
                 .numComp(numComponents)
@@ -284,9 +337,11 @@ public class MCSPhaseModel {
                 .nEquil(nEquil)
                 .nAvg(nAvg)
                 .seed(seed)
-                .R(R)
-                .build()
-                .run();
+                .R(R);
+        if (updateListener != null) {
+            runnerBuilder.updateListener(updateListener);
+        }
+        MCResult mcResult = runnerBuilder.build().run();
         long elapsedMs = (System.nanoTime() - startNs) / 1_000_000L;
 
         cachedState = EquilibriumState.fromMcs(

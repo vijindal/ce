@@ -1,20 +1,14 @@
 package org.ce.application.job;
 
 import org.ce.application.dto.MCSCalculationRequest;
-import org.ce.application.port.DataManagementPort;
-import org.ce.application.port.MCSRunnerPort;
-import org.ce.application.usecase.MCSCalculationUseCase;
-import org.ce.domain.model.result.CalculationFailure;
-import org.ce.domain.model.result.CalculationResult;
-import org.ce.domain.model.result.EquilibriumState;
 import org.ce.application.port.CalculationProgressListener;
-import org.ce.application.dto.MCSCalculationContext;
+import org.ce.application.port.DataManagementPort;
+import org.ce.domain.mcs.MCSPhaseModel;
+import org.ce.domain.model.result.EquilibriumState;
 import org.ce.infrastructure.logging.LoggingConfig;
-import org.ce.infrastructure.mcs.MCSRunnerAdapter;
-import org.ce.infrastructure.service.MCSProgressListenerAdapter;
 
+import java.util.Arrays;
 import java.util.UUID;
-import java.util.concurrent.CancellationException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -23,19 +17,18 @@ import java.util.logging.Logger;
  *
  * <p><strong>Type 2 Job — Thermodynamic Calculation</strong></p>
  *
- * This job encapsulates the full MCS pipeline including data loading:
+ * <p>Follows the unified pipeline pattern shared with {@link CVMPhaseModelJob}:</p>
  * <ol>
- *   <li>Load cluster identification data from cache (via base class)</li>
- *   <li>Load CEC/ECI from database (via base class)</li>
- *   <li>Build MCSCalculationContext</li>
- *   <li>Run MCS simulation via {@link MCSCalculationUseCase}</li>
+ *   <li>Load system, cluster data, and ECI (via base class)</li>
+ *   <li>Resolve composition array from request</li>
+ *   <li>{@link MCSPhaseModel#buildOnly} — model constructed, simulation NOT yet run</li>
+ *   <li>Wire update listener → GUI chart (so live sweep data flows during the run)</li>
+ *   <li>{@link MCSPhaseModel#getEquilibriumState} — triggers exactly one MC simulation</li>
+ *   <li>Log final results to listener text panel</li>
  * </ol>
  *
- * <p>All data loading happens on the background thread (NOT UI thread)
- * via {@link DataManagementPort}, ensuring clean separation of Type 1 (data)
- * from Type 2 (calculation) concerns.</p>
- *
- * <p>Supports cancellation and pause at MC sweep boundaries.</p>
+ * <p>All data loading and simulation run on the background thread (NOT UI thread)
+ * via {@link DataManagementPort}.</p>
  */
 public class MCSCalculationJob extends AbstractThermodynamicJob {
 
@@ -43,19 +36,15 @@ public class MCSCalculationJob extends AbstractThermodynamicJob {
 
     private final MCSCalculationRequest request;
     private final CalculationProgressListener externalListener;
-    private CalculationResult result;
-    private MCSCalculationContext context;
+    private MCSPhaseModel model;
+    private EquilibriumState result;
 
     /**
      * Creates a new MCS calculation job.
      *
-     * <p>The job defers all data loading until {@link #run()} is called
-     * (on the background thread). The request is a pure value object with
-     * no disk I/O.</p>
-     *
-     * @param request The MCS calculation request (systemId, T, x, L, steps, etc.)
-     * @param dataPort Port for loading cluster data and CEC from disk
-     * @param externalListener Optional listener for progress updates (e.g., GUI)
+     * @param request          MCS calculation parameters (systemId, T, x, L, sweeps, seed)
+     * @param dataPort         port for loading cluster data and ECI from disk
+     * @param externalListener optional listener for progress updates (e.g. GUI); may be null
      */
     public MCSCalculationJob(
             MCSCalculationRequest request,
@@ -63,8 +52,7 @@ public class MCSCalculationJob extends AbstractThermodynamicJob {
             CalculationProgressListener externalListener) {
         super(
             "mcs-" + request.getSystemId() + "-" + UUID.randomUUID(),
-            "MCS: " + request.getSystemId() +
-                " (T=" + request.getTemperature() + "K)",
+            "MCS: " + request.getSystemId() + " (T=" + request.getTemperature() + "K)",
             dataPort
         );
         this.request = request;
@@ -80,69 +68,55 @@ public class MCSCalculationJob extends AbstractThermodynamicJob {
         try {
             running = true;
 
-            // ========== PHASES 1+2: Load System, Cluster Data, ECI ==========
+            // ===== PHASES 1+2: Load system, cluster data, ECI =====
             ThermodynamicJobData jobData = loadSystemData(request);
             if (jobData == null) return; // markFailed already called
 
-            // ========== PHASE 3: Build Context ==========
+            // ===== PHASE 3: Build MCSPhaseModel (no run yet — parameters set first) =====
+            setStatusMessage("Building MCS model...");
             setProgress(25);
             if (shouldStop()) return;
 
-            import org.ce.domain.model.result.EquilibriumState;
-            // compositionArray is always non-null — resolved in request constructor.
-            // Works uniformly for binary, ternary, and any K-component system.
             double[] composition = request.getCompositionArray();
 
-            context = new MCSCalculationContext(
-                jobData.system(),
-                request.getTemperature(),
-                composition,
-                jobData.system().getNumComponents(),
-                request.getSupercellSize(),
-                request.getEquilibrationSteps(),
-                request.getAveragingSteps(),
-                request.getSeed()
-            );
-            context.setAllClusterData(jobData.clusterData());
-            context.setClusterData(jobData.clusterData().getStage1().getDisClusterData());
-            context.setECI(jobData.ncfEci());
+            // Build model without running: set all engine parameters before the first
+            // MC simulation so the simulation runs exactly once with the correct settings.
+            model = MCSPhaseModel.buildOnly(
+                    jobData.clusterData(),
+                    jobData.ncfEci(),
+                    jobData.system().getNumComponents(),
+                    request.getTemperature(),
+                    composition,
+                    request.getSupercellSize(),
+                    request.getEquilibrationSteps(),
+                    request.getAveragingSteps(),
+                    request.getSeed());
 
-            if (!context.isReady()) {
-                markFailed("MCS context validation failed: " + context.getReadinessError());
-                return;
+            // ===== PHASE 4: Wire live-update listener → GUI chart =====
+            if (externalListener != null) {
+                externalListener.initializeMCS(
+                        request.getEquilibrationSteps(),
+                        request.getAveragingSteps(),
+                        request.getSeed());
+                model.setUpdateListener(externalListener::updateMCSData);
             }
 
-            // ========== PHASE 4: Run MCS Simulation ==========
-            setStatusMessage("Starting Monte Carlo simulation...");
+            // ===== PHASE 5: Run MC simulation =====
+            setStatusMessage("Running Monte Carlo simulation...");
             setProgress(30);
             if (shouldStop()) return;
 
-            MCSProgressListenerAdapter progressPort = new MCSProgressListenerAdapter(externalListener);
-            MCSRunnerPort runnerPort = new MCSRunnerAdapter();
-            MCSCalculationUseCase useCase = new MCSCalculationUseCase(progressPort, runnerPort);
+            result = model.getEquilibriumState();
 
-            result = useCase.execute(context, () -> cancelled);
-
-            if (shouldStop()) return;
-
-                private MCSPhaseModel model;
-                private EquilibriumState result;
-                setProgress(100);
-                setStatusMessage("MCS calculation completed");
-                LOG.info("MCSCalculationJob.run — EXIT: COMPLETED");
-                markCompleted();
-            } else if (result instanceof CalculationFailure failure) {
-                LOG.warning("MCSCalculationJob.run — EXIT: FAILED — " + failure.errorMessage());
-                markFailed(failure.errorMessage());
-            } else {
-                LOG.warning("MCSCalculationJob.run — EXIT: FAILED — unexpected result type");
-                markFailed("MCS calculation returned unexpected result type");
+            // ===== PHASE 6: Log results to GUI text panel =====
+            if (externalListener != null) {
+                logResultsToListener(result, externalListener);
             }
 
-        } catch (CancellationException ex) {
-            LOG.info("MCSCalculationJob.run — EXIT: CANCELLED");
-            setStatusMessage("Calculation cancelled");
-            // Don't call markFailed; cancel() handles state
+            setProgress(100);
+            setStatusMessage("MCS calculation completed");
+            LOG.info("MCSCalculationJob.run — EXIT: COMPLETED");
+            markCompleted();
 
         } catch (Exception e) {
             LOG.log(Level.WARNING, "MCSCalculationJob.run — EXCEPTION: " + e.getMessage(), e);
@@ -154,17 +128,53 @@ public class MCSCalculationJob extends AbstractThermodynamicJob {
     }
 
     /**
-     * Returns the calculation result.
+     * Formats the completed EquilibriumState and writes it to the GUI text panel.
+     * Mirrors the output style of CVMPhaseModelExecutor.initializeModel().
      */
-    public CalculationResult getResult() {
-        return result;
+    private void logResultsToListener(EquilibriumState state, CalculationProgressListener listener) {
+        listener.logMessage("");
+        listener.logMessage("=".repeat(60));
+        listener.logMessage("MCS Equilibrium Result");
+        listener.logMessage("=".repeat(60));
+        listener.logMessage("  Temperature : " + String.format("%.2f", state.temperature()) + " K");
+        listener.logMessage("  Composition : " + Arrays.toString(state.compositionArray()));
+        listener.logMessage("");
+        listener.logMessage("  H_mix/site  : " + String.format("%.8e", state.enthalpyOfMixing()) + " J/mol");
+        state.heatCapacity().ifPresent(cv ->
+            listener.logMessage("  Cv/site     : " + String.format("%.8e", cv) + " J/(mol·K)"));
+
+        if (state.metrics() instanceof org.ce.domain.model.result.EngineMetrics.McsMetrics m) {
+            listener.logMessage("  Accept rate : " + String.format("%.4f", m.acceptRate()));
+            listener.logMessage("  Supercell L : " + m.supercellSize()
+                    + "  (N = " + m.nSites() + " sites)");
+            listener.logMessage("  Equil sweeps: " + m.nEquilSweeps());
+            listener.logMessage("  Avg sweeps  : " + m.nAvgSweeps());
+            listener.logMessage("  E/site      : " + String.format("%.8e", m.energyPerSite()) + " J/mol");
+        }
+
+        listener.logMessage("");
+        listener.logMessage("  Avg CFs (ncf-indexed):");
+        double[] cfs = state.correlationFunctions();
+        for (int i = 0; i < cfs.length; i++) {
+            listener.logMessage("    CF[" + i + "] = " + String.format("%.10f", cfs[i]));
+        }
+        listener.logMessage("=".repeat(60));
+        listener.logMessage("\u2714 MCS calculation complete");
     }
 
     /**
-     * Returns the MCS context (only available after run() completes).
+     * Returns the MCSPhaseModel (available after successful completion).
+     * Callers can use the model for further parameter sweeps or queries.
      */
-    public MCSCalculationContext getContext() {
-        return context;
+    public MCSPhaseModel getModel() {
+        return model;
+    }
+
+    /**
+     * Returns the equilibrium result (available after successful completion).
+     */
+    public EquilibriumState getResult() {
+        return result;
     }
 
     @Override

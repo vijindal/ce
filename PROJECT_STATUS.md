@@ -1,711 +1,154 @@
-# CE Workbench - Project Status
+# CE Workbench — Project Status
 
-**Last Updated:** March 12, 2026 (night)
-**Version:** 0.3.15
-**Compilation:** ✅ Successful (clean, no warnings)
-**Tests:** ✅ All 94 tests pass (CVM binary/ternary, CEC assembly, architecture)
-**GUI Status:** ✅ Fully Functional
-**Binary CVM Solver:** ✅ Correct — 7 root-cause bugs fixed; 69 tests pass
-**Ternary CVM Solver:** ✅ Correct — RC-2, RC-3, RC-7 fixed; ternary pipeline verified
-**CVM Phase Model (Thermodynamic API):** ✅ Phase 6 Complete — Model-centric architecture
-**CVM Expression Audit (G, Gu, Guu):** ✅ Fixed — unified evaluation path + iteration diagnostics
-**JUL Logging:** ✅ Complete — all three calculation types instrumented
-**ECI Standardization:** ✅ Phase 8 Complete — MCS & CVM both use ncf-length ECIs, no expansion needed
-**Unified Pipeline Phase 9.1:** ✅ hmixPerSite propagated through MCS pipeline (data loss bug fixed)
-**Unified Pipeline Phase 9.2:** ✅ EquilibriumState + EngineMetrics types created; ThermodynamicResult expanded
-**Unified Pipeline Phase 9.3:** ✅ Both ports/adapters/use cases migrated to return EquilibriumState
-**Unified Pipeline Phase 9.4:** ✅ MCSPhaseModel created — mirrors CVMPhaseModel pattern (lazy run, cached state)
-**Unified Pipeline Phase 9.5:** ✅ ECIMapper call removed from job — CVMPhaseModel.setECI() accepts ncf+ arrays
-**Unified Pipeline Phase 9.6:** ✅ ThermodynamicCalculationRequest base DTO extracted — DTO duplication eliminated
-**Unified Pipeline Phase 9.7:** ✅ AbstractThermodynamicJob extracted — data-loading phases deduped across both jobs
-**Unified Pipeline Phase 9.8:** ✅ Context classes moved to application/dto — layer violation resolved
+**Last Updated:** March 13, 2026  
+**Version:** 0.3.15  
+**Build:** ✅ Clean — no errors, no warnings  
+**Tests:** ✅ 94 / 94 passing  
+**GUI:** ✅ Fully functional  
 
 ---
 
-## ECI Standardization — Phase 8 Completion (Mar 12, 2026)
+## Health Summary
 
-### Issue
-The persistent "ECI length (4) does not match cluster type count (6)" error in MCS jobs arose
-from a fundamental design conflict:
-- Database stores ncf-length ECI (4 values: tet, tri, pair1, pair2)
-- `EmbeddingGenerator` generated embeddings for ALL tc types (6: ...+ point, empty)
-- `LocalEnergyCalc` accessed `eci[4]` and `eci[5]` → crash with 4-element arrays
-
-Previous session attempted expansion (ncf→tc) but used WRONG tc source, causing validation
-mismatch. The correct fix: skip sub-pair clusters (point/empty have ECI=0 always) so embeddings
-never access type indices ≥ ncf.
-
-### Solution (Phase 8)
-
-1. **`EmbeddingGenerator.buildTemplates()`** (domain/mcs/)
-   - Skip sub-pair clusters (size < 2) at generator level
-   - Effect: No embeddings for point/empty types → no access to `eci[4]`, `eci[5]`
-   - Physics-correct: point/empty have ECI=0 always (constants in canonical ensemble)
-
-2. **`MCSCalculationContext.getClusterTypeCount()`** (infrastructure/context/)
-   - Use `ncf` from Stage 2 for ECI length validation (was using tc from disClusterData)
-   - Aligns validation with actual ECI array length (ncf=4)
-
-3. **`MCSCalculationJob`** (application/job/)
-   - Remove expansion call (was: `ECIMapper.expandECIForMCS(nciEci, stage1.getTc())`)
-   - Pass ncf-length ECI directly since embeddings no longer exceed ncf types
-
-4. **Data fixes**
-   - Ti-Nb/cec.json: Correct CEC value order to match A2_T standard (A2 = Pearson symbol for disordered BCC)
-   - Removed debug logging from ResultsPanel
-
-### Design Outcome
-
-| Aspect | CVM | MCS | Status |
-|--------|-----|-----|--------|
-| **ECI Load** | ncf-length (4 values) | ncf-length (4 values) | ✅ Unified source |
-| **ECI Usage** | Direct, no expansion | Direct, no expansion | ✅ Architecturally clean |
-| **Validation** | Against ncf | Against ncf | ✅ Consistent |
-| **Embeddings** | N/A | Pair+ only (skip sub-pair) | ✅ No index out of bounds |
-
-**Key insight:** `allData.getStage2().getNcf()` is the definitive ECI length source throughout
-the system. Both CVM and MCS use it directly without expansion or padding logic.
-
-### Verification
-
-- ✅ Build: Clean compilation (no errors/warnings)
-- ✅ Tests: All 104 pass (CVM binary/ternary, CEC assembly, architecture)
-- ✅ Code changes: 5 files, 1 commit (0d11d01)
-- ✅ GUI startup: 4 systems load without "CEC file missing" warnings
+| Area | Status | Notes |
+|------|--------|-------|
+| Type 1: Cluster identification pipeline | ✅ Complete | Stages 1-3 working for binary, ternary, quaternary |
+| Type 1: CEC database management | ✅ Complete | Browse, edit, assemble in GUI and CLI |
+| Type 2: CVM engine (binary K=2) | ✅ Correct | N-R converges; G, H, S, CFs, SROs verified |
+| Type 2: CVM engine (ternary K≥3) | ⚠️ Partial | Convergence issue at random-state initial guess — see Known Issues |
+| Type 2: MCS engine | ✅ Correct | ΔE tracking, CF normalization, Hmix verified |
+| Unified pipeline (CVM ↔ MCS) | ✅ Complete | Both jobs use PhaseModel pattern + shared EquilibriumState |
+| ECI/CEC loading | ✅ Unified | Both engines load ncf-length arrays; no expansion or padding |
+| Architecture boundaries | ✅ Enforced | ArchitectureBoundaryTest passes; domain never imports infra/app |
+| JUL logging | ✅ Complete | All three calculation paths instrumented |
 
 ---
 
-## CVM Bug Fixes (Mar 8, 2026)
+## Test Suite
 
-Data-flow tracing through the full CVM execution path (CalculationService → CVMPhaseModel → NewtonRaphsonSolverSimple → CVMFreeEnergy) identified 7 root causes producing wrong G/H/S values.
-
-### Root causes fixed
-
-| ID | File | Bug | Effect |
-|---|---|---|---|
-| RC-1 | `CVMFreeEnergy` | `R = 1.0` (dimensionless gas constant) | G/H/S off by factor of 8.314 |
-| RC-2 | `NewtonRaphsonSolverSimple.getURand` | Binary σ=(2·x_B−1) formula for K≥3 | Wrong initial guess; NR may diverge for ternary |
-| RC-3 | `NewtonRaphsonSolverSimple.updateCV` | Binary point-CF in step limiter for K≥3 | Negative CVs mid-iteration for K≥3 |
-| RC-4 | `CVMPhaseModel.isStable` | Diagonal-only Hessian check | Missed saddle points (indefinite H) |
-| RC-5 | `CalculationService.mapCECToCvmECI` | Stripped first 2 CEC values (tet, tri) instead of last 2 (point, empty) | Pair ECI [−390,−260] assigned to wrong cluster types |
-| RC-6 | `CVMEngine.solve` | `{composition, 1−composition}` inverted | Legacy path: solver received x_A as x_B |
-| RC-7 | `CVMPhaseModel.setComposition` | Silently zeroed components ≥2 for K>2 | Ternary models ran as binary without error |
-
-### RC-5 detail — critical for G/H/S correctness
-
-`cec.json` stores ECIs in descending body-count order: `[tet, tri, pair1, pair2, point, empty]`.
-`mapCECToCvmECI` was calling `System.arraycopy(cecRaw, 2, mapped, 0, ncf)` — stripping index 0–1
-(tet, tri) — instead of `System.arraycopy(cecRaw, 0, mapped, 0, ncf)` — keeping first ncf values.
-
-For Nb-Ti this assigned:
-- Wrong: `eci = [−390, −260, 0, 0]` → −390 J/mol applied to tetrahedron (mult=6) → H wrong
-- Correct: `eci = [0, 0, −390, −260]` → −390 J/mol applied to 1-nn pair (mult=4) → H correct
-
-### RC-4 detail — Cholesky stability check
-
-Replaced the diagonal `H[i][i] > 0` check in `isStable()` with a full Cholesky decomposition.
-A symmetric matrix can have all positive diagonal entries yet be indefinite (saddle point) when
-off-diagonal terms dominate. Cholesky succeeds iff the matrix is strictly positive definite.
-
-### Test suite added
-
-| Test class | Tests | Purpose |
+| Test class | Tests | What it covers |
 |---|---|---|
-| `CVMFreeEnergyTest` | 9 | R_GAS units, G=H−T·S, gradient, Hessian symmetry |
-| `CMatrixBuilderTest` | 7 | C-matrix dimensions, CV positivity and normalization |
-| `NewtonRaphsonTest` | 10 | Convergence, gradient norm, initial-guess |
-| `CVMBinaryIntegrationTest` | 14 | Binary: convergence at multiple (T, x), G=H−T·S, CV≥0, symmetry |
-| `CVMTernaryIntegrationTest` | 10 | Ternary: convergence, G=H−T·S, CV≥0, entropy physical units |
-| `CVMDataFlowVerificationTest` | 9 | Step-by-step ECI mapping and moleFractions verification |
-
-All 69 tests pass. `./gradlew build` succeeds.
-
----
-
-## Current Architecture
-
-### Data Structure (UPDATED - Feb 2026)
-Three-tier data organization:
-
-```
-data/cluster_cache/                 # Cluster data (version-controlled; regenerated by CFIdentificationJob)
-│                                   # Directory names: {StructuralType}_{ComponentCount}
-│   └── A2_T_bin/                   # A2=Pearson symbol (disordered BCC); T=tetrahedron model; bin=binary
-│       └── all_cluster_data.json   # Full pipeline data (Stages 1-3)
-app/src/main/resources/
-├── data/
-│   ├── systems/                    # Element-specific CECs
-│   │   ├── Ti-Nb/
-│   │   │   └── cec.json
-│   │   ├── Ti-V/
-│   │   │   └── cec.json
-│   │   └── Nb-Ti/
-│   │       └── cec.json
-│   └── models/                     # Shared structural definitions (Pearson symbol-based)
-│       ├── A2_T/                   # A2=Pearson symbol (disordered BCC); T=tetrahedron CVM model
-│       │   └── model_data.json
-│       └── L12_T/                  # L12=Pearson symbol (ordered FCC); T=tetrahedron CVM model
-│           └── model_data.json
-├── cluster/                        # Cluster input files
-└── symmetry/                       # Symmetry group files
-```
-
-**Rationale:**
-- **CECs** are element-pair specific (Ti-Nb ≠ Ti-V; different interatomic interactions)
-- **Structural definitions** are shared across alloys (Ti-Nb, Ti-V, Ti-Zr all use A2_T)
-  - **A2** = Pearson symbol for disordered BCC (a **single, complete** structural designation)
-  - **T** = tetrahedron CVM model
-  - Never confuse A2 as "phase independent of structure"; A2 is the Pearson type combining lattice + ordering
-- **Cluster results** are system-specific runtime data (persisted for distribution)
-
-### GUI Components
-- **SystemRegistryPanel** - System management with guided text input (replaces periodic table)
-  - Text fields: Elements (Ti-Nb), Structural Type (A2), Model (T)
-  - **IMPORTANT:** A2 is a complete Pearson symbol (disordered BCC), not separated into structure/phase
-  - Data availability checking (CEC + Model status)
-  - Tree view showing CEC/Cluster/CF status per system
-  - Single identification dialog with cached input (eliminates redundancy)
-  - Pre-filled ordered cluster/symmetry fields
-  - Comprehensive diagnostic logging
-  
-- **CalculationSetupPanel** - Configure and run calculations
-- **BackgroundJobManager** - Async job execution
-- **SystemDataLoader** - Load from separated data structure
-- **AllClusterDataCache** - JSON persistence for all cluster data (Stages 1-3)
-
-### Backend
-- **SystemRegistry** - System registration and metadata management
-- **SystemInfo** - Enhanced with model field and availability flags
-- **CEWorkbenchCLI** - Command-line interface
-- **ClusterIdentificationJob** - Saves cluster data before job completion
-- **CFIdentificationJob** - Reuses cached input files
+| `CVMFreeEnergyTest` | 9 | R_GAS units, G=H−T·S identity, gradient, Hessian symmetry |
+| `CMatrixBuilderTest` | 7 | C-matrix dimensions, CV positivity, normalization |
+| `CVMCMatrixDiagnosticTest` | 15 | C-matrix diagnostics for binary and ternary |
+| `NewtonRaphsonTest` | 11 | N-R convergence, gradient norm, initial-guess correctness |
+| `CVMBinaryIntegrationTest` | 15 | Binary pipeline: convergence at multiple (T, x), G=H−T·S, CV≥0, symmetry |
+| `CVMTernaryIntegrationTest` | 10 | Ternary pipeline: convergence, G=H−T·S, CV≥0, entropy range |
+| `CVMDataFlowVerificationTest` | 10 | Step-by-step ECI mapping and moleFractions data-flow tracing |
+| `CECAssemblyIntegrationTest` | 10 | CEC assembly from binary subsystems for ternary/quaternary |
+| `AllClusterDataCacheCompatibilityTest` | 2 | Cache load/save compatibility across schema versions |
+| `ClusterCacheSchemaMigratorTest` | 2 | Schema migration for legacy Stage-3 payloads |
+| `ArchitectureBoundaryTest` | 3 | Layer dependency rules enforced |
+| **Total** | **94** | |
 
 ---
 
-## Recent Changes (Mar 2026)
+## Open Work
 
-### ✅ Completed (Mar 9, 2026 evening)
-**MCS Energy Calculation Audit + Optimization**
+### Active — Refactor Plan Phase 10
 
-Comprehensive audit confirmed MCS energy formulas are mathematically equivalent to CVM:
-- Hmix/site formula uses CVM msdis coefficients: `hmixCoeff[t] = ECI[t] * count[t] / (size[t] * N)`
-- ΔE calculation for MC moves is correct: `ΔE = Σ_e ECI[t] · (Φ_new - Φ_old)` (no size division needed—implicitly cancelled by embedding sum)
-- Empty (size=0) and point (size=1) clusters correctly skipped—constant terms cancel in ΔE and Var(H)
+See [Refactor_Plan.md](Refactor_Plan.md) for full details and implementation instructions.
 
-Performance optimizations (no physics change):
-1. Added `EmbeddingData.multiSiteEmbedCountsPerType()` — precomputes per-type embedding counts once (topology-invariant)
-2. Updated `MCSampler` constructor to accept precomputed counts; eliminates per-call heap allocations and O(E_multisite) recounting
-3. Pre-allocated `cfNumScratch[]` in `MCSampler` to avoid per-sweep allocations
-4. Removed redundant `hmixCoeff` field from `MCEngine`; now uses `sampler.meanHmixPerSite()` directly
-5. Guarded temporary config mutation in `LocalEnergyCalc.deltaEExchange()` with try/finally (correctness fix—prevents silent corruption on exception)
+| Phase | Description | Priority |
+|-------|-------------|----------|
+| 10.3 | Fix ternary composition passed as scalar in `CVMPhaseModelJob` (D6) | HIGH |
+| 10.4 | Remove orphaned `CVMCalculationUseCase` (D3) | MEDIUM |
+| 10.5 | Retire `AbstractCalculationContext` DTO hierarchy (D4, D7) | MEDIUM |
+| 10.6 | Add cooperative cancellation to CVM Newton-Raphson engine (D8) | LOW |
 
-All changes compile clean. MCS results numerically identical to pre-optimization baseline.
+### Known Issues
 
-### ✅ Completed (Mar 8, 2026)
-**JUL Logging — All Three Calculation Types**
+**CVM ternary convergence (K≥3)**  
+The Newton-Raphson solver oscillates at the random-state initial guess for K≥3 systems.
+Root cause: many cluster variables (CVs) are zero at the equimolar starting point when
+using the {−1, 0, 1} basis, causing a near-singular Hessian. Binary (K=2) is unaffected.
 
-Structured `java.util.logging` (JUL) logging is now instrumented across every major calculation path in the application. All `System.out` / `System.err` debug output in domain/infrastructure code has been replaced with proper JUL calls.
+Options under consideration:
+- CV regularization — add a small floor to CVs before Hessian evaluation
+- Revised entropy formulation for zero/near-zero CVs in K≥3
+- Alternative initial guess that avoids σ¹=0 regions
 
-**Log level policy:**
+Affected tests: 3 in `CVMTernaryIntegrationTest` (entropy at equimolar, all CVs positive,
+entropy → ln(3) limit).
 
-| Level | Purpose |
-|---|---|
-| `WARNING` | Exceptions, failed convergence, null/invalid input |
-| `INFO` | Job lifecycle: ENTER, EXIT COMPLETED, EXCEPTION |
-| `FINE` | Method ENTER/EXIT with key parameters/results |
-| `FINEST` | Per-iteration detail (guarded; off by default) |
+**MCS double-run on job startup**  
+`MCSPhaseModel.create()` runs one MC simulation with default engine parameters (L=4,
+nEquil=5000, nAvg=10000), then `MCSCalculationJob` immediately sets the correct
+parameters from the request, triggering a second run. For large supercells the first
+run is wasted. Fix: provide a lazy-create factory or pass engine parameters upfront.
+(Tracked as departure D4 in Refactor_Plan.)
 
-**Logger factory:**
-- New `org.ce.infrastructure.logging.LoggingConfig` — infrastructure/application classes call `LoggingConfig.getLogger(X.class)`
-- Domain classes use `Logger.getLogger(X.class.getName())` directly (no infrastructure dependency)
+**JavaFX warnings on JDK 25**  
+Restricted-method warnings from JavaFX 20.0.1 on JDK 25. Expected; no functional impact.
+Will resolve when JavaFX releases JDK 25 support.
 
-**Files modified — Calculation 1: Cluster Data Generation (6 files)**
+### Pending Features
 
-| File | Change |
-|---|---|
-| `CFIdentificationJob` | INFO ENTER (system/numComponents/clusterKey); INFO EXIT COMPLETED (tcdis/tcf/ncf/elapsed); WARNING EXCEPTION |
-| `CVMPipeline` | Logger added; FINE ENTER (numComponents); FINE EXIT (tcdis/tc/tcf/ncf/elapsed) |
-| `ClusterIdentifier` | Logger added; FINE ENTER (disClusters/ordClusters/symOps counts) + per-stage FINE; FINE EXIT (tcdis/tc/nxcdis/nxc/nc/lc); all `System.out` removed; `printDebug()` calls removed |
-| `CFIdentifier` | Logger added; FINE ENTER (tcdis/numComp); per-stage FINE; FINE EXIT (tcf/nxcf/ncf/lcf summary); all `System.out` removed |
-| `CMatrixBuilder` | Logger added; FINE ENTER (tc/ncf/tcf/numElements); FINE EXIT (totalCVs/lcv.length) |
-| `AllClusterDataCache` | Old `[>>]` format replaced: FINE ENTER/EXIT/NOT FOUND for `save()` and `load()` |
-
-**Files modified — Calculation 3: CVM Phase Model (6 files)**
-
-| File | Change |
-|---|---|
-| `CVMPhaseModelJob` | Logger added; INFO ENTER (system/T); INFO EXIT COMPLETED; WARNING on failed init; `e.printStackTrace()` replaced with `LOG.warning` |
-| `CVMPhaseModelExecutor` | Logger added; FINE ENTER (T); FINE EXIT (T/G/iterations/convergence); WARNING on exception; garbled UTF-8 checkmarks fixed |
-| `CalculationSetupPanel` | FINE ENTER (system/T/x); WARNING on prepare failure; FINE EXIT (jobId) |
-| `CalculationService` | `prepareCVMModel` EXIT enhanced: adds tcdis/tcf/ncf/ECI length |
-| `CVMPhaseModel` | Logger added; `logMinimizationSuccess()` → FINE log; `logMinimizationFailure()` → WARNING; FINE before `minimize()` in `ensureMinimized()`; `System.err` replaced |
-| `NewtonRaphsonSolverSimple` | Logger added; FINE ENTER (ncf/tcf/T/xB/tolerance); FINEST per-iteration (guarded); FINE CONVERGED; WARNING SINGULAR/STALLED/NOT CONVERGED; all `System.out/printf` removed |
-
-**MCS logging (from previous session, Mar 6–7, 2026):**
-13 MCS-related classes were similarly instrumented covering `MCSCalculationJob`, `MCSRunner`, `MCEngine`, `MCSampler`, `ExchangeStep`, `FlipStep`, `LatticeConfig`, `EmbeddingGenerator`, and related infrastructure adapters.
-
-**Other changes:**
-- Removed per-sweep FINEST log blocks from `MCEngine.runExchange()` and `MCEngine.runFlip()` to reduce log noise (data already visible in results GUI)
-- Removed `data/cluster_cache/` from `.gitignore` — pre-computed cluster data is now version-controlled so it ships with the repository
-
-### Package Consolidation (Mar 8, 2026)
-Reduced the project from 47 packages to 32 (32% reduction) by merging thin single/two-file packages into logical neighbors. The 4-layer architecture (domain / application / infrastructure / presentation) is unchanged. All 8 tests pass.
-
-**Domain layer (4 merges, -5 packages):**
-- `domain.mcs.event` merged into `domain.mcs`
-- `domain.model.cvm` merged into `domain.cvm`
-- `domain.engine.common` merged into `domain.cvm`
-- `domain.identification.cf` merged into `domain.identification.cluster`
-
-**Application layer (2 merges, -5 packages):**
-- `application.{cvm,mcs,pipeline,validation}` consolidated into `application.usecase`
-- `application.service` (listener interface) merged into `application.port`
-
-**Infrastructure layer (6 merges, -7 packages):**
-- `infrastructure.cache` merged into `infrastructure.persistence`
-- `infrastructure.eci` merged into `infrastructure.data`
-- `infrastructure.config` merged into `infrastructure.context`
-- `infrastructure.key` merged into `infrastructure.registry`
-- `infrastructure.{adapter,job}` merged into `infrastructure.service`
-- `infrastructure.cvm.examples` flattened into `infrastructure.cvm`
+| Item | Priority | Notes |
+|------|----------|-------|
+| SROs in `EquilibriumState` | MEDIUM | CVM computes them in `getSROs()` but does not package them in the shared result record; MCS does not compute them at all |
+| Unified CF indexing across engines | MEDIUM | `correlationFunctions` in `EquilibriumState` has different length/semantics for CVM vs MCS — needs a canonical ncf-indexed representation |
+| Manual CEC input dialog | MEDIUM | GUI workflow for entering CEC values by hand and saving to `cec.json` |
+| Calculation panel data-readiness gate | LOW | Disable Type 2 panel when cluster data or CECs are missing; show "Missing CECs" / "Missing Clusters" |
+| Additional test systems | LOW | Ti-V, Ti-Zr, Fe-Ni CEC data; demonstrates cluster cache reuse |
+| Phase diagram plotting | LOW | Temperature/composition scan → G vs x curves |
 
 ---
 
-## Recent Changes (Mar 2026)
+## Architecture Invariants
 
-### ✅ Completed (Mar 1, 2026)
-**Phase 5: Multi-Component CVM Solver Generalization (K > 2)**
+These must never be broken:
 
-**Binary System (K=2):** All 13 CVM solver tests **PASSING** ✅
-- Newton-Raphson solver converges in <10 iterations
-- Converges to ||Gcu|| < 1e-10 tolerance (excellent)
-- Point correlation function ordering fixed using `cfBasisIndices`
-- Random-state cluster variable (CV) verification working correctly
-- Entropy at random state validates to ln(2) formula
-- Hessian computation well-conditioned and stable
-
-**Multi-Component API Generalization:**
-- Changed signature from `solve(double composition, ...)` to `solve(double[] moleFractions, int K, ...)`
-- Enables K-component systems (K ≥ 2)
-- Backward-compatible binary wrapper: still supports old API
-- `cfBasisIndices` propagated through entire call chain for proper CF placement
-
-**Ternary System (K=3):** 8/11 tests passing, convergence issue identified
-- Root cause: **Hessian ill-conditioning at random state due to zero cluster variables**
-- For equimolar ternary with basis {-1, 0, 1}: σ¹ = 0
-- Many multi-site CFs = 0 because they are products involving σ¹
-- Zero CVs trigger smooth entropy extension (for CV < 1e-6)
-- Smooth extension sets invEff = 1/EPS = 1e6 for numerical stability
-- This creates massive values in Hessian → ill-conditioned or singular
-- NR solver oscillates at ~1e-8 gradient norm, never reaches 1e-10 tolerance
-- Step sizes collapse to ~1e-15 (numerical precision limit reached)
-
-**Test Status:**
-- Binary CVMSolverTest: **13/13 PASS** ✅
-- Ternary CVMTernaryTest: **8/11 PASS** (3 fail at convergence check)
-
-**Next Phase:** Fix ternary Hessian computation
-- Option 1: CV regularization (add small offset to CV to keep > threshold)
-- Option 2: Revised entropy formulation for K≥3
-- Option 3: Alternative solver approach (gradient descent, trust region, etc.)
-
----
-
-### ✅ Completed (Mar 6, 2026)
-**Phase 6: CVM Phase Model - Model-Centric Architecture**
-
-**Documentation cleanup (Mar 6, 2026):** ✅
-- Removed redundant root planning doc (`DATA_FLOW_AND_REORGANIZATION_PLAN.md`)
-- Consolidated architecture governance into `docs/ARCHITECTURE_CONTRACT.md`
-- Kept operational/project tracking in `PROJECT_STATUS.md` and usage guidance in `README.md`
-
-**PR-2: Domain Port Decoupling (Mar 6, 2026):** ✅
-- Refactored domain ports to generic contracts so domain no longer imports legacy `org.ce.workbench.*` models
-- Updated infrastructure adapters and DI wiring with concrete generic types (`AllClusterData`, `SystemIdentity`)
-- Tightened architecture guardrail: removed temporary domain allowlist entries in `ArchitectureBoundaryTest`
-
-**PR-3: Application Boundary Hardening + Context Migration (Mar 6, 2026):** ✅
-- Migrated calculation context classes from legacy `workbench.util.context` to `infrastructure.context`
-- Updated all context consumers (application use cases, services, CVM engine/model/examples, CLI, GUI, and jobs)
-- Removed remaining `org.ce.workbench.*` imports from `org.ce.application.*`
-- Tightened architecture guardrail: removed temporary application allowlist entries in `ArchitectureBoundaryTest`
-
-**Runtime compatibility fix (Mar 6, 2026):** ✅
-- Fixed legacy cache-load failure: `JSONObject["cfBasisIndices"] not found` for older Stage-3 payloads
-- Added backward-compatible Stage-3 deserialization in `AllClusterDataCache` with binary legacy inference
-- Added on-load schema upgrade path that writes `schemaVersion=2` and persists inferred `cfBasisIndices`
-- Added regression tests in `AllClusterDataCacheCompatibilityTest`
-
-**PR-4: Cache Migration Architecture Extraction (Mar 6, 2026):** ✅
-- Introduced explicit cache migration package: `org.ce.infrastructure.persistence.migration`
-- Added dedicated migrator components:
-   - `ClusterCacheSchemaMigrator` (versioned in-memory/bulk migration orchestration)
-   - `LegacyStage3CfBasisIndicesInferer` (legacy Stage-3 binary basis inference)
-   - `ClusterCachePreflight` (one-time startup migration sweep + logging)
-   - `CacheMigrationReport` (scan/migrate/failure summary contract)
-- Refactored `AllClusterDataCache` to delegate schema upgrades to migrator before strict deserialization
-- Wired preflight migration in `CalculationService` constructor to proactively upgrade stale cache files
-- Added focused migration tests in `ClusterCacheSchemaMigratorTest` and aligned compatibility coverage in `AllClusterDataCacheCompatibilityTest`
-
-**PR-5: CVM Engine Decoupling (Mar 6, 2026):** ✅
-- Refactored `CVMEngine` and `CVMPhaseModel` to remove direct `org.ce.workbench.*` dependencies
-- Introduced domain CVM input contract: `org.ce.domain.cvm.CVMModelInput`
-- Updated `CVMCalculationUseCase` and `CalculationService` to map legacy context/cache data into domain CVM input before invoking CVM core
-- Updated CVM job wiring (`CVMPhaseModelJob`, `CalculationSetupPanel`) so background job system identity no longer comes from CVM model internals
-- Tightened architecture guardrail by removing temporary CVM allowlist entries in `ArchitectureBoundaryTest`
-
-**PR-6: MCS Engine Decoupling (Mar 6, 2026):** ✅
-- Refactored `MCSRunner` and `MCEngine` to remove `org.ce.workbench.util.*` coupling from core MCS logic
-- Moved `MCSUpdate` to domain event model: `org.ce.domain.mcs.MCSUpdate`
-- Updated use-case/presentation/workbench listeners to consume the application event model
-- Moved rolling-window helper used by MCS core into `org.ce.mcs.RollingWindow`
-- Tightened architecture guardrail by removing temporary MCS allowlist entries in `ArchitectureBoundaryTest`
-
-**PR-7: Cache Contract Hardening (Mar 6, 2026):** ✅
-- Added adapter-layer migration + schema validation in `ClusterDataRepositoryAdapter.load(...)`
-- Enforced cache `schemaVersion` and Stage-3 required fields (`cmat/lcv/wcv/cfBasisIndices`) before returning loaded data
-- Kept persisted `all_cluster_data.json` schema stamping via `schemaVersion`
-- Enforced Stage-3 required-field contract in `CVMModelInput` before CVM model construction
-- Added fail-fast service path for invalid CVM stage-data contract in `CalculationService`
-
-**PR-8: Collapse Duplicate Result Abstractions (Mar 6, 2026):** ✅
-- Renamed `org.ce.application.dto.CalculationResult<T>` → `PreparationResult<T>`
-- Eliminated name collision with domain calculation result: `org.ce.domain.model.result.CalculationResult` (sealed interface)
-- Updated all references across `CalculationService`, `CalculationSetupPanel`, and `CEWorkbenchCLI`
-- Clarified semantic distinction: `PreparationResult` = preparation/validation outcome, `CalculationResult` = domain calculation outcome
-
-**PR-9: Presentation Layer Simplification (Mar 6, 2026):** ✅
-- Documented `CalculationService` as presentation-layer convenience façade (not core orchestration)
-- Clarified architectural position: coordinates infrastructure adapters (cache, registry, ECI) for GUI/CLI convenience
-- Marked thin wrapper methods for future removal (direct use-case invocation preferred)
-- Service remains for now to avoid duplicating preparation logic across presentation layers
-- Future direction documented: move preparation logic to infrastructure factories, eliminate service layer
-
-**PR-10: Repository Hygiene and Final Cleanup (Mar 6, 2026):** ✅
-- Updated `.gitignore` to exclude runtime artifacts: `*.log`
-- `data/cluster_cache/` was initially excluded but later re-included (Mar 8, 2026) so pre-computed cluster data ships with the repo
-- Verified no sample fixtures need relocation (CVMPhaseModelExamples appropriately located in main as API documentation)
-- Confirmed architecture migration complete (PR-1 through PR-9) with all adapter bridge classes still required
-- Identified future cleanup candidates:
-  - `MCSExecutor` (@Deprecated, forRemoval = true) - still used by `MCSCalculationJob`, requires job refactor first
-  - Direct use-case invocation in GUI (replace CalculationService façade) - deferred to future PR
-- Repository now clean of obsolete files and properly ignores auto-generated artifacts
-
-**CVM Expression Audit Fix (Mar 6, 2026):** ✅
-- **Root cause fixed:** N-R solver's internal `G/Gu/Guu` expressions could diverge from `CVMFreeEnergy` implementation
-- **Fix:** `NewtonRaphsonSolverSimple` now computes `G`, `dG/du`, `d²G/du²` via `CVMFreeEnergy.evaluate(...)`
-- **Fix:** Removed incorrect `CVMFreeEnergy.evaluate(uFull, ...)` call in `CVMPhaseModel`; now uses non-point CF vector `u`
-- **Convergence safety:** step-size convergence now requires gradient criterion; stalled small-step with large gradient is marked non-converged
-- **Diagnostics:** per-iteration Newton trace now captured and reported in GUI (`CF[i]` and `dG/du[i]` each iteration)
-- **API policy:** CVM execution is now phase-model only (`prepareCVMModel` path)
-
-**New CVMPhaseModel Class:** Complete thermodynamic model API ✅
-- Location: `org.ce.cvm.CVMPhaseModel` (700+ lines)
-- **Core concept:** CVM model = central entity encapsulating all data + automatic re-minimization
-- **Immutable data:** AllClusterData (Stages 1-3) fixed at creation
-- **Mutable data:** System parameters (ECI) and macro parameters (T, x) can change anytime
-- **Cached state:** Equilibrium results invalidated when parameters change, re-minimized on next query
-
-**Factory Method:**
-```java
-CVMPhaseModel model = CVMPhaseModel.create(context, eci, temperature, composition);
-```
-
-**Parameter Setters (Trigger Re-minimization):**
-- `setTemperature(T)` - Change temperature
-- `setComposition(x)` - Change composition (binary shorthand)
-- `setMoleFractions(x[])` - Change composition (K-component)
-- `setECI(eci[])` - Change system parameters (CECs)
-- `setTolerance(tol)` - Change convergence criterion
-
-**Query Methods (Auto-minimize if Needed):**
-- `getEquilibriumG/H/S()` - Gibbs, enthalpy, entropy
-- `getEquilibriumCFs()` - Correlation functions
-- `getEquilibriumCVs()` - Cluster variables
-- `getSROs()` - Short-range order parameters
-- `isStable()` - Stability check
-- `getGradient()`, `getGradientNorm()` - Convergence diagnostics
-- `getEquilibriumState()` - Bundle all properties
-
-**Performance Features:**
-- **Lazy re-minimization:** Only re-computes when parameters change AND queried
-- **Smart caching:** Multiple queries after one parameter change use cached results
-- **Thread-safe:** `synchronized ensureMinimized()` for concurrent access
-- **K-agnostic:** Works for binary (K=2), ternary (K≥3), any K
-
-**Usage Patterns:**
-1. **Single point:** Create model → query properties
-2. **Parameter scan:** Change T (or x) in loop → queries auto-minimize as needed
-3. **Phase diagrams:** 100 points = 1 model + 100 parameter changes (efficient)
-4. **Multi-component:** Use `setMoleFractions()` for K≥3 systems
-
-**Build Status:** ✅ Clean compilation, all tests passing
-
-**Example Code:**
-```java
-// Create model
-CVMPhaseModel model = CVMPhaseModel.create(context, eci, 1000.0, 0.5);
-
-// Temperature scan
-for (double T = 300; T <= 1500; T += 100) {
-    model.setTemperature(T);
-    System.out.println("T=" + T + "K: G=" + model.getEquilibriumG());
-}
-
-// Composition scan at fixed T
-model.setTemperature(800.0);
-for (double x = 0; x <= 1.0; x += 0.1) {
-    model.setComposition(x);
-    System.out.println("x=" + x + ": stable=" + model.isStable());
-}
-```
-
-**Architecture Transformation:**
-- OLD: User calls CVMEngine.solve() → returns CVMSolverResult
-- NEW: User creates CVMPhaseModel → calls query methods on model
-- **Mental model shift:** "Manage thermodynamic state" (not just "run solver once")
-
-### Previous Session (Feb 28, 2026)
-
-### ✅ Completed (Feb 28 - Part 2)
-2. **MCS Performance Optimization** - UI Slowdown Fixed
-   - Root cause: Chart updated every sweep → JavaFX redraw queue buildup
-   - Solution: Sample chart updates (every 10 sweeps) instead of every sweep
-   - Solution: Sample text output (every 50 sweeps) instead of every 100 updates
-   - Solution: Keep only 300 chart points (vs 10k) with continuous pruning
-   - Result: **~80 ms/sweep consistently** (formerly 20-25+ sec/sweep at 500+ sweeps)
-   - Verification: 1000-sweep run now **85.5 seconds** (was 6+ hours on slowdown path)
-   - Performance gain: **250x faster** for long runs, **linear timing** throughout
-   - Files modified:
-- [ResultsPanel.java](app/src/main/java/org/ce/presentation/gui/view/ResultsPanel.java) — Sampling logic
-    - [EnergyConvergenceChart.java](app/src/main/java/org/ce/presentation/gui/component/EnergyConvergenceChart.java) — Aggressive pruning
-
-### ✅ Completed (Feb 28 - Part 1)
-3. **MCS Energy Tracking Optimization** - CRITICAL PERFORMANCE FIX
-   - Implemented true ΔE accumulation: energy updates only on accepted moves
-   - Modified `ExchangeStep.attempt()` to return `double ΔE` instead of `boolean`
-   - Modified `FlipStep.attempt()` to return `double ΔE` instead of `boolean`
-   - MCEngine accumulates per-step: `currentEnergy += stepDeltaE` (0.0 if rejected)
-   - Only non-zero ΔE values added to rolling window (accepted moves only)
-   - Performance improvement: **~1000x faster** than recalculation per step
-   - Verification method: Periodic full-energy recalculation every 10 sweeps
-   - Test results: ✓ MATCH with zero numerical drift (sweeps 10, 20)
-   - Threading fix: Wrapped `ResultsPanel.initializeMCS()` in `Platform.runLater()` to fix `ConcurrentModificationException`
-   - Code cleanup: Removed diagnostic logging and verification blocks (production ready)
-   - Build status: ✅ Clean compilation, no errors or warnings
-
-### ✅ Completed (Week of Feb 27)
-2. **CF Normalization Fix** - CRITICAL BUG FIX ⚠️
-   - Fixed incorrect correlation function normalization formula in MCSampler
-   - OLD (WRONG): `CF = Σ(Φ) / (N × orbitSize)` caused CFs to scale incorrectly
-   - NEW (CORRECT): `CF = Σ(Φ) / embedCount` - average cluster product per embedding
-   - Fixed empty cluster generation (Type 5 was being skipped)
-   - All cluster types now correctly produce CF=1.0 for all-B configuration
-   - See [CF_NORMALIZATION_FIX_SUMMARY.md](CF_NORMALIZATION_FIX_SUMMARY.md) for detailed analysis
-   
-3. **MCS UI Enhancements**
-   - Added Supercell Size (L) parameter to CalculationSetupPanel
-   - Standardized gas constant to R=8.314 J/(mol·K) for all calculations
-   - Removed legacy R=1.0 convention
-
-4. **Cluster Data Persistence** - NEW
-   - AllClusterDataCache for unified JSON serialization (Stages 1-3)
-   - Results saved to `data/cluster_cache/{clusterKey}/all_cluster_data.json`
-   - Project-based storage (not user home directory) for distribution
-   
-5. **UX Improvements** - MAJOR
-   - **Single identification dialog** - Eliminated duplicate file prompts
-   - **Cached input pattern** - CF identification reuses cluster identification inputs
-   - **Pre-filled fields** - Ordered cluster/symmetry auto-populated with resolved values
-   - **Diagnostic logging** - Component-prefixed console output (`[ClusterJob]`, `[AllClusterDataCache]`)
-   
-6. **Bug Fixes** - CRITICAL
-   - Fixed system availability check (now checks actual `cluster_result.json`)
-   - Fixed job timing issue (cluster data saved before job removed from queue)
-   - Fixed dialog redundancy (single prompt for entire identification pipeline)
-
-### ✅ Completed (Week of Feb 20-26)
-7. **Window Sizing** - Responsive sizing (90% screen, centered)
-8. **UI Redesign** - Replaced periodic table with guided text fields
-9. **Data Separation** - Split CECs from model data for proper reuse
-10. **SystemDataLoader** - Rewritten for new dual-source loading
-11. **Nb-Ti System** - Added CEC data (4 values from phase diagram)
-12. **BCC_A2_T Model** - Added shared model data (tcdis=5, tcf=15)
-
----
-
-## Known Issues
-
-### Build Warnings
-- Test compilation fails (CVMConfiguration references in tests need updating)
-  - **Workaround:** Use `.\gradlew.bat run --no-configuration-cache` (skips tests)
-  - **Fix Required:** Update test classes to match new architecture
-
-### JavaFX Warnings
-- JDK 25 restricted method warnings (JavaFX 20.0.1)
-  - Expected behavior, does not affect functionality
-  - Will be resolved when JavaFX updates for JDK 25
-
-### CVM Ternary Convergence Issue (In Progress)
-- NR solver oscillates for K≥3 systems at random state
-- Root cause: Hessian ill-conditioned due to zero cluster variables
-- Affects 3 tests: entropy at equimolar, all CVs positive, entropy approaches ln(3)
-- Binary (K=2) working perfectly — not a systematic CVM issue
-- Next: Implement CV regularization or entropy reformulation for K≥3
-
-### Known Limitations
-- Full `Cluster` geometry objects are not serialized to `all_cluster_data.json`
-  - Only the numeric results (tcdis, tc, tcf, ncf, lcf, C-matrix, etc.) are persisted
-  - CVM and MCS calculations use these numeric results — no re-identification needed after app restart
-  - Re-running `CFIdentificationJob` regenerates the JSON from the original input files
-
----
-
-## Next Steps
-
-### High Priority (Phase 5 Completion)
-1. **Fix Ternary CVM Convergence** (In Progress)
-   - Implement CV regularization or entropy reformulation
-   - Target: 11/11 ternary tests passing
-   - Then: Extend to K=4, K=5 systems
-
-2. **Manual CEC Input Workflow**
-   - Create dialog for entering CEC values manually
-   - Save to systems/<Elements>/cec.json
-   - Integrate with "Add System" flow
-
-3. **Calculation Panel Gating**
-   - Disable calculation panel if system data incomplete
-   - Show status: "Missing CECs" or "Missing Clusters/CFs"
-
-### Medium Priority
-4. **Additional Test Systems**
-   - Add Ti-V, Ti-Zr, Fe-Ni CEC data
-   - Demonstrate model reuse (same BCC_A2_T for all)
-
-5. **Import/Export**
-   - Import CEC data from CSV/JSON
-   - Export system configurations
-
-6. **Full Cluster Serialization** (if needed)
-   - Serialize complete Cluster objects with Nd4j matrices
-   - Enable cross-session cluster data loading
-
-7. **Documentation**
-   - User guide for adding new systems
-   - Developer guide for data structure
-   - Keep architecture/dependency policy in `docs/ARCHITECTURE_CONTRACT.md`
-
-### Low Priority
-8. **Phase Diagram Plotting** (future)
-9. **MCS Integration** (future)
-10. **Quaternary and Higher-Order Systems** (Phase 6+)
+1. `./gradlew build` passes after every commit — zero errors, zero warnings.
+2. All 94 tests pass.
+3. `ArchitectureBoundaryTest` passes — `domain` never imports `application`, `infrastructure`, or `presentation`.
+4. `AllClusterData` is the single source of cluster topology for both CVM and MCS engines.
+5. ECI arrays are always **ncf-length** — never tc-length, never padded with zeros.
+6. `EquilibriumState` is the only result type returned from both `CVMPhaseModel` and `MCSPhaseModel`.
+7. Type 2 calculations never re-run cluster identification — they always load from the disk cache.
 
 ---
 
 ## How to Run
 
-### GUI Application
 ```bash
-.\gradlew.bat run --no-configuration-cache
+# GUI (recommended)
+./gradlew run
+
+# CLI
+./gradlew run --args='--cli'
+
+# Build only
+./gradlew build
+
+# All tests
+./gradlew test
+
+# Specific test class
+./gradlew test --tests "org.ce.domain.cvm.CVMBinaryIntegrationTest"
 ```
 
-### CLI (System Creation)
-```bash
-.\gradlew.bat run --args='--cli'
-```
-
-### Build Only
-```bash
-.\gradlew.bat compileJava --no-configuration-cache
-```
-
-### Run Tests
-```bash
-# Binary CVM tests only
-.\gradlew test --tests CVMSolverTest
-
-# Ternary CVM tests
-.\gradlew test --tests CVMTernaryTest
-```
+Requires Java 25 (Gradle auto-downloads if absent).
 
 ---
 
-## Project Structure
+## Key File Locations (Quick Reference)
 
 ```
-ce/
-├── app/src/main/java/org/ce/
-│   ├── presentation/
-│   │   ├── gui/
-│   │   │   ├── CEWorkbenchApplication.java      # JavaFX entry point
-│   │   │   ├── component/                       # Dialogs, charts, inspectors (7 files)
-│   │   │   ├── model/                           # MVC model layer (2 files)
-│   │   │   └── view/                            # Panels and views (6 files)
-│   │   └── cli/
-│   │       └── CEWorkbenchCLI.java              # Command-line interface
-│   ├── application/
-│   │   ├── usecase/                             # CVM/MCS use cases, pipeline, validation (5 files)
-│   │   ├── job/                                 # Background job contracts + orchestration jobs (6 files)
-│   │   ├── port/                                # Application port interfaces + listener (5 files)
-│   │   └── dto/                                 # Data transfer objects (3 files)
-│   ├── infrastructure/
-│   │   ├── service/                             # CalculationService + job manager + progress adapters (4 files)
-│   │   ├── registry/                            # System/result repositories + key utils (3 files)
-│   │   ├── data/                                # Metadata loaders + ECI loading (2 files)
-│   │   ├── persistence/                         # Cache, serializer, repository adapters (6 files)
-│   │   │   └── migration/                       # Schema migration infrastructure (5 files)
-│   │   ├── context/                             # Calculation contexts (5 files)
-│   │   ├── cvm/                                 # CVM executor + examples (3 files)
-│   │   ├── mcs/                                 # MCS executor + adapters (2 files)
-│   │   ├── input/                               # Cluster/symmetry file parsers (3 files)
-│   │   └── logging/                             # JUL LoggingConfig factory + log routing (2 files)
-│   └── domain/
-│       ├── cvm/                                 # CVM engine, phase model, solvers, free energy (24 files)
-│       ├── mcs/                                 # MCS engine, samplers, lattice, steps (18 files)
-│       ├── identification/                      # Cluster/CF identification pipeline
-│       │   ├── cluster/                         # Stage 1 cluster + Stage 2 CF identification (6 files)
-│       │   ├── engine/                          # Enumeration kernel (5 files)
-│       │   ├── geometry/                        # Vector/site/cluster geometry (7 files)
-│       │   ├── result/                          # Identification result types (5 files)
-│       │   ├── subcluster/                      # Sub-cluster generation (5 files)
-│       │   └── symmetry/                        # Symmetry operations (4 files)
-│       ├── model/                               # Shared data/result models
-│       │   ├── data/                            # AllClusterData, EmbeddingData, etc. (6 files)
-│       │   └── result/                          # CalculationResult types (6 files)
-│       ├── port/                                # Domain port interfaces (4 files)
-│       └── system/                              # System identity/status types (2 files)
-├── app/src/test/java/org/ce/
-│   ├── architecture/
-│   │   └── ArchitectureBoundaryTest.java        # Layer dependency enforcement
-│   └── infrastructure/persistence/
-│       ├── AllClusterDataCacheCompatibilityTest.java
-│       └── migration/
-│           └── ClusterCacheSchemaMigratorTest.java
-├── data/cluster_cache/                          # Pre-computed cluster data (version-controlled)
-│   └── {clusterKey}/                            # clusterKey = structural type (Pearson symbol + model + components)
-│       └── all_cluster_data.json                # Full pipeline data (Stages 1-3)
-├── app/src/main/resources/
-│   ├── data/
-│   │   ├── systems/                             # Element-specific CECs
-│   │   │   ├── Ti-Nb/cec.json
-│   │   │   └── ...
-│   │   ├── models/                              # Shared structural definitions (Pearson symbol–based)
-│   │   │   ├── A2_T/model_data.json             # A2 = Pearson symbol (disordered BCC); T = tetrahedron model
-│   │   │   ├── L12_T/model_data.json            # L12 = Pearson symbol (ordered FCC); T = tetrahedron model
-│   │   │   └── ...
-│   │   ├── cluster/                             # Cluster input files (by Pearson symbol)
-│   │   └── symmetry/                            # Symmetry group files (by Pearson symbol)
-└── docs/
-    └── extracted-mathematica-functions.md       # Algorithm reference
+domain/cvm/CVMPhaseModel.java              CVM model — lazy N-R, getEquilibriumState()
+domain/mcs/MCSPhaseModel.java              MCS model — lazy MC, getEquilibriumState()
+domain/model/result/EquilibriumState.java  Shared immutable result record
+domain/model/result/EngineMetrics.java     Sealed: CvmMetrics | McsMetrics
+
+application/job/CVMPhaseModelJob.java      Type 2 background job: loads data, runs CVM
+application/job/MCSCalculationJob.java     Type 2 background job: loads data, runs MCS
+application/job/CFIdentificationJob.java   Type 1 background job: runs Stages 1-3
+application/job/AbstractThermodynamicJob.java  Shared Phases 1+2 (load cluster data + ECI)
+
+application/dto/ThermodynamicCalculationRequest.java  Shared request base (T, x[], systemId)
+application/service/CECAssemblyService.java            Assembles higher-order CECs from binary
+
+infrastructure/persistence/AllClusterDataCache.java    Reads/writes all_cluster_data.json
+infrastructure/registry/SystemRegistry.java            System registration and lookup
+infrastructure/registry/KeyUtils.java                  Canonical key construction
 ```
-
-**Package totals:** 30 packages, 165 Java files (reduced from 47 packages via consolidation, Mar 8, 2026)
-
----
-
-## Contact & References
-
-**Repository:** vijindal/ce  
-**Built With:** Java 25, JavaFX 22.0.2, Gradle 9.3.1  
-**License:** See LICENSE file
