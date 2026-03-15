@@ -9,12 +9,11 @@ import javafx.scene.layout.VBox;
 import org.ce.application.dto.CVMCalculationRequest;
 import org.ce.application.dto.MCSCalculationRequest;
 import org.ce.infrastructure.registry.SystemRegistry;
-import org.ce.infrastructure.service.BackgroundJobManager;
-import org.ce.application.job.CVMPhaseModelJob;
-import org.ce.application.job.MCSCalculationJob;
+import org.ce.application.service.CalculationService;
 import org.ce.domain.system.SystemIdentity;
 import org.ce.infrastructure.logging.LoggingConfig;
 import org.ce.infrastructure.service.DataManagementAdapter;
+import org.ce.application.port.DataManagementPort;
 import org.ce.infrastructure.registry.KeyUtils;
 import org.ce.presentation.gui.component.DataReadinessIndicator;
 
@@ -28,13 +27,15 @@ import java.util.logging.Logger;
  * 
  * <p>CVM calculations are executed through the model-centric CVMPhaseModel path.</p>
  */
+
 public class CalculationSetupPanel extends VBox {
 
     private static final Logger LOG = LoggingConfig.getLogger(CalculationSetupPanel.class);
 
     private final SystemRegistry registry;
     private final ResultsPanel resultsPanel;
-    private final BackgroundJobManager jobManager;
+    private final CalculationService calculationService;
+    private final DataManagementPort dataPort;
     private final RadioButton mcsToggle;
     private final RadioButton cvmToggle;
     private final VBox parametersContainer;
@@ -60,10 +61,11 @@ public class CalculationSetupPanel extends VBox {
     // Action button
     private Button runButton;
 
-    public CalculationSetupPanel(SystemRegistry registry, BackgroundJobManager jobManager, ResultsPanel resultsPanel) {
+    public CalculationSetupPanel(SystemRegistry registry, ResultsPanel resultsPanel, CalculationService calculationService, DataManagementPort dataPort) {
         this.registry = registry;
-        this.jobManager = jobManager;
         this.resultsPanel = resultsPanel;
+        this.calculationService = calculationService;
+        this.dataPort = dataPort;
 
         setSpacing(8);
         setPadding(new Insets(12));
@@ -79,7 +81,7 @@ public class CalculationSetupPanel extends VBox {
         selectedSystemLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #666; -fx-font-style: italic;");
 
         // Data readiness indicator
-        readinessIndicator = new DataReadinessIndicator(new DataManagementAdapter(registry));
+        readinessIndicator = new DataReadinessIndicator(dataPort);
 
         // Calculation type toggle
         Label calcTypeLabel = new Label("Type");
@@ -298,16 +300,15 @@ public class CalculationSetupPanel extends VBox {
             return;
         }
 
-        DataManagementAdapter dataPort = new DataManagementAdapter(registry);
         boolean clustersReady = dataPort.isClustersComputed(selectedSystem.getId());
         boolean cecReady = dataPort.isCecAvailable(KeyUtils.cecKey(selectedSystem));
         boolean cfsReady = dataPort.isCfsComputed(selectedSystem.getId());
 
-        if (mcsToggle.isSelected()) {
-            // MCS: needs clusters + CEC
+        if (cvmToggle.isSelected()) {
+            // CVM: needs clusters + CEC
             runButton.setDisable(!(clustersReady && cecReady));
         } else {
-            // CVM: needs clusters + CEC + CFs
+            // MCS: needs clusters + CEC + CFs
             runButton.setDisable(!(clustersReady && cecReady && cfsReady));
         }
     }
@@ -353,14 +354,12 @@ public class CalculationSetupPanel extends VBox {
                 + ", nAvg=" + request.getAveragingSteps());
 
         // Create data management port and GUI listener
-        DataManagementAdapter dataPort = new DataManagementAdapter(registry);
+        // use injected dataPort
         ResultsPanelProgressListener listener = new ResultsPanelProgressListener(resultsPanel);
 
-        // Submit MCS job to BackgroundJobManager for managed execution
-        // All data loading (cluster data, CEC/ECI) happens on background thread via DataManagementPort
-        MCSCalculationJob job = new MCSCalculationJob(request, dataPort, listener);
-        jobManager.submitJob(job);
-        LOG.fine("CalculationSetupPanel.runMCSCalculation — EXIT: job submitted successfully, id=" + job.getId());
+        // Use CalculationService to run MCS calculation
+        calculationService.runMCS(request, listener);
+        LOG.fine("CalculationSetupPanel.runMCSCalculation — EXIT: job submitted successfully");
     }
 
     /**
@@ -429,14 +428,12 @@ public class CalculationSetupPanel extends VBox {
                 + ", T=" + request.getTemperature() + " K, K=" + request.getNumComponents());
 
         // Create data management port and GUI listener
-        DataManagementAdapter dataPort = new DataManagementAdapter(registry);
+        // use injected dataPort
         ResultsPanelProgressListener listener = new ResultsPanelProgressListener(resultsPanel);
 
-        // Submit CVM job to BackgroundJobManager for managed execution
-        // All data loading (cluster data, CEC/ECI) + first N-R minimization happens on background thread
-        CVMPhaseModelJob job = new CVMPhaseModelJob(request, dataPort, listener);
-        jobManager.submitJob(job);
-        LOG.fine("CalculationSetupPanel.runCVMCalculation — EXIT: job submitted, id=" + job.getId());
+        // Use CalculationService to run CVM calculation
+        calculationService.runCVM(request, listener);
+        LOG.fine("CalculationSetupPanel.runCVMCalculation — EXIT: job submitted");
     }
     
     private void showError(String title, String message) {
