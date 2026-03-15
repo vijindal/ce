@@ -128,16 +128,17 @@ public class CECAssemblyJob extends AbstractBackgroundJob {
                 for (List<String> subsys : subsystemsAtOrder) {
                     if (shouldStop()) return;
 
-                    String subsysKey = CECAssemblyService.toElementString(subsys);
-                    setStatusMessage("Processing subsystem " + subsysKey + " (order " + order + ")...");
+                        String subsysKey = CECAssemblyService.toElementString(subsys);
+                        setStatusMessage("Processing subsystem " + subsysKey + " (order " + order + ")...");
 
-                    Optional<SystemDataLoader.CECData> cecDataOpt = SystemDataLoader.loadCecData(
-                            subsysKey, system.getStructure(), system.getPhase(), system.getModel());
+                        String structurePhase = system.getStructurePhase();
+                        Optional<SystemDataLoader.CECData> cecDataOpt = SystemDataLoader.loadCecData(
+                            subsysKey, structurePhase, "", system.getModel());
 
-                    if (cecDataOpt.isEmpty()) {
+                        if (cecDataOpt.isEmpty()) {
                         String msg = "CEC not found for subsystem " + subsysKey
-                                + " (" + system.getStructure() + "_" + system.getPhase()
-                                + "_" + system.getModel() + ")";
+                            + " (" + structurePhase
+                            + "_" + system.getModel() + ")";
                         LOG.warning("CECAssemblyJob.run — " + msg);
                         markFailed(msg);
                         fireAssemblyFailed(msg);
@@ -145,6 +146,13 @@ public class CECAssemblyJob extends AbstractBackgroundJob {
                     }
 
                     double[] sourceECIs = extractECIValues(cecDataOpt.get());
+                    // Pad to target numCF if the subsystem CEC has fewer CFs than the target.
+                    // Zeros are correct for positions that have no binary counterpart.
+                    if (sourceECIs.length < tcf) {
+                        double[] padded = new double[tcf];
+                        System.arraycopy(sourceECIs, 0, padded, 0, sourceECIs.length);
+                        sourceECIs = padded;
+                    }
                     double[] transformed = CECAssemblyService.transformToTarget(
                             sourceECIs, order, K, cfOrderMap, targetData);
 

@@ -261,6 +261,17 @@ public class CECManagementCoordinator implements BackgroundJobManager.JobManager
                     throw new IllegalStateException("CEC for " + elements + " contains no values");
                 }
 
+                // Pad sourceECIs to the target's numCF if the binary subsystem has fewer CFs.
+                // Extra positions correspond to higher-order basis functions absent in the
+                // binary system; zeros are mathematically correct (they don't contribute to
+                // the transformation and are excluded by cfOrderMap filtering in step 6).
+                int numCF = targetData.getStage3().getCfBasisIndices().length;
+                if (sourceECIs.length < numCF) {
+                    double[] padded = new double[numCF];
+                    System.arraycopy(sourceECIs, 0, padded, 0, sourceECIs.length);
+                    sourceECIs = padded;
+                }
+
                 // Basis transformation: V_target = T · V_sub
                 double[] contribution = CECAssemblyService.transformToTarget(
                         sourceECIs, M, K, cfOrderMap, targetData);
