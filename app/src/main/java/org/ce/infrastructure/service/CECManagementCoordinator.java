@@ -6,11 +6,16 @@ import org.ce.application.job.CECAssemblyJob;
 import org.ce.application.port.CECOperationListener;
 import org.ce.application.service.CECAssemblyService;
 import org.ce.application.service.CECManagementService;
+import org.ce.domain.model.data.AllClusterData;
 import org.ce.domain.system.SystemIdentity;
 import org.ce.infrastructure.data.SystemDataLoader;
 import org.ce.infrastructure.logging.LoggingConfig;
+import org.ce.infrastructure.persistence.AllClusterDataCache;
+import org.ce.infrastructure.registry.KeyUtils;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
@@ -172,18 +177,104 @@ public class CECManagementCoordinator implements BackgroundJobManager.JobManager
                 transformedByOrder, pureKValues, cfOrderMap, result.targetData());
 
         SystemDataLoader.CECData cecData = new SystemDataLoader.CECData();
-        cecData.elements  = String.join("-", result.targetSystem().getComponents());
-        cecData.structure = result.targetSystem().getStructure();
-        cecData.phase     = result.targetSystem().getPhase();
-        cecData.model     = result.targetSystem().getModel();
-        cecData.cecValues = finalECIs;
-        cecData.cecUnits  = "J/mol";
-        cecData.reference = result.targetSystem().getId();
-        cecData.tc        = tcf;
+        cecData.elements       = String.join("-", result.targetSystem().getComponents());
+        cecData.structurePhase = result.targetSystem().getStructurePhase();
+        cecData.model          = result.targetSystem().getModel();
+        cecData.cecValues      = finalECIs;
+        cecData.cecUnits       = "J/mol";
+        cecData.reference      = result.targetSystem().getId();
+        cecData.tc             = tcf;
 
         cecManagementService.saveCEC(cecData);
         LOG.info("CECManagementCoordinator.saveAssembledCEC — saved for system="
                 + result.targetSystem().getId() + " tcf=" + tcf);
+    }
+
+    // -----------------------------------------------------------------------
+    // Per-subsystem transformation
+    // -----------------------------------------------------------------------
+
+    /**
+     * Immutable result of a single-subsystem basis transformation delivered to the UI.
+     *
+     * @param elements     element string of the subsystem (e.g. "Nb-Ti")
+     * @param contribution transformed ECI contribution array (length = target tcf)
+     * @param cfOrderMap   CF-order classification for the target system
+     */
+    public record SubsystemContribution(String elements, double[] contribution, int[] cfOrderMap) {}
+
+    /**
+     * Runs the basis transformation for a single lower-order subsystem on a background
+     * thread and delivers the {@link SubsystemContribution} result back to the FX thread.
+     *
+     * <p>The calling panel should apply a delta-merge: subtract the previous contribution
+     * for this subsystem, add the new one, and store the new contribution so that
+     * re-applying is idempotent.</p>
+     *
+     * @param target              the higher-order target system
+     * @param subsystemComponents components of the subsystem to transform (e.g. ["Nb","Ti"])
+     * @param onSuccess           called on the FX thread with the transformation result
+     * @param onError             called on the FX thread with a human-readable error message
+     */
+    public void applySubsystem(
+            SystemIdentity target,
+            List<String> subsystemComponents,
+            Consumer<SubsystemContribution> onSuccess,
+            Consumer<String> onError) {
+
+        String elements = CECAssemblyService.toElementString(subsystemComponents);
+        int M = subsystemComponents.size();
+        int K = target.getNumComponents();
+        LOG.fine("CECManagementCoordinator.applySubsystem — " + elements + " → " + target.getId());
+
+        new Thread(() -> {
+            try {
+                // Load (cached) cluster data for the target
+                Optional<AllClusterData> targetOpt = AllClusterDataCache.load(KeyUtils.clusterKey(target));
+                if (targetOpt.isEmpty()) {
+                    throw new IllegalStateException(
+                            "No cluster data found for " + KeyUtils.clusterKey(target)
+                            + ". Run cluster identification first.");
+                }
+                AllClusterData targetData = targetOpt.get();
+
+                // Classify all CFs by minimum required subsystem order
+                int[] cfOrderMap = CECAssemblyService.classifyCFsByOrder(targetData);
+
+                // Load the subsystem CEC
+                Optional<SystemDataLoader.CECData> opt = cecManagementService.loadCEC(
+                        elements, target.getStructurePhase(), "", target.getModel());
+                if (opt.isEmpty()) {
+                    throw new IllegalStateException("No CEC found for subsystem: " + elements);
+                }
+                SystemDataLoader.CECData subsysCec = opt.get();
+
+                // Extract source ECI values
+                double[] sourceECIs;
+                if (subsysCec.cecTerms != null) {
+                    sourceECIs = new double[subsysCec.cecTerms.length];
+                    for (int i = 0; i < subsysCec.cecTerms.length; i++)
+                        sourceECIs[i] = subsysCec.cecTerms[i].a;
+                } else if (subsysCec.cecValues != null) {
+                    sourceECIs = subsysCec.cecValues.clone();
+                } else {
+                    throw new IllegalStateException("CEC for " + elements + " contains no values");
+                }
+
+                // Basis transformation: V_target = T · V_sub
+                double[] contribution = CECAssemblyService.transformToTarget(
+                        sourceECIs, M, K, cfOrderMap, targetData);
+
+                SubsystemContribution result =
+                        new SubsystemContribution(elements, contribution, cfOrderMap);
+                Platform.runLater(() -> onSuccess.accept(result));
+
+            } catch (Exception e) {
+                LOG.warning("CECManagementCoordinator.applySubsystem — failed for "
+                        + elements + ": " + e.getMessage());
+                Platform.runLater(() -> onError.accept(e.getMessage()));
+            }
+        }, "cec-subsys-" + elements).start();
     }
 
     // -----------------------------------------------------------------------
